@@ -28,6 +28,7 @@ import { WindowsAdapter } from '../platform/adapters/WindowsAdapter';
 import type BadgeManager from './badgeManager';
 import type TrayManager from './trayManager';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
+import { GITHUB_LATEST_RELEASE_API_URL } from '../../shared/constants/urls';
 const logger = createLogger('[UpdateManager]');
 
 // Re-export UpdateInfo for use in other modules
@@ -695,7 +696,7 @@ export default class UpdateManager {
     }
 
     private async checkGitHubForLatestRelease(): Promise<UpdateInfo | null> {
-        const response = await net.fetch('https://api.github.com/repos/bwendell/gemini-desktop/releases/latest', {
+        const response = await net.fetch(GITHUB_LATEST_RELEASE_API_URL, {
             headers: { 'User-Agent': 'gemini-desktop-updater' },
         });
 

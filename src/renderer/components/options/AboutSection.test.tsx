@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { AboutSection } from './AboutSection';
+import { GITHUB_DISCLAIMER_URL, GITHUB_LICENSE_URL } from '../../../shared/constants/urls';
 
 // Version injected from package.json via vitest define
 declare const __APP_VERSION__: string;
@@ -27,12 +28,12 @@ describe('AboutSection', () => {
         render(<AboutSection />);
 
         const licenseLink = screen.getByTestId('about-license-link');
-        expect(licenseLink).toHaveAttribute('href', expect.stringContaining('LICENSE'));
+        expect(licenseLink).toHaveAttribute('href', GITHUB_LICENSE_URL);
         expect(licenseLink).toHaveAttribute('target', '_blank');
         expect(licenseLink).toHaveAttribute('rel', 'noopener noreferrer');
 
         const disclaimerLink = screen.getByTestId('about-disclaimer-link');
-        expect(disclaimerLink).toHaveAttribute('href', expect.stringContaining('DISCLAIMER.md'));
+        expect(disclaimerLink).toHaveAttribute('href', GITHUB_DISCLAIMER_URL);
 
         const tosLink = screen.getByTestId('about-google-tos-link');
         expect(tosLink).toHaveAttribute('href', 'https://policies.google.com/terms');

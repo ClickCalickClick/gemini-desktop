@@ -8,6 +8,7 @@ It holds the contracts that keep those boundaries synchronized: IPC channel name
 Primary files and folders:
 
 - `src/shared/constants/ipc-channels.ts` — canonical IPC channel names
+- `src/shared/constants/urls.ts` — the fork's GitHub repository and every link derived from it (release notes, issues, License, Disclaimer, the notify-only update check)
 - `src/shared/types/ipc.ts` — typed preload/renderer contract (`ElectronAPI`)
 - `src/shared/types/tabs.ts` — shared tab state and payload shapes
 - `src/shared/types/` — cross-boundary payloads and state types
@@ -38,6 +39,7 @@ For architecture context, read [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md
 
 - Changing a shared contract without updating preload and main in the same change
 - Hardcoding channel strings outside `src/shared/constants/ipc-channels.ts`
+- Writing a GitHub repository URL anywhere but `src/shared/constants/urls.ts` (`tests/unit/shared/urls.test.ts` fails)
 - Adding boundary-specific behavior to shared utilities instead of keeping them pure and reusable
 - Renaming payload fields without updating the renderer and tests that consume them
 

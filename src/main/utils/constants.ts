@@ -72,25 +72,7 @@ export const GOOGLE_SIGNIN_URL = `${GOOGLE_ACCOUNTS_URL}/signin` as const;
 // External URLs
 // =========================================================================
 
-/**
- * GitHub repository base URL.
- */
-export const GITHUB_REPO_URL = 'https://github.com/bwendell/gemini-desktop' as const;
-
-/**
- * GitHub issues URL for bug reports.
- */
-export const GITHUB_ISSUES_URL = `${GITHUB_REPO_URL}/issues` as const;
-
-/**
- * GitHub license file URL.
- */
-export const GITHUB_LICENSE_URL = `${GITHUB_REPO_URL}/blob/main/LICENSE` as const;
-
-/**
- * GitHub disclaimer file URL.
- */
-export const GITHUB_DISCLAIMER_URL = `${GITHUB_REPO_URL}/blob/main/DISCLAIMER.md` as const;
+// The GitHub repository URLs live in src/shared/constants/urls.ts.
 
 /**
  * Google Terms of Service URL.

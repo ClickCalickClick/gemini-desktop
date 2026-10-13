@@ -1,12 +1,13 @@
 import { Menu, MenuItemConstructorOptions, app, shell, MenuItem } from 'electron';
 import WindowManager from './windowManager';
 import type HotkeyManager from './hotkeyManager';
-import { GOOGLE_SIGNIN_URL, GITHUB_ISSUES_URL } from '../utils/constants';
+import { GOOGLE_SIGNIN_URL } from '../utils/constants';
 import { isApplicationHotkey, type HotkeyId } from '../types';
 import type { PlatformAdapter } from '../platform/PlatformAdapter';
 import { getPlatformAdapter } from '../platform/platformAdapterFactory';
 import { getReleaseNotesUrl } from '../../shared/utils/releaseNotes';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
+import { GITHUB_ISSUES_URL } from '../../shared/constants/urls';
 import type { TabStateIpcHandler } from './ipc';
 
 /**
