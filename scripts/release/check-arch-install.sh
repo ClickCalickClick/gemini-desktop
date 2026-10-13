@@ -25,6 +25,8 @@ pacman -Qi gemini-desktop
 
 grep -qx 'StartupWMClass=gemini-desktop' /usr/share/applications/gemini-desktop.desktop
 test -x /usr/bin/gemini-desktop
+# The update notice reads this to tell pacman installs to install the new package (src/main/utils/packageType.ts).
+grep -qx 'pacman' '/opt/Gemini Desktop/resources/package-type'
 
 missing=$(ldd '/opt/Gemini Desktop/gemini-desktop' | grep 'not found' || true)
 if [ -n "$missing" ]; then

@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import type { UpdateInfo } from '../components/toast';
+import type { UpdateInfo } from '../../shared/types/updates';
 import { isDevMode } from '../utils/platform';
 
 /**

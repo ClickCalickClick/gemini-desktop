@@ -29,6 +29,7 @@ import type BadgeManager from './badgeManager';
 import type TrayManager from './trayManager';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import { GITHUB_LATEST_RELEASE_API_URL } from '../../shared/constants/urls';
+import { getLinuxPackageType } from '../utils/packageType';
 const logger = createLogger('[UpdateManager]');
 
 // Re-export UpdateInfo for use in other modules
@@ -67,7 +68,8 @@ async function getAutoUpdater(): Promise<AppUpdater> {
  * - Silent download of updates
  * - User notification when update is ready
  * - Opt-out via settings
- * - Platform-aware (disables for DEB/RPM Linux, portable Windows)
+ * - Platform-aware: electron-updater for the Windows installer and the Linux AppImage, and a
+ *   notify-only GitHub check for macOS, the Linux packages and portable Windows
  */
 export default class UpdateManager {
     private autoUpdater: AppUpdater | null = null;
@@ -294,8 +296,13 @@ export default class UpdateManager {
                 const updateInfo = await this.checkGitHubForLatestRelease();
 
                 if (updateInfo) {
+                    // deb, rpm and pacman installs are updated by installing the new package.
+                    const packageType = getLinuxPackageType();
                     logger.log(`Manual update available: ${updateInfo.version}`);
-                    this.broadcastToWindows(IPC_CHANNELS.AUTO_UPDATE_MANUAL_UPDATE_AVAILABLE, updateInfo);
+                    this.broadcastToWindows(
+                        IPC_CHANNELS.AUTO_UPDATE_MANUAL_UPDATE_AVAILABLE,
+                        packageType ? { ...updateInfo, packageType } : updateInfo
+                    );
                 } else {
                     logger.log('No update available (GitHub API)');
                     if (this.isFirstCheck || this.isManualCheck) {

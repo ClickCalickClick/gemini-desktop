@@ -241,12 +241,41 @@ describe('UpdateToastContext', () => {
                 expect(screen.getByTestId('toast-action-0')).toHaveTextContent('Download');
             });
 
+            expect(
+                screen.getByText('Version 4.0.0 is available. Download it from the releases page.')
+            ).toBeInTheDocument();
             expect(screen.queryByText('View Release Notes')).not.toBeInTheDocument();
 
             fireEvent.click(screen.getByTestId('toast-action-0'));
             expect(openSpy).toHaveBeenCalledWith(getReleaseNotesUrl('4.0.0'));
 
             openSpy.mockRestore();
+        });
+
+        it('tells package-manager installs to install the new package', async () => {
+            let capturedCallback: ((info: { version: string; packageType?: 'pacman' }) => void) | undefined;
+            mockElectronAPI.onManualUpdateAvailable.mockImplementation((cb) => {
+                capturedCallback = cb;
+                return () => {};
+            });
+
+            render(
+                <TestWrapper>
+                    <div>Child</div>
+                </TestWrapper>
+            );
+
+            capturedCallback?.({ version: '4.0.0', packageType: 'pacman' });
+
+            await waitFor(() => {
+                expect(
+                    screen.getByText(
+                        'Version 4.0.0 is available. Download the .pacman package and install it with your package manager.'
+                    )
+                ).toBeInTheDocument();
+            });
+
+            expect(screen.getByTestId('toast-action-0')).toHaveTextContent('Download');
         });
 
         it('clicking dismiss hides toast for available type', async () => {
