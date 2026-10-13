@@ -150,5 +150,14 @@
                 "node-gyp": "^12.2.0"
             }
         }
+    },
+    "allowScripts": {
+        "edgedriver": true,
+        "electron": true,
+        "electron-winstaller": true,
+        "esbuild": true,
+        "geckodriver": true,
+        "node-llama-cpp": true,
+        "usocket": true
     }
 }
