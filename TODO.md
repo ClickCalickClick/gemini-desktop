@@ -66,7 +66,7 @@ Goal: pushing a `v*` tag builds the AppImage, pacman, deb, rpm and tar.gz packag
 
 **First release**
 
-- [ ] **L13 (owner)** Set the version to `0.13.0`, push tag `v0.13.0`, review the draft release, note that users of upstream builds must install this one by hand once, and publish it. Publishing is what makes it visible to update checks.
+- [~] **L13 (owner)** Set the version to `0.13.0`, push tag `v0.13.0`, review the draft release, note that users of upstream builds must install this one by hand once, and publish it. Publishing is what makes it visible to update checks. The version is set in [#3](https://github.com/ClickCalickClick/gemini-desktop/pull/3); the tag and publishing are the owner's.
 - [ ] **L14 (owner)** Test on CachyOS: `pacman -U` pulls only the expected dependencies; the KDE launcher, taskbar icon and window grouping are right; the tray works; sign-in survives a restart; `pacman -R` removes `/usr/bin/gemini-desktop`; the AppImage runs (install `fuse2` if it complains).
 
 **Optional**
