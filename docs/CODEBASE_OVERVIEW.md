@@ -223,6 +223,8 @@ Problems with the suites:
 - Every IPC handler is tested twice, once in unit tests and once in `tests/coordinated/ipc/`. Coverage gates of 97-98% have produced `*.coverage.test.tsx` files that exist only to hit lines.
 - Integration specs contain 44 `browser.pause()` calls even though the docs forbid fixed waits.
 
+Since then, [TEST_COVERAGE.md](TEST_COVERAGE.md) maps every feature to the tests that exercise it, and TODO items T1 to T4 plan a harness that tries every feature.
+
 ## 7. Known bugs and risks
 
 IDs are referenced from [TODO.md](../TODO.md).

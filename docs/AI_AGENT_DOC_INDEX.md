@@ -43,6 +43,7 @@ Start with [root AGENTS.md](../AGENTS.md), then use the routing table below to l
 
 ## Testing and Operations References
 
+- **What the tests cover, feature by feature, and what runs in CI** → [docs/TEST_COVERAGE.md](./TEST_COVERAGE.md)
 - **E2E strategy** → [docs/E2E_TESTING_GUIDELINES.md](./E2E_TESTING_GUIDELINES.md)
 - **Deterministic wait migration** → [docs/E2E_WAIT_PATTERNS.md](./E2E_WAIT_PATTERNS.md)
 - **Shared test helper catalog** → [tests/helpers/README.md](../tests/helpers/README.md)
