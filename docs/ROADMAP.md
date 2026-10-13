@@ -60,9 +60,12 @@ Priorities may shift based on user feedback, upstream Gemini changes, and platfo
 
 ## Near-Term Focus
 
-- Continue strengthening release quality and upgrade reliability across platforms.
-- Improve desktop-native productivity workflows (tabs, quick access, and startup behavior).
-- Keep hardening test coverage and CI stability for faster iteration with lower regression risk.
+The releases above were made upstream in [bwendell/gemini-desktop](https://github.com/bwendell/gemini-desktop). This fork's actionable plan lives in [TODO.md](../TODO.md). In short:
+
+- Build and publish Linux installers (AppImage, pacman, deb, rpm) from GitHub Actions, with CachyOS and Arch as the first-class Linux target.
+- Bring back global hotkeys and local text prediction on CachyOS and macOS, and move off the end-of-life Electron 39.
+- Add macOS installers to CI after that; until then macOS builds are made by hand.
+- Simplify the code, tests and release pipeline without dropping any feature.
 
 ## Future Ideas
 

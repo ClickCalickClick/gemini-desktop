@@ -2,6 +2,15 @@
 
 This guide is for agentic coding agents working in the Gemini Desktop repository. It details project-specific commands, conventions, and workflows.
 
+## 🍴 Fork Status & Planned Work
+
+This repository is [ClickCalickClick/gemini-desktop](https://github.com/ClickCalickClick/gemini-desktop), a maintained fork of bwendell/gemini-desktop.
+
+- **Read [TODO.md](TODO.md) before starting work.** It holds the plan, the current focus and the owner's decisions. Update it in the same PR as the work: tick the item, link the PR and add a Done log line.
+- **[docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md)** maps every feature, the known bugs (B1, B2, ...), the build and release setup, and the maintenance hotspots.
+- Primary platforms are CachyOS (Arch-based, KDE Plasma on Wayland) and macOS. Windows must keep building, and no feature may be dropped without the owner's OK.
+- Some statements in this file and in `docs/ARCHITECTURE.md` are out of date, for example the `persist:gemini` partition and "Google-only connections". Trust the code and [section 9 of the overview](docs/CODEBASE_OVERVIEW.md#9-docs-that-are-wrong-today) until TODO item S6 fixes them.
+
 ## 🛠 Build, Lint, and Test Commands
 
 The project uses **npm** for package management and **Vitest** + **WebdriverIO** for testing.
@@ -174,6 +183,7 @@ When commands, boundaries, or patterns change, the nearest AGENTS.md or operatio
 | E2E wait utilities or test patterns               | `tests/e2e/AGENTS.md`                |
 | Unit test mock factories or patterns              | `tests/unit/AGENTS.md`               |
 | AI-agent routing or documentation discovery paths | `docs/AI_AGENT_DOC_INDEX.md`         |
+| Planned work, priorities or owner decisions       | `TODO.md`                            |
 | Wayland / ARM Linux / browser validation runbooks | nearest relevant `docs/*.md` runbook |
 | Global build/lint/test commands                   | Root `AGENTS.md`                     |
 | Verification matrix commands                      | Root `AGENTS.md`                     |
