@@ -112,4 +112,4 @@ Until then, build on a Mac by hand ([recipe](docs/CODEBASE_OVERVIEW.md#55-buildi
 
 ## Done log
 
-- **2026-10-13:** Codebase overview and this TODO list ([docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md), `TODO.md`).
+- **2026-10-13:** Codebase overview and this TODO list ([docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md), `TODO.md`), [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1).
