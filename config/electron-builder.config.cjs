@@ -2,6 +2,8 @@
  * @type {import('electron-builder').Configuration}
  * @see https://www.electron.build/configuration/configuration
  */
+const { description } = require('../package.json');
+
 const explicitBuildArch = process.env.npm_config_arch || process.env.BUILD_ARCH;
 const buildArch = explicitBuildArch || process.arch;
 const buildPlatform = process.env.BUILD_PLATFORM || process.platform;
@@ -126,6 +128,10 @@ module.exports = {
                 arch: ['x64'],
             },
             {
+                target: 'pacman',
+                arch: ['x64'],
+            },
+            {
                 target: 'tar.gz',
                 arch: ['x64'],
             },
@@ -134,16 +140,72 @@ module.exports = {
         category: 'Utility',
         artifactName: 'Gemini-Desktop-${version}-${arch}.${ext}',
         executableName: 'gemini-desktop',
+        // The one-line package summary. Without it the deb synopsis and pacman's pkgdesc are empty.
+        synopsis: description,
+        // The deb Maintainer and the pacman packager. Without it, fpm uses the upstream author.
+        maintainer: 'ClickCalickClick <16350651+ClickCalickClick@users.noreply.github.com>',
+        desktop: {
+            entry: {
+                // Must match the window class the app sets with --class on Linux, so desktops
+                // group the window with its launcher. The default is the product name.
+                StartupWMClass: 'gemini-desktop',
+            },
+        },
     },
+    // A custom depends list replaces electron-builder's defaults instead of adding to them,
+    // so the deb and rpm lists are the defaults plus ALSA.
     deb: {
-        depends: ['libnotify4', 'libxtst6', 'libnss3', 'libasound2'],
+        depends: [
+            'libgtk-3-0',
+            'libnotify4',
+            'libnss3',
+            'libxss1',
+            'libxtst6',
+            'xdg-utils',
+            'libatspi2.0-0',
+            'libuuid1',
+            'libsecret-1-0',
+            'libasound2',
+        ],
         recommends: ['libayatana-appindicator3-1'],
     },
     rpm: {
-        depends: ['libnotify', 'libappindicator', 'libXtst', 'nss', 'alsa-lib'],
+        depends: [
+            'gtk3',
+            'libnotify',
+            'nss',
+            'libXScrnSaver',
+            '(libXtst or libXtst6)',
+            'xdg-utils',
+            'at-spi2-core',
+            '(libuuid or libuuid1)',
+            'alsa-lib',
+        ],
     },
+    // The pacman defaults pull in all of ffmpeg (Electron bundles its own), the archived http-parser
+    // and libappindicator-gtk3, which Arch only has as a provides. This list follows Arch's own
+    // Electron app packages; mesa provides libgbm.
+    pacman: {
+        depends: [
+            'gtk3',
+            'nss',
+            'nspr',
+            'alsa-lib',
+            'libxss',
+            'libxtst',
+            'libnotify',
+            'libsecret',
+            'xdg-utils',
+            'hicolor-icon-theme',
+            'mesa',
+        ],
+    },
+    // Builds use --publish never. This only names the repository that AppImage and Windows
+    // builds check for updates (app-update.yml); without it electron-builder guesses from .git.
     publish: {
         provider: 'github',
+        owner: 'ClickCalickClick',
+        repo: 'gemini-desktop',
         releaseType: 'release',
         timeout: 600000,
     },
