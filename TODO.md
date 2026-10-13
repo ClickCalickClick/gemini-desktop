@@ -47,15 +47,16 @@ Goal: pushing a `v*` tag builds the AppImage, pacman, deb, rpm and tar.gz packag
 
 **Workflows** (one PR)
 
-- [ ] **L5** Replace `release.yml`, `manual-release.yml`, `_build.yml` and `_release.yml` with one `release.yml`:
+- [x] **L5** Replace `release.yml`, `manual-release.yml` and `_release.yml` with one `release.yml` (`_build.yml` stays, because the manual `test.yml` uses it). [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
     - `verify`: the tag matches `package.json`, then lint, both builds and the three Vitest suites.
-    - `linux` on `ubuntu-24.04`: install `libarchive-tools`, `rpm` and `xvfb`, package, run `npm run test:e2e:release`, write `SHA256SUMS`.
+    - `linux` on `ubuntu-24.04`: install `libarchive-tools`, `rpm` and `xvfb`, package, run `npm run test:e2e:release`, write `checksums-linux.txt`.
     - `publish`: create or update a **draft** release with `gh`.
-    - Rewrite the ~186 lines of unit tests that read `_release.yml` as text, and update `AGENTS.md`, `tests/e2e/AGENTS.md` and `docs/CONTRIBUTING.md`.
-- [ ] **L6** Arch install check in the `linux` job: in an `archlinux:latest` container, `pacman -Syu`, `pacman -U` the package, check that `gemini-desktop.desktop` is installed, and fail if `ldd` reports a missing library.
-- [ ] **L7** `ci.yml` for pushes and PRs: lint, both builds, the three Vitest suites, and a Linux packaging job that uploads the AppImage and pacman package as a 7-day artifact, so any PR can be installed on CachyOS. Move `test.yml` and `_test.yml` to manual or nightly runs.
-- [ ] **L8** Node 22 in CI, plus `.nvmrc` and an `engines` field. CI pins Node 20, which is end of life.
-- [ ] **L9** Windows x64 and arm64 jobs in the new `release.yml`, with the x64 packaged E2E and installer smoke test. The upgrade-from-previous-release check cannot pass until the fork has a release, so drop it or make it non-blocking; if dropped, remove `scripts/release/resolve-windows-baseline-installer.cjs` and its test.
+    - Running it by hand without a tag builds the branch and keeps the installers as workflow artifacts, replacing `manual-release.yml`'s dry run.
+    - Rewrite the ~186 lines of unit tests that read `_release.yml` as text (now `tests/unit/main/releaseWorkflow.test.ts`), and update `AGENTS.md`, `tests/e2e/AGENTS.md` and `docs/CONTRIBUTING.md`.
+- [x] **L6** Arch install check in the `linux` job: in an Arch Linux container, `pacman -Syu`, `pacman -U` the package, check that `gemini-desktop.desktop` is installed, and fail if `ldd` reports a missing library. Lives in `scripts/release/check-arch-install.sh`, run by `.github/actions/linux-packages` in both CI and releases; it also checks that `pacman -R` removes `/usr/bin/gemini-desktop`. [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
+- [x] **L7** `ci.yml` for pushes and PRs: lint, both builds, the three Vitest suites, and a Linux packaging job that uploads the AppImage and pacman package as a 7-day artifact, so any PR can be installed on CachyOS. Move `test.yml` and `_test.yml` to manual or nightly runs (manual). [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
+- [x] **L8** Node 24 in CI, plus `.nvmrc` and an `engines` field (`>=22.12.0`). CI pinned Node 20, which is end of life. Node 24 rather than 22: it is supported until April 2028, and its npm 11 is what wrote `package-lock.json` (npm 10 rewrites it). Every workflow reads the version from `.nvmrc`. [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
+- [x] **L9** Windows x64 and arm64 jobs in the new `release.yml`, with the x64 packaged E2E and installer smoke test. The upgrade-from-previous-release check cannot pass until the fork has a release, so drop it or make it non-blocking; if dropped, remove `scripts/release/resolve-windows-baseline-installer.cjs` and its test. (Dropped, together with the two `windows-upgrade-*.spec.ts` specs. arm64 is no longer launched on a `windows-11-arm` runner.) [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
 
 **Update path and fork identity** (app change, one PR)
 
@@ -89,7 +90,7 @@ Goal: pushing a `v*` tag builds the AppImage, pacman, deb, rpm and tar.gz packag
 
 Until then, build on a Mac by hand ([recipe](docs/CODEBASE_OVERVIEW.md#55-building-installers-by-hand)).
 
-- [ ] **M1** Consistent ad-hoc signing (`identity: "-"`), with hardened runtime off or the full JIT entitlements. Drop the zip until macOS auto-update exists, updating `tests/unit/main/releaseWorkflowAliases.test.ts`.
+- [ ] **M1** Consistent ad-hoc signing (`identity: "-"`), with hardened runtime off or the full JIT entitlements. Drop the zip until macOS auto-update exists, updating `tests/unit/main/releaseWorkflow.test.ts`.
 - [ ] **M2** macOS jobs in `release.yml`: arm64 on `macos-latest`, and Intel on `macos-15-intel` or not at all **(owner decides)**. Avoid `macos-14`, which retires on 2026-11-02.
 - [ ] **M3 (owner)** Developer ID signing and notarization: Apple Developer Program (US$99 a year), then the `CSC_LINK`, `CSC_KEY_PASSWORD` and notarization secrets.
 - [ ] **M4** macOS auto-update after M3: support in `MacAdapter`, upload the zip and `latest-mac.yml`, and fix the channel naming in `updateManager.ts`.
@@ -97,7 +98,7 @@ Until then, build on a Mac by hand ([recipe](docs/CODEBASE_OVERVIEW.md#55-buildi
 ## Phase 4: Simplify, keeping every feature
 
 - [ ] **S1** Delete dead code and assets (about 1,000 lines and 3.3 MB): the unused hooks `useQuickChatNavigation`, `useWebviewInit` and `useOptionsWindow`, the never-rendered `UpdateToast`, the unreachable model selection in `llmManager.ts`, unused images in `src/renderer/assets`, `public/` and `build/`, and the `.sisyphus` line in `.ignore`.
-- [ ] **S2** Dependencies: remove `yaml`, `@playwright/test`, `@types/marked`, and `typedoc` together with `typedoc.json` and the `docs` script (which would overwrite `docs/`); declare `esbuild`; update electron-builder to the latest 26.x.
+- [ ] **S2** Dependencies: remove `@playwright/test`, `@types/marked`, and `typedoc` together with `typedoc.json` and the `docs` script (which would overwrite `docs/`); declare `esbuild`; update electron-builder to the latest 26.x. (`yaml` is now used by the workflow tests.)
 - [ ] **S3** Scripts: remove `scripts/process_icon.cjs`, `scripts/run-all-e2e-groups.cjs` and the unused `.github/actions/e2e-setup`; narrow the `pkill` in `scripts/clean.cjs`; fix the stale version comments on pinned actions.
 - [ ] **S4** Make the tests honest (B12): wire in or delete the orphan E2E specs and `tests/unit/e2e/`; remove the missing spec from `config/wdio/wdio.conf.js`; make `npm run test:e2e` run what CI runs; set WDIO retries to 0 or 1; remove the release checks that read the defunct `globalThis.llmManager`.
 - [ ] **S5** Slim the test suite: one test layer per behaviour (drop the duplicated `tests/coordinated/ipc/` tests), merge duplicate test files, lower the coverage gates to about 80/70 and drop the `*.coverage.test` files, give renderer tests one home, keep an E2E smoke set for Linux Wayland (macOS later), and replace the 44 `browser.pause()` calls.
@@ -114,3 +115,4 @@ Until then, build on a Mac by hand ([recipe](docs/CODEBASE_OVERVIEW.md#55-buildi
 
 - **2026-10-13:** Codebase overview and this TODO list ([docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md), `TODO.md`), [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1).
 - **2026-10-13:** L1 to L4: fork package metadata, a pacman target with Arch dependencies, deb and rpm dependencies that keep electron-builder's defaults, the `gemini-desktop` window class in the `.desktop` entry, and `dist:linux` and `dist:mac-*` scripts that build first, [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1).
+- **2026-10-13:** L5 to L9: a tag-driven `release.yml` (Linux and Windows installers, then a draft release), a `ci.yml` for pushes and PRs that builds and tests the Linux packages and installs the pacman package on Arch, the old 48-job test matrix made manual, and Node 24 from `.nvmrc`, [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1).

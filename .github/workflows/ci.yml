@@ -1,0 +1,111 @@
+# =============================================================================
+# CI
+# =============================================================================
+#
+# Runs on every push and pull request to main:
+#   - lint, both builds and the three Vitest suites
+#   - the Linux packages, their packaged-app E2E tests and the Arch install check
+#
+# The AppImage and pacman package are kept for 7 days, so any pull request can
+# be installed and tried on CachyOS. The full cross-platform E2E matrix
+# (test.yml) is run by hand from the Actions tab.
+# =============================================================================
+
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+    workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    CI: true
+    ELECTRON_ENABLE_LOGGING: true
+    npm_config_fetch_retries: '3'
+    npm_config_fetch_retry_mintimeout: '10000'
+    npm_config_fetch_retry_maxtimeout: '60000'
+
+jobs:
+    checks:
+        name: Lint, build and unit tests
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout
+              uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+            - name: Setup Node.js
+              uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+
+            - name: Install dependencies
+              uses: ./.github/actions/retry-command
+              with:
+                  command: npm ci
+
+            - name: Lint
+              run: npm run lint
+
+            - name: Build
+              run: npm run build && npm run build:electron
+
+            - name: Unit tests (renderer)
+              run: npm run test
+
+            - name: Unit tests (main process, preload and shared)
+              run: npm run test:electron
+
+            - name: Coordinated multi-window tests
+              run: npm run test:coordinated
+
+    linux:
+        name: Linux packages
+        runs-on: ubuntu-24.04
+        timeout-minutes: 60
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout
+              uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+            - name: Setup Node.js
+              uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+
+            - name: Build, test and install the Linux packages
+              uses: ./.github/actions/linux-packages
+
+            - name: Upload E2E logs and screenshots
+              if: failure()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: linux-e2e-logs
+                  path: |
+                      tests/e2e/screenshots/
+                      tests/e2e/logs/
+                  retention-days: 7
+                  if-no-files-found: ignore
+
+            - name: Upload the AppImage and pacman package
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: linux-packages
+                  path: |
+                      release/*.AppImage
+                      release/*.pacman
+                  retention-days: 7
+                  if-no-files-found: error

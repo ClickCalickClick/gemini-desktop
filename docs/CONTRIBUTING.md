@@ -2,7 +2,7 @@
 
 First off, thank you for considering contributing to Gemini Desktop! 🎉 This guide walks you through setup, testing, code style, and the contribution workflow.
 
-> **Quick summary:** Use **Node.js 20+**, install dependencies with `npm install`, run the app with `npm run electron:dev`, and run the relevant tests before opening a PR.
+> **Quick summary:** Use **Node.js 24** (see `.nvmrc`), install dependencies with `npm install`, run the app with `npm run electron:dev`, and run the relevant tests before opening a PR.
 
 ## Table of Contents
 
@@ -29,8 +29,8 @@ We follow a simple code of conduct: **be kind, be respectful, be helpful**. If y
 
 ### Prerequisites
 
-- **Node.js 20+** (CI uses Node 20)
-- **npm 9+**
+- **Node.js 24** (the version in `.nvmrc`, which CI uses; 22.12 or later also works)
+- **npm 11** (comes with Node.js 24; older npm versions rewrite `package-lock.json`)
 - **Git**
 
 ### Getting Started

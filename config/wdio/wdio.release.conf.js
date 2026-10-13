@@ -90,11 +90,8 @@ export const config = {
         '../../tests/e2e/external-links.spec.ts',
         '../../tests/e2e/release/*.spec.ts',
     ],
-    exclude: [
-        '../../tests/e2e/release/windows-installer-smoke.spec.ts',
-        '../../tests/e2e/release/windows-upgrade-x64.spec.ts',
-        '../../tests/e2e/release/windows-upgrade-arm64.spec.ts',
-    ],
+    // Runs against an installed build through wdio.release.installer.conf.js instead.
+    exclude: ['../../tests/e2e/release/windows-installer-smoke.spec.ts'],
     // Release builds are stable; use minimal retries (default: 1). Override with WDIO_SPEC_FILE_RETRIES env var
     specFileRetries: SPEC_FILE_RETRIES,
     specFileRetriesDelay: SPEC_FILE_RETRY_DELAY_SECONDS,

@@ -51,6 +51,14 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 - Use `CHROMEDRIVER_PATH` only if you need to override the chromedriver binary (e.g., custom ARM builds).
 - See `docs/ARM_LINUX_TESTING.md` for package prerequisites and runbook steps.
 
+### CI and Releases (GitHub Actions)
+
+- Node.js comes from `.nvmrc` (24) in every workflow; `engines` in `package.json` allows 22.12 or later.
+- `ci.yml` runs on pushes and pull requests to `main`: lint, both builds, the three Vitest suites, and the Linux packages through `.github/actions/linux-packages` (`npm run dist:linux`, `npm run test:e2e:release`, then `scripts/release/check-arch-install.sh` installs the pacman package in an Arch Linux container). It keeps the AppImage and pacman package as 7-day artifacts.
+- `release.yml` runs on `v*` tags: it checks the tag against the `package.json` version, builds Linux and Windows (x64 and arm64) installers, and creates or updates a **draft** GitHub release. Run it by hand without a tag to build a branch without releasing. macOS is built by hand until TODO item M2.
+- `test.yml` (with `_build.yml` and `_test.yml`) is the full cross-platform E2E matrix and only runs by hand.
+- `tests/unit/main/releaseWorkflow.test.ts` reads the workflow files and pins the release contract: draft-only publishing, the uploaded file names and update feeds, SHA-pinned actions and `.nvmrc`.
+
 ---
 
 ## 🏗 Code Style & Guidelines
@@ -164,6 +172,7 @@ Run the appropriate commands based on what you changed:
 | `tests/coordinated/` | `npm run test:coordinated`                                                | Vitest (jsdom) — multi-window coordination  |
 | `tests/shared/`      | `npm run lint` + relevant `test:integration` / `test:e2e:spec` coverage   | Shared WDIO helpers used by multiple suites |
 | `tests/e2e/`         | `npm run test:e2e` or `npm run test:e2e:spec -- --spec=<path>`            | WDIO E2E tests                              |
+| `.github/`           | `npm run test:electron`, `npm run lint`                                   | Workflow contract tests                     |
 | Everything           | `npm run test:all`                                                        | Full sequential suite                       |
 
 ## 🔧 Documentation Maintenance Contract
@@ -187,6 +196,7 @@ When commands, boundaries, or patterns change, the nearest AGENTS.md or operatio
 | Planned work, priorities or owner decisions       | `TODO.md`                            |
 | Wayland / ARM Linux / browser validation runbooks | nearest relevant `docs/*.md` runbook |
 | Global build/lint/test commands                   | Root `AGENTS.md`                     |
+| GitHub Actions workflows or `.github/actions/`    | Root `AGENTS.md` (CI and Releases)   |
 | Verification matrix commands                      | Root `AGENTS.md`                     |
 
 ---

@@ -36,7 +36,6 @@ on:
 permissions: {}
 
 env:
-    NODE_VERSION: '20'
     CI: true
     ELECTRON_ENABLE_LOGGING: true
     npm_config_fetch_retries: '3'
@@ -61,7 +60,7 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
               with:
-                  node-version: ${{ env.NODE_VERSION }}
+                  node-version-file: .nvmrc
                   cache: 'npm'
 
             - name: Install Dependencies
@@ -127,7 +126,7 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
               with:
-                  node-version: ${{ env.NODE_VERSION }}
+                  node-version-file: .nvmrc
                   cache: 'npm'
 
             - name: Install Dependencies
@@ -189,7 +188,7 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
               with:
-                  node-version: ${{ env.NODE_VERSION }}
+                  node-version-file: .nvmrc
                   cache: 'npm'
 
             - name: Install Dependencies
@@ -250,7 +249,7 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
               with:
-                  node-version: ${{ env.NODE_VERSION }}
+                  node-version-file: .nvmrc
                   cache: 'npm'
 
             - name: Install Dependencies
@@ -343,7 +342,7 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
               with:
-                  node-version: ${{ env.NODE_VERSION }}
+                  node-version-file: .nvmrc
                   cache: 'npm'
 
             - name: Install Dependencies
@@ -421,7 +420,7 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
               with:
-                  node-version: ${{ env.NODE_VERSION }}
+                  node-version-file: .nvmrc
                   cache: 'npm'
 
             - name: Setup Linux Environment
@@ -520,7 +519,7 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
               with:
-                  node-version: ${{ env.NODE_VERSION }}
+                  node-version-file: .nvmrc
                   cache: 'npm'
 
             # Linux-specific: Install dependencies and configure for headless Electron
