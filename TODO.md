@@ -29,7 +29,7 @@ These are one-time settings only Jared can change. O1 blocks every CI item.
 
 - [ ] **O1** Enable GitHub Actions on the fork: open the Actions tab and choose "I understand my workflows, go ahead and enable them". GitHub does not run workflows in a fork until this is done.
 - [ ] **O2** Repository settings: turn on Issues, and change the Website field, which still points at upstream's GitHub Pages site.
-- [ ] **O3** Choose the maintainer line baked into Linux packages. Default if no choice is made: `ClickCalickClick <16350651+ClickCalickClick@users.noreply.github.com>`.
+- [ ] **O3** Choose the maintainer line baked into Linux packages. Until then they use the default from L1, `ClickCalickClick <16350651+ClickCalickClick@users.noreply.github.com>`; to change it, edit `linux.maintainer` in `config/electron-builder.config.cjs`.
 - [ ] **O4** Settings, Code security: turn on private vulnerability reporting, Dependabot alerts and Dependabot security updates.
 
 Later owner items: L13 and L14 (first release and CachyOS test), L16 (AUR), M2 and M3 (macOS runners and signing), S12 (Dependabot version updates).
@@ -40,10 +40,10 @@ Goal: pushing a `v*` tag builds the AppImage, pacman, deb, rpm and tar.gz packag
 
 **Packaging config** (one PR)
 
-- [ ] **L1** Package metadata. Add `license: "MIT"`, `homepage`, `repository`, `bugs` and `desktopName: "gemini-desktop.desktop"` to `package.json`. In `config/electron-builder.config.cjs`, set `publish.owner` and `publish.repo`, and `linux.maintainer` (O3). Done when packaging works from a git worktree without `-c` overrides and the pacman `.PKGINFO` shows the MIT license and the fork maintainer.
-- [ ] **L2** pacman target. Add `pacman` (x64) to `linux.target` with an explicit `pacman.depends`: `gtk3 nss nspr alsa-lib libxss libxtst libnotify libsecret xdg-utils hicolor-icon-theme mesa`. Set `linux.desktop.entry.StartupWMClass` to `gemini-desktop`. Extend `tests/unit/main/electronBuilderLinuxPackageMetadata.test.ts`.
-- [ ] **L3** deb and rpm dependencies. Use electron-builder's default lists plus ALSA instead of the custom lists, which drop GTK 3, xdg-utils and AT-SPI (and libsecret on deb). Keep appindicator as a deb `recommends`; drop rpm's GTK 2 `libappindicator`.
-- [ ] **L4** Make `dist:linux` and `dist:mac-*` build first, as the Windows scripts already do.
+- [x] **L1** Package metadata. Add `license: "MIT"`, `homepage`, `repository` and `bugs` to `package.json`. In `config/electron-builder.config.cjs`, set `publish.owner` and `publish.repo`, and `linux.maintainer` (O3). Done when packaging works from a git worktree without `-c` overrides and the pacman `.PKGINFO` shows the MIT license and the fork maintainer. [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
+- [x] **L2** pacman target. Add `pacman` (x64) to `linux.target` with an explicit `pacman.depends`: `gtk3 nss nspr alsa-lib libxss libxtst libnotify libsecret xdg-utils hicolor-icon-theme mesa`. Set `linux.desktop.entry.StartupWMClass` to `gemini-desktop`. Extend `tests/unit/main/electronBuilderLinuxPackageMetadata.test.ts`. [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
+- [x] **L3** deb and rpm dependencies. Use electron-builder's default lists plus ALSA instead of the custom lists, which drop GTK 3, xdg-utils and AT-SPI (and libsecret on deb). Keep appindicator as a deb `recommends`; drop rpm's GTK 2 `libappindicator`. [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
+- [x] **L4** Make `dist:linux` and `dist:mac-*` build first, as the Windows scripts already do. [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)
 
 **Workflows** (one PR)
 
@@ -75,7 +75,7 @@ Goal: pushing a `v*` tag builds the AppImage, pacman, deb, rpm and tar.gz packag
 
 ## Phase 2: Bring back features that are off on CachyOS and macOS
 
-- [ ] **P1** Global hotkeys on kernel 7+ (B1). Never load the native `usocket` module: exclude it from the package, and connect dbus-next with a `unix:socket=` address converted from `DBUS_SESSION_BUS_ADDRESS`. Then remove the D-Bus part of the kernel guard, keeping it for node-llama-cpp until P3. **(owner)** Verify on CachyOS: no `v8_ArrayBuffer_NewBackingStore` crash, KDE shows its shortcut dialog, and all three hotkeys fire and survive a restart.
+- [ ] **P1** Global hotkeys on kernel 7+ (B1). Never load the native `usocket` module: exclude it from the package, and connect dbus-next with a `unix:socket=` address converted from `DBUS_SESSION_BUS_ADDRESS`. Then remove the D-Bus part of the kernel guard, keeping it for node-llama-cpp until P3. Also check which app id the portal sees: the app never calls `org.freedesktop.host.portal.Registry.Register`, and it calls `setDesktopName('gemini-desktop')` without the `.desktop` suffix, while the pacman package installs `gemini-desktop.desktop`. **(owner)** Verify on CachyOS: no `v8_ArrayBuffer_NewBackingStore` crash, KDE shows its shortcut dialog, and all three hotkeys fire and survive a restart.
 - [ ] **P2** Upgrade Electron 39 to 44 (B4). Work through the breaking changes of 40 to 44 (`console-message`, login items, Wayland), and re-check the V8 sandbox behaviour behind the kernel guard, wdio-electron-service and chromedriver.
 - [ ] **P3** Text prediction in packaged builds (B2, B3). Stop excluding the packaged platform's own `@node-llama-cpp` CPU (or Metal) binary; check that the binary loads before starting the 640 MB model download; fix `sandboxInit.ts` reading the wrong settings file, or remove that gate if node-llama-cpp no longer needs it; add a CI check that `llama-addon.node` is in the Linux package. **(owner)** Confirm the model loads on macOS.
 - [ ] **P4** Close the bridge exposure (B5): no preload in the sign-in window, one navigation and window-open allowlist for every window, dev and test IPC only in development or E2E runs, and sender checks in `BaseIpcHandler`.
@@ -113,3 +113,4 @@ Until then, build on a Mac by hand ([recipe](docs/CODEBASE_OVERVIEW.md#55-buildi
 ## Done log
 
 - **2026-10-13:** Codebase overview and this TODO list ([docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md), `TODO.md`), [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1).
+- **2026-10-13:** L1 to L4: fork package metadata, a pacman target with Arch dependencies, deb and rpm dependencies that keep electron-builder's defaults, the `gemini-desktop` window class in the `.desktop` entry, and `dist:linux` and `dist:mac-*` scripts that build first, [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1).

@@ -23,6 +23,7 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 - `npm run build` - Full build (TypeScript + Vite)
 - `npm run clean` - Clean build artifacts
 - `npm run dist:win` auto-builds `dist/` and `dist-electron/` if missing before packaging the default Windows x64 installer.
+- `npm run dist:linux`, `npm run dist:mac-x64` and `npm run dist:mac-arm64` always rebuild `dist/` and `dist-electron/` before packaging. `dist:linux` builds AppImage, deb, rpm, pacman and tar.gz (x64); on a Debian or Ubuntu build host the pacman target needs `bsdtar` (`libarchive-tools`) and the rpm target needs `rpmbuild` (`rpm`).
 
 ### Linting & Formatting
 

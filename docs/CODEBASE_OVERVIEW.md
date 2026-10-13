@@ -169,18 +169,15 @@ Linux (Ubuntu or Debian build host; on Arch install `libarchive` and `rpm-tools`
 ```bash
 sudo apt-get install -y libarchive-tools rpm
 npm ci
-npm run build && npm run build:electron
-npx electron-builder --linux --x64 --publish never --config config/electron-builder.config.cjs \
-  -c.extraMetadata.homepage=https://github.com/ClickCalickClick/gemini-desktop \
-  -c.publish.owner=ClickCalickClick -c.publish.repo=gemini-desktop
-# Add -c.linux.target=pacman to build only the pacman package.
+npm run dist:linux
+# Output in release/: the AppImage, deb, rpm, pacman and tar.gz packages.
+# To build only the pacman package: npm run dist:linux -- -c.linux.target=pacman
 ```
 
 macOS on Apple Silicon (needs the Xcode command line tools for the native `usocket` build):
 
 ```bash
 npm ci
-npm run build && npm run build:electron
 npm run dist:mac-arm64
 # Output: release/Gemini-Desktop-<version>-arm64.dmg and release/mac-arm64/Gemini Desktop.app
 ```
