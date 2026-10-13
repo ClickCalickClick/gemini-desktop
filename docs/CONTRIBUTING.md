@@ -2,7 +2,7 @@
 
 First off, thank you for considering contributing to Gemini Desktop! 🎉 This guide walks you through setup, testing, code style, and the contribution workflow.
 
-> **Quick summary:** Use **Node.js 20+**, install dependencies with `npm install`, run the app with `npm run electron:dev`, and run the relevant tests before opening a PR.
+> **Quick summary:** Use **Node.js 24** (see `.nvmrc`), install dependencies with `npm install`, run the app with `npm run electron:dev`, and run the relevant tests before opening a PR.
 
 ## Table of Contents
 
@@ -29,8 +29,8 @@ We follow a simple code of conduct: **be kind, be respectful, be helpful**. If y
 
 ### Prerequisites
 
-- **Node.js 20+** (CI uses Node 20)
-- **npm 9+**
+- **Node.js 24** (the version in `.nvmrc`, which CI uses; 22.12 or later also works)
+- **npm 11** (comes with Node.js 24; older npm versions rewrite `package-lock.json`)
 - **Git**
 
 ### Getting Started
@@ -72,12 +72,12 @@ All scripts below come from `package.json` and are the source of truth for contr
 | Build       | `npm run build:electron`           | Build Electron main/preload output                |
 | Build       | `npm run electron:build`           | Full production build via electron-builder        |
 | Build       | `npm run clean`                    | Remove build artifacts                            |
-| Release     | `npm run dist:mac-x64`             | Build macOS x64 release artifact                  |
-| Release     | `npm run dist:mac-arm64`           | Build macOS ARM64 release artifact                |
+| Release     | `npm run dist:mac-x64`             | Build, then package the macOS x64 dmg and zip     |
+| Release     | `npm run dist:mac-arm64`           | Build, then package the macOS ARM64 dmg and zip   |
 | Release     | `npm run dist:win`                 | Build Windows x64 release artifact                |
 | Release     | `npm run dist:win-x64`             | Build Windows x64 release artifact                |
 | Release     | `npm run dist:win-arm64`           | Build Windows ARM64 release artifact              |
-| Release     | `npm run dist:linux`               | Build Linux release artifact                      |
+| Release     | `npm run dist:linux`               | Build, then package all Linux x64 formats         |
 | Lint/Format | `npm run lint`                     | Run ESLint across the repo                        |
 | Lint/Format | `npm run format`                   | Format files with Prettier                        |
 | Docs        | `npm run docs`                     | Generate TypeDoc docs                             |

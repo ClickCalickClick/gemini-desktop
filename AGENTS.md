@@ -2,6 +2,15 @@
 
 This guide is for agentic coding agents working in the Gemini Desktop repository. It details project-specific commands, conventions, and workflows.
 
+## 🍴 Fork Status & Planned Work
+
+This repository is [ClickCalickClick/gemini-desktop](https://github.com/ClickCalickClick/gemini-desktop), a maintained fork of bwendell/gemini-desktop.
+
+- **Read [TODO.md](TODO.md) before starting work.** It holds the plan, the current focus and the owner's decisions. Update it in the same PR as the work: tick the item, link the PR and add a Done log line.
+- **[docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md)** maps every feature, the known bugs (B1, B2, ...), the build and release setup, and the maintenance hotspots.
+- Primary platforms are CachyOS (Arch-based, KDE Plasma on Wayland) and macOS. Windows must keep building, and no feature may be dropped without the owner's OK.
+- Some statements in this file and in `docs/ARCHITECTURE.md` are out of date, for example the `persist:gemini` partition and "Google-only connections". Trust the code and [section 9 of the overview](docs/CODEBASE_OVERVIEW.md#9-docs-that-are-wrong-today) until TODO item S6 fixes them.
+
 ## 🛠 Build, Lint, and Test Commands
 
 The project uses **npm** for package management and **Vitest** + **WebdriverIO** for testing.
@@ -14,6 +23,7 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 - `npm run build` - Full build (TypeScript + Vite)
 - `npm run clean` - Clean build artifacts
 - `npm run dist:win` auto-builds `dist/` and `dist-electron/` if missing before packaging the default Windows x64 installer.
+- `npm run dist:linux`, `npm run dist:mac-x64` and `npm run dist:mac-arm64` always rebuild `dist/` and `dist-electron/` before packaging. `dist:linux` builds AppImage, deb, rpm, pacman and tar.gz (x64); on a Debian or Ubuntu build host the pacman target needs `bsdtar` (`libarchive-tools`) and the rpm target needs `rpmbuild` (`rpm`).
 
 ### Linting & Formatting
 
@@ -40,6 +50,14 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 - On Linux, headless mode is detected when `DISPLAY` is unset; WDIO auto-manages Xvfb in this case. Do **not** force `DISPLAY` for headless runs.
 - Use `CHROMEDRIVER_PATH` only if you need to override the chromedriver binary (e.g., custom ARM builds).
 - See `docs/ARM_LINUX_TESTING.md` for package prerequisites and runbook steps.
+
+### CI and Releases (GitHub Actions)
+
+- Node.js comes from `.nvmrc` (24) in every workflow; `engines` in `package.json` allows 22.12 or later.
+- `ci.yml` runs on pushes and pull requests to `main`: lint, both builds, the three Vitest suites, and the Linux packages through `.github/actions/linux-packages` (`npm run dist:linux`, `npm run test:e2e:release`, then `scripts/release/check-arch-install.sh` installs the pacman package in an Arch Linux container). It keeps the AppImage and pacman package as 7-day artifacts.
+- `release.yml` runs on `v*` tags: it checks the tag against the `package.json` version, builds Linux and Windows (x64 and arm64) installers, and creates or updates a **draft** GitHub release. Run it by hand without a tag to build a branch without releasing. macOS is built by hand until TODO item M2.
+- `test.yml` (with `_build.yml` and `_test.yml`) is the full cross-platform E2E matrix and only runs by hand.
+- `tests/unit/main/releaseWorkflow.test.ts` reads the workflow files and pins the release contract: draft-only publishing, the uploaded file names and update feeds, SHA-pinned actions and `.nvmrc`.
 
 ---
 
@@ -154,6 +172,7 @@ Run the appropriate commands based on what you changed:
 | `tests/coordinated/` | `npm run test:coordinated`                                                | Vitest (jsdom) — multi-window coordination  |
 | `tests/shared/`      | `npm run lint` + relevant `test:integration` / `test:e2e:spec` coverage   | Shared WDIO helpers used by multiple suites |
 | `tests/e2e/`         | `npm run test:e2e` or `npm run test:e2e:spec -- --spec=<path>`            | WDIO E2E tests                              |
+| `.github/`           | `npm run test:electron`, `npm run lint`                                   | Workflow contract tests                     |
 | Everything           | `npm run test:all`                                                        | Full sequential suite                       |
 
 ## 🔧 Documentation Maintenance Contract
@@ -174,8 +193,10 @@ When commands, boundaries, or patterns change, the nearest AGENTS.md or operatio
 | E2E wait utilities or test patterns               | `tests/e2e/AGENTS.md`                |
 | Unit test mock factories or patterns              | `tests/unit/AGENTS.md`               |
 | AI-agent routing or documentation discovery paths | `docs/AI_AGENT_DOC_INDEX.md`         |
+| Planned work, priorities or owner decisions       | `TODO.md`                            |
 | Wayland / ARM Linux / browser validation runbooks | nearest relevant `docs/*.md` runbook |
 | Global build/lint/test commands                   | Root `AGENTS.md`                     |
+| GitHub Actions workflows or `.github/actions/`    | Root `AGENTS.md` (CI and Releases)   |
 | Verification matrix commands                      | Root `AGENTS.md`                     |
 
 ---

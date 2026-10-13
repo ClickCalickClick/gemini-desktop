@@ -11,6 +11,7 @@ Welcome! You are an AI assistant helping with the `gemini-desktop` project.
 
 ## Where to find more context
 
+- **Fork Plan & Progress:** `TODO.md` (Root)
 - **Repository Guidelines:** `AGENTS.md` (Root)
 - **Agent Task Routing:** `docs/AI_AGENT_DOC_INDEX.md`
 - **Architecture & Design:** `docs/ARCHITECTURE.md`

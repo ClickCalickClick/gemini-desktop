@@ -13,8 +13,8 @@ This runbook covers automated and local verification for Wayland global hotkeys 
 | Wayland session  | `echo $XDG_SESSION_TYPE` (should print "wayland") |
 | KDE Plasma 5.27+ | `plasmashell --version`                           |
 | D-Bus running    | `dbus-daemon --version`                           |
-| Node.js 20+      | `node --version`                                  |
-| npm 9+           | `npm --version`                                   |
+| Node.js 22.12+   | `node --version`                                  |
+| npm 10+          | `npm --version`                                   |
 
 ## Environment Setup
 

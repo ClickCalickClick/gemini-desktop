@@ -2,12 +2,10 @@
 # GitHub Actions Test Workflow
 # =============================================================================
 #
-# This workflow runs automated tests for the Gemini Desktop application.
-# It triggers on pushes to main and pull requests, running:
-#   - Build (via _build.yml)
-#   - Unit tests with coverage
-#   - E2E/Integration tests (Windows, Linux, macOS)
-#   - Build verification
+# The full cross-platform test matrix: unit tests with coverage, plus the
+# integration and E2E suites on Windows, macOS and Ubuntu (about 48 jobs).
+# Run it by hand from the Actions tab, for example before a release.
+# ci.yml is the gate for pushes and pull requests.
 #
 # =============================================================================
 
@@ -17,11 +15,6 @@ name: Test
 # Trigger Configuration
 # =============================================================================
 on:
-    push:
-        branches: [main]
-    pull_request:
-        branches: [main]
-    # Allow manual triggering from Actions tab
     workflow_dispatch:
 
 # =============================================================================

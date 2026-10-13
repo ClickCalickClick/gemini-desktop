@@ -5,6 +5,8 @@ Start with [root AGENTS.md](../AGENTS.md), then use the routing table below to l
 
 ## Start Here
 
+- **Fork plan, current focus, and owner decisions** → [TODO.md](../TODO.md)
+- **Feature inventory, known bugs, and build/release state** → [docs/CODEBASE_OVERVIEW.md](./CODEBASE_OVERVIEW.md)
 - **Repository rules, commands, and verification matrix** → [AGENTS.md](../AGENTS.md)
 - **Cross-boundary architecture and source-of-truth files** → [docs/ARCHITECTURE.md](./ARCHITECTURE.md)
 - **Need help choosing a verification command?** → the **Verification Matrix** in [AGENTS.md](../AGENTS.md)
@@ -22,6 +24,7 @@ Start with [root AGENTS.md](../AGENTS.md), then use the routing table below to l
 | Shared wait utilities, timing constants, or WDIO shared infra                                | [tests/shared/AGENTS.md](../tests/shared/AGENTS.md) → [tests/shared/index.ts](../tests/shared/index.ts) → [tests/shared/wait-utilities.ts](../tests/shared/wait-utilities.ts) | `tests/shared/` is the canonical shared test infrastructure surface   |
 | E2E specs or deterministic wait usage in `tests/e2e/`                                        | [tests/e2e/AGENTS.md](../tests/e2e/AGENTS.md) → [docs/E2E_TESTING_GUIDELINES.md](./E2E_TESTING_GUIDELINES.md) → [docs/E2E_WAIT_PATTERNS.md](./E2E_WAIT_PATTERNS.md)           | E2E behavior and wait strategy are documented separately              |
 | Shared mock factories or test harness helpers                                                | [tests/unit/AGENTS.md](../tests/unit/AGENTS.md) → [tests/helpers/README.md](../tests/helpers/README.md)                                                                       | Mock-factory catalog and harness patterns live there                  |
+| Packaging, CI workflows, releases, or auto-update                                            | [AGENTS.md](../AGENTS.md) CI and Releases → [docs/CODEBASE_OVERVIEW.md](./CODEBASE_OVERVIEW.md) section 5 → [TODO.md](../TODO.md) Phase 1                                     | How CI and releases run now, the background, and what is left         |
 | Browser-only styling validation                                                              | [docs/BROWSER_UI_VALIDATION.md](./BROWSER_UI_VALIDATION.md)                                                                                                                   | Explains what browser-mode validation can and cannot prove            |
 | ARM Linux or headless Linux test execution                                                   | [docs/ARM_LINUX_TESTING.md](./ARM_LINUX_TESTING.md)                                                                                                                           | Platform runbook for Linux package prerequisites and automation notes |
 | Wayland automation or manual hotkey validation                                               | [docs/WAYLAND_TESTING_RUNBOOK.md](./WAYLAND_TESTING_RUNBOOK.md) or [docs/WAYLAND_MANUAL_TESTING.md](./WAYLAND_MANUAL_TESTING.md)                                              | Separates automation-friendly guidance from manual-only verification  |

@@ -46,7 +46,7 @@ Group specs by feature behavior, not by helper implementation detail.
 - Single spec: `npm run test:e2e:spec -- --spec=tests/e2e/<file>`
 - Grouped suites: `npm run test:e2e:group:<name>`
 - Windows installer validation specs run only on Windows hosts through `npm run test:e2e:release:installer`.
-- For branch-safe release-path verification, trigger `gh workflow run manual-release.yml --ref "$(git branch --show-current)" -f publish=false` so `_release.yml` runs per-architecture Windows packaging, including the `windows-11-arm` arm64 installer validation gate, without publishing release assets.
+- For branch-safe release-path verification, run the Release workflow without a tag: `gh workflow run release.yml --ref "$(git branch --show-current)"`. It packages Linux and Windows and runs the packaged-app and x64 installer tests, keeping the installers as workflow artifacts instead of releasing them.
 
 ## Common Mistakes
 
