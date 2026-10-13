@@ -25,9 +25,9 @@ Legend: `[ ]` open, `[~]` in progress, `[x]` done, `[!]` blocked (say on what).
 
 ## Needs the owner
 
-These are one-time settings only Jared can change. O1 blocks every CI item.
+These are one-time settings only Jared can change.
 
-- [ ] **O1** Enable GitHub Actions on the fork: open the Actions tab and choose "I understand my workflows, go ahead and enable them". GitHub does not run workflows in a fork until this is done.
+- [x] **O1** Enable GitHub Actions on the fork: open the Actions tab and choose "I understand my workflows, go ahead and enable them". GitHub does not run workflows in a fork until this is done. (Done on 2026-10-13; the first run was CI on [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1).)
 - [ ] **O2** Repository settings: turn on Issues, and change the Website field, which still points at upstream's GitHub Pages site.
 - [ ] **O3** Choose the maintainer line baked into Linux packages. Until then they use the default from L1, `ClickCalickClick <16350651+ClickCalickClick@users.noreply.github.com>`; to change it, edit `linux.maintainer` in `config/electron-builder.config.cjs`.
 - [ ] **O4** Settings, Code security: turn on private vulnerability reporting, Dependabot alerts and Dependabot security updates.

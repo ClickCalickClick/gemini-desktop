@@ -79,6 +79,8 @@ Google cookies live in Chromium's default session; there is no `persist:` partit
 
 ## 5. Build, packaging and release
 
+Sections 5.1 to 5.3 describe the snapshot. Since then, TODO items L1 to L9 ([#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1)) added the package metadata and the pacman target, made the `dist:*` scripts build first, and replaced the workflows; the root [AGENTS.md](../AGENTS.md#ci-and-releases-github-actions) describes the current ones.
+
 ### 5.1 Local build
 
 | Step             | Command                                                | What it does                                                                                                                             |
