@@ -67,11 +67,11 @@ Goal: pushing a `v*` tag builds the AppImage, pacman, deb, rpm and tar.gz packag
 **First release**
 
 - [~] **L13 (owner)** Set the version to `0.13.0`, push tag `v0.13.0`, review the draft release, note that users of upstream builds must install this one by hand once, and publish it. Publishing is what makes it visible to update checks. The version is set in [#3](https://github.com/ClickCalickClick/gemini-desktop/pull/3); the tag and publishing are the owner's.
-- [ ] **L14 (owner)** Test on CachyOS: `pacman -U` pulls only the expected dependencies; the KDE launcher, taskbar icon and window grouping are right; the tray works; sign-in survives a restart; `pacman -R` removes `/usr/bin/gemini-desktop`; the AppImage runs (install `fuse2` if it complains).
+- [ ] **L14 (owner)** Test on CachyOS: `pacman -U` pulls only the expected dependencies; the KDE launcher, taskbar icon and window grouping are right; the tray works; sign-in survives a restart; `pacman -R` removes `/usr/bin/gemini-desktop`; the AppImage runs without `fuse2` (L15).
 
 **Optional**
 
-- [ ] **L15** AppImage without `fuse2`: try `toolsets.appimage: "1.0.2"`, or `1.0.3` with electron-builder 26.17 or later. Needs a CachyOS test.
+- [~] **L15** AppImage without `fuse2`: try `toolsets.appimage: "1.0.2"`, or `1.0.3` with electron-builder 26.17 or later. Needs a CachyOS test. The config now sets `1.0.2`, which builds the AppImage with the static type2 runtime; it needs `fusermount3` from `fuse3`, which `xdg-desktop-portal` already pulls in. In a container without libfuse2 the old AppImage fails with `dlopen(): error loading libfuse.so.2` and the new one starts the app. Waiting for the CachyOS test, [#3](https://github.com/ClickCalickClick/gemini-desktop/pull/3).
 - [ ] **L16 (owner)** An AUR package, `gemini-desktop-bin`, that repackages the release's pacman file, so `paru` or `yay` handle updates. Needs an AUR account.
 
 ## Phase 2: Bring back features that are off on CachyOS and macOS

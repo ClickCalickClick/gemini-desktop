@@ -25,6 +25,9 @@ type ElectronBuilderConfig = {
     pacman?: {
         depends?: string[];
     };
+    toolsets?: {
+        appimage?: string | null;
+    };
     publish?: {
         provider?: string;
         owner?: string;
@@ -85,6 +88,13 @@ describe('electron-builder Linux package metadata', () => {
         for (const unwanted of ['ffmpeg', 'http-parser', 'libappindicator-gtk3']) {
             expect(builderConfig.pacman?.depends).not.toContain(unwanted);
         }
+    });
+
+    it('builds the AppImage with the type2 runtime, which needs fuse3 instead of fuse2', () => {
+        // Without a toolset, or with 0.0.0, electron-builder uses the legacy runtime that loads libfuse.so.2.
+        expect(getTarget('AppImage')).toEqual({ target: 'AppImage', arch: ['x64'] });
+        expect(builderConfig.toolsets?.appimage).toBeTruthy();
+        expect(builderConfig.toolsets?.appimage).not.toBe('0.0.0');
     });
 
     it('sets the desktop entry window class to gemini-desktop, the wmClass the Linux adapters use', () => {

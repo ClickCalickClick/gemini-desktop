@@ -152,6 +152,12 @@ module.exports = {
             },
         },
     },
+    // The default AppImage runtime loads libfuse2, which CachyOS and Ubuntu 22.04 and later do not
+    // install. The static type2 runtime in toolset 1.0.2 only needs fusermount3 from fuse3, which
+    // xdg-desktop-portal already depends on. Windows keeps the default winCodeSign toolset.
+    toolsets: {
+        appimage: '1.0.2',
+    },
     // A custom depends list replaces electron-builder's defaults instead of adding to them,
     // so the deb and rpm lists are the defaults plus ALSA.
     deb: {

@@ -195,6 +195,8 @@ Upstream CI cross-built the Intel version on Apple Silicon. That will stop worki
 - **Wayland works natively.** Electron 38.2 and later use native Wayland by default, and Plasma's tray supports Electron's StatusNotifierItem.
 - **Kernel 7.x turns off global hotkeys and text prediction** (B1). Arch's `core/linux` was 7.2.9 on 2026-10-13.
 
+Since then, L15 ([#3](https://github.com/ClickCalickClick/gemini-desktop/pull/3)) builds the AppImage with electron-builder's type2 runtime (toolset `1.0.2`), which needs `fusermount3` from `fuse3` instead of `fuse2`. KDE Plasma already installs `fuse3` through `xdg-desktop-portal`.
+
 ## 6. Tests and current health
 
 Results of a clean run on 2026-10-13 (Linux x64, Node 22, `npm ci`):

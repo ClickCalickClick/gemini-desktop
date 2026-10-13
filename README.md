@@ -70,7 +70,7 @@ sudo pacman -U ./Gemini-Desktop-<version>-x64.pacman
 sudo pacman -R gemini-desktop
 ```
 
-**AppImage.** It needs FUSE 2. If it does not start, install it with `sudo pacman -S fuse2` on Arch-based systems or `sudo apt install libfuse2t64` on Ubuntu 24.04 and later.
+**AppImage.** It needs FUSE 3, which most desktops already have. If it does not start, install it with `sudo pacman -S fuse3` on Arch-based systems or `sudo apt install fuse3` on Debian and Ubuntu.
 
 ```bash
 chmod +x Gemini-Desktop-<version>-x86_64.AppImage
