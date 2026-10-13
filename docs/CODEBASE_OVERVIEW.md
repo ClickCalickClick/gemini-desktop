@@ -153,6 +153,8 @@ The proposed replacement is one tag-driven `release.yml` (verify, then a Linux j
 
 ### 5.4 Updates
 
+Since then, L10 and L11 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) point the notify-only check at the fork's releases, and the notice on deb, rpm and pacman installs says to install the new package with the package manager.
+
 | Install type                         | How updates work today                                          | What fork users get                                        |
 | ------------------------------------ | --------------------------------------------------------------- | ---------------------------------------------------------- |
 | Windows installer                    | electron-updater, using `latest-x64.yml` or `latest-arm64.yml`  | Fork releases (the feed comes from the CI checkout).       |
@@ -242,6 +244,8 @@ IDs are referenced from [TODO.md](../TODO.md).
 ## 8. Upstream references to change
 
 `grep -rniE "bwendell|benwendell|wendell"` matches 25 files outside `package-lock.json`.
+
+Since then, L1, L10 and L12 ([#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1), [#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) changed `package.json`, the app's repository constants, `dev-app-update.yml`, the tests that asserted upstream values, `README.md`, `docs/SECURITY.md`, and the issue links in `docs/CONTRIBUTING.md` and `docs/PRIVACY.md`. `docs/TRANSPARENCY.md` and upstream's GitHub Pages files are left for S6.
 
 | Where                                                                                            | What it does in the fork                                                                                                                                                                          |
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

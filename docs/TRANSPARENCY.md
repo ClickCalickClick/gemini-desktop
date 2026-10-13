@@ -1,5 +1,8 @@
 # Transparency Report
 
+> [!NOTE]
+> Ben Wendell wrote this report about the original project, [bwendell/gemini-desktop](https://github.com/bwendell/gemini-desktop), and "I" below is him. This fork is maintained by [ClickCalickClick](https://github.com/ClickCalickClick); download its builds only from [its releases page](https://github.com/ClickCalickClick/gemini-desktop/releases).
+
 > **"Sunlight is the best disinfectant."**
 
 This document exists to provide complete transparency into what Gemini Desktop does, how it works, and who built it. In light of malware masquerading as open-source tools, trust must be earned through verification, not just promises.

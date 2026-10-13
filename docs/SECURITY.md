@@ -19,13 +19,13 @@ We take security seriously. If you discover a security vulnerability, please rep
 
 **Do NOT open a public issue for security vulnerabilities.**
 
-Instead, please email: **<github@benwendell.com>**
+Instead, use GitHub's private vulnerability reporting:
 
-Or use GitHub's private vulnerability reporting:
-
-1. Go to the [Security tab](https://github.com/bwendell/gemini-desktop/security)
+1. Go to the [Security tab](https://github.com/ClickCalickClick/gemini-desktop/security)
 2. Click "Report a vulnerability"
 3. Fill out the form
+
+This policy covers the fork at [ClickCalickClick/gemini-desktop](https://github.com/ClickCalickClick/gemini-desktop). Report problems that also affect upstream's releases to [bwendell/gemini-desktop](https://github.com/bwendell/gemini-desktop/security) as well.
 
 ### What to Include
 
@@ -59,23 +59,23 @@ Gemini Desktop follows Electron security best practices:
 | **Node Integration**  | Disabled in renderer                     |
 | **Remote Module**     | Disabled                                 |
 | **Web Security**      | Enabled                                  |
-| **HTTPS Only**        | Only connects to google.com over HTTPS   |
+| **HTTPS Only**        | All network connections use HTTPS        |
 | **IPC Validation**    | All IPC messages are validated           |
 
 ### 🛡️ Automated Checks
 
 We employ automated security scanning to ensure code quality and safety:
 
-- **CodeQL**: All code changes are scanned for vulnerabilities using GitHub's CodeQL.
-- **Dependency Auditing**: We regularly audit dependencies (`npm audit`) for known vulnerabilities.
-- **Open Source**: You can view our [Security Scan Workflows](https://github.com/bwendell/gemini-desktop/actions/workflows/scorecard.yml) publicly.
+- **OpenSSF Scorecard**: The [Scorecard workflow](https://github.com/ClickCalickClick/gemini-desktop/actions/workflows/scorecard.yml) checks the repository's supply-chain practices every week and on each push to `main`.
+- **Dependabot**: Dependabot alerts and security updates flag vulnerable dependencies.
+- **CI**: Every pull request runs lint and the unit tests, and builds and installs the Linux packages.
 
 ### 🔒 Data Handling
 
 For detailed information on how we handle data, please see our [**Privacy Policy**](./PRIVACY.md).
 
 - **No telemetry** - Zero data collection or analytics
-- **No remote servers** - Only connects to Google's servers
+- **No servers of our own** - The app connects to Google for Gemini, to GitHub for updates, and to Hugging Face only to download the model if you turn on text prediction
 - **Local storage only** - All data stays on your machine
 - **Encrypted cookies** - Standard Chromium encryption
 
@@ -118,4 +118,4 @@ We appreciate security researchers who help keep Gemini Desktop safe. With your 
 
 This security policy may be updated from time to time. Check back for the latest version.
 
-Last updated: January 2026
+Last updated: October 2026
