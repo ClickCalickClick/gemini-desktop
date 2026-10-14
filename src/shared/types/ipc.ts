@@ -454,6 +454,12 @@ export interface ElectronAPI {
     /** Listen for platform hotkey status changes. Returns unsubscribe function. */
     onPlatformHotkeyStatusChanged: (callback: (status: PlatformHotkeyStatus) => void) => () => void;
 
+    /**
+     * Open the desktop's own dialog for the global shortcut keys, where the user presses the key
+     * they want. Resolves false when the desktop has no such dialog.
+     */
+    changeHotkeysInDesktop: () => Promise<boolean>;
+
     // =========================================================================
     // Test-Only: D-Bus Activation Signal Tracking (Wayland Integration Tests)
     // =========================================================================

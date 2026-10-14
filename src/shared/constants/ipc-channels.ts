@@ -88,6 +88,8 @@ export const IPC_CHANNELS = {
     HOTKEYS_ACCELERATOR_SET: 'hotkeys:accelerator:set',
     HOTKEYS_ACCELERATOR_CHANGED: 'hotkeys:accelerator:changed',
     HOTKEYS_FULL_SETTINGS_GET: 'hotkeys:full-settings:get',
+    /** Open the desktop's own dialog for the global shortcut keys (Wayland portal) */
+    HOTKEYS_CHANGE_IN_DESKTOP: 'hotkeys:change-in-desktop',
 
     // Auto-Update
     AUTO_UPDATE_GET_ENABLED: 'auto-update:get-enabled',

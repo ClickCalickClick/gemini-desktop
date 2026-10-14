@@ -241,11 +241,16 @@ function QuickChatApp(): React.ReactElement {
         return () => clearTimeout(timer);
     }, [run.phase]);
 
-    // Quick Chat hides on blur. When it is shown again with a finished answer and an empty input,
-    // start compact. A plan still waiting for Apply stays, so the user can look at the files first.
+    // Quick Chat hides on blur. When it is shown again with an answer the user already saw and an
+    // empty input, start compact. An answer that finished while Quick Chat was hidden stays, so it
+    // can be read, and so does a plan still waiting for Apply, so the user can look at the files first.
     useEffect(() => {
         let wasHidden = false;
+        let doneWhenHidden = false;
         const markHidden = () => {
+            if (!wasHidden) {
+                doneWhenHidden = runStateRef.current.phase === 'done';
+            }
             wasHidden = true;
         };
         const maybeReset = () => {
@@ -253,6 +258,9 @@ function QuickChatApp(): React.ReactElement {
                 return;
             }
             wasHidden = false;
+            if (!doneWhenHidden) {
+                return;
+            }
             const state = runStateRef.current;
             const planWaiting =
                 state.planState === 'pending' || state.planState === 'applying' || state.planState === 'undoing';

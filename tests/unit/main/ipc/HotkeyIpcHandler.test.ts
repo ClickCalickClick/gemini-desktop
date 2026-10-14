@@ -691,6 +691,25 @@ describe('HotkeyIpcHandler', () => {
         });
     });
 
+    describe('changing keys in the desktop', () => {
+        it('opens the desktop dialog through the hotkey manager', async () => {
+            mockHotkeyManager.changeShortcutsInDesktop = vi.fn().mockResolvedValue(true);
+            handler.register();
+
+            const result = await mockIpcMain._handlers.get(IPC_CHANNELS.HOTKEYS_CHANGE_IN_DESKTOP)!();
+
+            expect(result).toBe(true);
+            expect(mockHotkeyManager.changeShortcutsInDesktop).toHaveBeenCalledTimes(1);
+        });
+
+        it('answers false when the dialog cannot open', async () => {
+            mockHotkeyManager.changeShortcutsInDesktop = vi.fn().mockRejectedValue(new Error('no portal'));
+            handler.register();
+
+            await expect(mockIpcMain._handlers.get(IPC_CHANNELS.HOTKEYS_CHANGE_IN_DESKTOP)!()).resolves.toBe(false);
+        });
+    });
+
     describe('unregister cleanup', () => {
         it('removes PLATFORM_HOTKEY_STATUS_GET handler', () => {
             handler.register();

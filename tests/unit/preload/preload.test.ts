@@ -296,6 +296,15 @@ describe('Preload Script', () => {
             expect(result).toEqual(mockStatus);
         });
 
+        it('changeHotkeysInDesktop should invoke IPC handler', async () => {
+            ipcRendererMock.invoke.mockResolvedValue(true);
+
+            const result = await exposedAPI.changeHotkeysInDesktop();
+
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('hotkeys:change-in-desktop');
+            expect(result).toBe(true);
+        });
+
         it('onPlatformHotkeyStatusChanged should register listener and return unsubscribe', () => {
             const callback = vi.fn();
             const unsubscribe = exposedAPI.onPlatformHotkeyStatusChanged(callback);

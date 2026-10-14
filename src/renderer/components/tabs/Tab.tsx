@@ -44,7 +44,9 @@ export function Tab({ tab, isActive, onClick, onClose, onMouseDown }: TabProps) 
                 data-testid={TAB_TEST_IDS.tabClose(tab.id)}
                 aria-label={`Close ${tab.title}`}
             >
-                x
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false">
+                    <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
             </button>
         </div>
     );

@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { IndividualHotkeyToggles } from '../../../../../src/renderer/components/options/IndividualHotkeyToggles';
 import * as hotkeysContext from '../../../../../src/renderer/context/IndividualHotkeysContext';
 import { COPILOT_KEY_ACCELERATOR, DEFAULT_ACCELERATORS } from '../../../../../src/shared/types/hotkeys';
@@ -151,6 +151,101 @@ describe('IndividualHotkeyToggles', () => {
             expect(
                 screen.getByRole('button', { name: /keyboard shortcut: shift \+ super \+ f23/i })
             ).toBeInTheDocument();
+        });
+    });
+
+    describe('keys owned by the desktop (Wayland portal)', () => {
+        let originalElectronAPI: typeof window.electronAPI;
+
+        beforeEach(() => {
+            originalElectronAPI = window.electronAPI;
+        });
+
+        afterEach(() => {
+            window.electronAPI = originalElectronAPI;
+        });
+
+        function desktopStatus(quickChatTrigger?: string) {
+            return {
+                waylandStatus: {
+                    isWayland: true,
+                    desktopEnvironment: 'gnome',
+                    deVersion: '51',
+                    portalAvailable: true,
+                    portalMethod: 'dbus-direct',
+                },
+                registrationResults: [
+                    quickChatTrigger
+                        ? { hotkeyId: 'quickChat', success: true, desktopTrigger: quickChatTrigger }
+                        : { hotkeyId: 'quickChat', success: true },
+                    { hotkeyId: 'peekAndHide', success: true, desktopTrigger: 'Press <Control><Shift>space' },
+                    { hotkeyId: 'voiceChat', success: true },
+                ],
+                globalHotkeysEnabled: true,
+                registrationPending: false,
+                canChangeInDesktop: true,
+            };
+        }
+
+        it('shows the desktop key and opens the desktop dialog instead of recording', async () => {
+            const api = setupMockElectronAPI({ platform: 'linux' });
+            vi.mocked(api.getPlatformHotkeyStatus).mockResolvedValue(
+                desktopStatus('Press <Shift><Super>XF86Assistant') as never
+            );
+            vi.mocked(api.changeHotkeysInDesktop).mockResolvedValue(true);
+            render(<IndividualHotkeyToggles />);
+
+            const quickChat = await screen.findByTestId('hotkey-desktop-trigger-quickChat');
+            expect(quickChat).toHaveAttribute('aria-label', 'Keyboard shortcut: Shift + Super + Copilot');
+            expect(screen.getByTestId('hotkey-desktop-trigger-voiceChat')).toHaveTextContent('Not set');
+            expect(screen.queryByTestId('hotkey-copilot-preset')).not.toBeInTheDocument();
+            // App-only hotkeys keep the recorder
+            expect(screen.getByRole('button', { name: /keyboard shortcut: ctrl \+ alt \+ p/i })).toBeInTheDocument();
+
+            fireEvent.click(screen.getByTestId('hotkey-change-in-desktop-quickChat'));
+            await waitFor(() => expect(api.changeHotkeysInDesktop).toHaveBeenCalledTimes(1));
+            expect(screen.queryByRole('status')).not.toBeInTheDocument();
+        });
+
+        it('updates when the desktop reports new keys', async () => {
+            const api = setupMockElectronAPI({ platform: 'linux' });
+            vi.mocked(api.getPlatformHotkeyStatus).mockResolvedValue(desktopStatus() as never);
+            render(<IndividualHotkeyToggles />);
+            await screen.findByTestId('hotkey-desktop-trigger-quickChat');
+
+            const listener = vi.mocked(api.onPlatformHotkeyStatusChanged).mock.calls[0][0];
+            listener(desktopStatus('Press <Shift><Super>XF86Assistant') as never);
+
+            await waitFor(() =>
+                expect(screen.getByTestId('hotkey-desktop-trigger-quickChat')).toHaveAttribute(
+                    'aria-label',
+                    'Keyboard shortcut: Shift + Super + Copilot'
+                )
+            );
+        });
+
+        it('says where to change the keys when the dialog cannot open', async () => {
+            const api = setupMockElectronAPI({ platform: 'linux' });
+            vi.mocked(api.getPlatformHotkeyStatus).mockResolvedValue(desktopStatus() as never);
+            vi.mocked(api.changeHotkeysInDesktop).mockResolvedValue(false);
+            render(<IndividualHotkeyToggles />);
+
+            fireEvent.click(await screen.findByTestId('hotkey-change-in-desktop-peekAndHide'));
+
+            expect(await screen.findByRole('status')).toHaveTextContent(/Settings, under Apps/);
+        });
+
+        it('keeps the in-app recorder when the desktop has no dialog', async () => {
+            const api = setupMockElectronAPI({ platform: 'linux' });
+            vi.mocked(api.getPlatformHotkeyStatus).mockResolvedValue({
+                ...desktopStatus(),
+                canChangeInDesktop: false,
+            } as never);
+            render(<IndividualHotkeyToggles />);
+
+            await waitFor(() => expect(api.getPlatformHotkeyStatus).toHaveBeenCalled());
+            expect(screen.queryByTestId('hotkey-desktop-trigger-quickChat')).not.toBeInTheDocument();
+            expect(screen.getByTestId('hotkey-copilot-preset')).toBeInTheDocument();
         });
     });
 });

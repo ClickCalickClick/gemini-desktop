@@ -7,7 +7,7 @@ import { createSubscription } from '../createSubscription';
 
 export const platformAPI: Pick<
     ElectronAPI,
-    'platform' | 'isElectron' | 'getPlatformHotkeyStatus' | 'onPlatformHotkeyStatusChanged'
+    'platform' | 'isElectron' | 'getPlatformHotkeyStatus' | 'onPlatformHotkeyStatusChanged' | 'changeHotkeysInDesktop'
 > = {
     platform: process.platform,
     isElectron: true,
@@ -15,4 +15,5 @@ export const platformAPI: Pick<
     onPlatformHotkeyStatusChanged: createSubscription<PlatformHotkeyStatus>(
         IPC_CHANNELS.PLATFORM_HOTKEY_STATUS_CHANGED
     ),
+    changeHotkeysInDesktop: () => ipcRenderer.invoke(IPC_CHANNELS.HOTKEYS_CHANGE_IN_DESKTOP),
 };

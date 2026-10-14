@@ -9,14 +9,19 @@
  * - **Peek and Hide**: Toggle hide to/restore from system tray
  * - **Quick Chat**: Open quick chat overlay
  *
+ * Where the desktop owns the global hotkey keys (Wayland portal with a shortcut dialog), those rows
+ * show the desktop's key and open its dialog instead of recording a key in the app.
+ *
  * @module IndividualHotkeyToggles
  */
 
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { CapsuleToggle } from '../common/CapsuleToggle';
 import { useIndividualHotkeys, HotkeyId, DEFAULT_ACCELERATORS } from '../../context/IndividualHotkeysContext';
 import { HotkeyAcceleratorInput } from './HotkeyAcceleratorInput';
-import { COPILOT_KEY_ACCELERATOR } from '../../../shared/types/hotkeys';
+import { DesktopHotkeyField } from './DesktopHotkeyField';
+import { COPILOT_KEY_ACCELERATOR, isGlobalHotkey } from '../../../shared/types/hotkeys';
+import type { PlatformHotkeyStatus } from '../../../shared/types/hotkeys';
 import './individualHotkeyToggles.css';
 
 // ============================================================================
@@ -66,6 +71,34 @@ const HOTKEY_CONFIGS: HotkeyConfig[] = [
 ];
 
 // ============================================================================
+// Hooks
+// ============================================================================
+
+/** The platform hotkey status, kept up to date as the desktop binds or changes keys */
+function usePlatformHotkeyStatus(): PlatformHotkeyStatus | null {
+    const [status, setStatus] = useState<PlatformHotkeyStatus | null>(null);
+
+    useEffect(() => {
+        let active = true;
+        const unsubscribe = window.electronAPI?.onPlatformHotkeyStatusChanged?.((next) => setStatus(next));
+        window.electronAPI
+            ?.getPlatformHotkeyStatus?.()
+            .then((next) => {
+                if (active) setStatus(next ?? null);
+            })
+            .catch(() => {
+                // No status: the app records keys itself
+            });
+        return () => {
+            active = false;
+            unsubscribe?.();
+        };
+    }, []);
+
+    return status;
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -78,6 +111,11 @@ export const IndividualHotkeyToggles = memo(function IndividualHotkeyToggles() {
     // Copilot keys are on Windows laptops, which also run Linux; Macs have none
     const platform = window.electronAPI?.platform;
     const offersCopilotKey = platform === 'linux' || platform === 'win32';
+    const platformStatus = usePlatformHotkeyStatus();
+    const desktopOwnsKeys = platformStatus?.canChangeInDesktop === true;
+    const desktopTriggers = new Map(
+        (platformStatus?.registrationResults ?? []).map((result) => [result.hotkeyId, result.desktopTrigger])
+    );
 
     return (
         <div className="individual-hotkey-toggles" data-testid="individual-hotkey-toggles">
@@ -88,14 +126,22 @@ export const IndividualHotkeyToggles = memo(function IndividualHotkeyToggles() {
                         <span className="hotkey-description">{config.description}</span>
                     </div>
                     <div className="hotkey-accelerator-wrapper">
-                        <HotkeyAcceleratorInput
-                            hotkeyId={config.id}
-                            currentAccelerator={accelerators[config.id]}
-                            disabled={!settings[config.id]}
-                            onAcceleratorChange={setAccelerator}
-                            defaultAccelerator={DEFAULT_ACCELERATORS[config.id]}
-                        />
-                        {config.id === 'quickChat' && offersCopilotKey && (
+                        {desktopOwnsKeys && isGlobalHotkey(config.id) ? (
+                            <DesktopHotkeyField
+                                hotkeyId={config.id}
+                                desktopTrigger={desktopTriggers.get(config.id)}
+                                disabled={!settings[config.id]}
+                            />
+                        ) : (
+                            <HotkeyAcceleratorInput
+                                hotkeyId={config.id}
+                                currentAccelerator={accelerators[config.id]}
+                                disabled={!settings[config.id]}
+                                onAcceleratorChange={setAccelerator}
+                                defaultAccelerator={DEFAULT_ACCELERATORS[config.id]}
+                            />
+                        )}
+                        {config.id === 'quickChat' && offersCopilotKey && !desktopOwnsKeys && (
                             <button
                                 type="button"
                                 className="hotkey-preset-button"

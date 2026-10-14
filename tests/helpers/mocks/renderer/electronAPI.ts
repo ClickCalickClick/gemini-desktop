@@ -212,6 +212,7 @@ export function createMockElectronAPI(overrides: MockElectronAPIOverrides = {}):
             globalHotkeysEnabled: false,
         }),
         onPlatformHotkeyStatusChanged: vi.fn().mockReturnValue(defaultUnsubscribe),
+        changeHotkeysInDesktop: vi.fn().mockResolvedValue(false),
 
         getDbusActivationSignalStats: vi.fn().mockResolvedValue({
             trackingEnabled: false,

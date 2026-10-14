@@ -190,6 +190,13 @@ export interface HotkeyRegistrationResult {
     success: boolean;
     /** Error message if registration failed */
     error?: string;
+    /**
+     * The key the desktop actually bound, in the desktop's own words (GNOME says
+     * "Press <Shift><Super>XF86Assistant"). Set only for shortcuts registered through the portal,
+     * where the desktop keeps the user's choice and ignores the app's suggestion after the first
+     * approval.
+     */
+    desktopTrigger?: string;
 }
 
 /**
@@ -208,4 +215,10 @@ export interface PlatformHotkeyStatus {
      * the status on PLATFORM_HOTKEY_STATUS_CHANGED once it has the answer.
      */
     registrationPending?: boolean;
+    /**
+     * Whether the desktop owns the global shortcut keys and can open its own dialog to change
+     * them (portal GlobalShortcuts version 2, ConfigureShortcuts). Options then changes the keys
+     * there instead of recording them in the app.
+     */
+    canChangeInDesktop?: boolean;
 }
