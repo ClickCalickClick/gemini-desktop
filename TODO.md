@@ -97,6 +97,7 @@ Quick Chat decides per prompt whether a Gemini web tab or the local agent CLI an
 - [~] **H5** Options, "Quick Chat" section: routing mode (Auto, always Gemini tab, always agent), engine (Auto, Antigravity CLI, Gemini CLI), model, and the engine's status with install and sign-in hints.
 - [~] **H6** Desktop looks: a "Look" setting with Auto (match the desktop) and Default (today's look), GNOME, KDE Plasma, Xfce, Cinnamon, MATE, Budgie, elementary OS, COSMIC, macOS and Windows. Each look changes the titlebar, window controls, fonts, corner radii and colors of the main window, Options and Quick Chat, in light and dark; GNOME and KDE use the desktop's accent color when the desktop exposes one.
 - [~] **H7** GNOME launcher for Quick Chat: a `--quick-chat` command-line flag (also for a running app), a second desktop entry "Gemini Quick Chat" that can be pinned to the dash, and a "Quick Chat" action on the main entry's right-click menu.
+- [~] **H18** Any key for Quick Chat, including the Copilot key: the shortcut recorder takes F13 to F24 and Super chords, a "Use Copilot key" button sets `Shift+Super+F23`, and the Wayland portal path converts those keys correctly.
 - [ ] **H8 (owner)** On CachyOS: install Antigravity CLI and run `agy` once to sign in; then the live check drives Quick Chat through a web prompt, an agent answer and a file plan in a scratch folder.
 
 Ideas for later, each its own item when picked up:
