@@ -73,6 +73,7 @@ Goal: pushing a `v*` tag builds the AppImage, pacman, deb, rpm and tar.gz packag
 **Found in the CachyOS test**
 
 - [x] **L17** npm 11.19 warns about every dependency install script that `package.json` does not list in `allowScripts`, and its documentation says they are blocked by default. List the seven dependencies whose scripts run today (Electron's binary download, esbuild, node-llama-cpp, the `usocket` build, two WDIO driver downloads and electron-winstaller) by name, so version updates keep working. [#3](https://github.com/ClickCalickClick/gemini-desktop/pull/3)
+- [~] **L18** Sign-in from Gemini's own Sign in button (B14) showed Google's "401. That's an error. The server cannot process the request because it is malformed." The button navigates the tab's iframe to `accounts.google.com`, and Google refuses its sign-in pages inside an iframe: the same request gets the 401 only with `Sec-Fetch-Dest: iframe`, with Electron's user agent and with Chrome's. The main window now opens a Gemini tab's navigation to a Google accounts page in the sign-in window and reloads after that window closes. File > Sign in to Google opens a sign-in page that continues to Gemini, so the window closes itself after sign-in, and the macOS menu item reloads only after the window closes (from P9). Waiting for the CachyOS test, [#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2).
 
 **Optional**
 
@@ -101,7 +102,7 @@ Today about 3,400 unit tests run in CI with Electron and the desktop mocked, and
 - [ ] **P6** Stop logging text prediction prompts and completions (B11).
 - [ ] **P7** Global hotkeys on X11 (B8): let the X11 adapter use Electron's native `globalShortcut`. Test in a Plasma X11 session.
 - [ ] **P8** Launch at startup on Linux through an XDG autostart entry, and "start minimized" on macOS through `wasOpenedAtLogin` (B9). Until then, hide the toggles where they do nothing.
-- [ ] **P9** Small fixes (B13): the native "Sign in" waits for the window to close; menu labels come from the real accelerators; stale predictions are discarded; title polling pauses while hidden; settings writes are atomic.
+- [ ] **P9** Small fixes (B13): menu labels come from the real accelerators; stale predictions are discarded; title polling pauses while hidden; settings writes are atomic.
 
 ## Phase 3: macOS installers from GitHub Actions (later)
 

@@ -65,6 +65,8 @@ Every feature below must keep working through the cleanup. The status is for pac
 | Smart Enter and scroll-to-bottom button                                                         | OK                                                | OK                                                                         | OK               | inline script in `mainWindow.ts`                                |
 | Linux sandbox fallback (`--no-sandbox` when user namespaces and SUID sandbox are unavailable)   | n/a                                               | OK                                                                         | n/a              | `sandboxDetector.ts`, `sandboxInit.ts`                          |
 
+Since then, the CachyOS test found that Gemini's own Sign in button cannot sign in on any platform (B14). L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) opens it in the sign-in window.
+
 Persisted state lives in the user-data folder: `user-preferences.json`, `tabs-state.json`, `update-settings.json`, `notification-settings.json` and `models/*.gguf`.
 Google cookies live in Chromium's default session; there is no `persist:` partition.
 
@@ -229,6 +231,8 @@ Since then, [TEST_COVERAGE.md](TEST_COVERAGE.md) maps every feature to the tests
 
 IDs are referenced from [TODO.md](../TODO.md).
 
+Since then, the CachyOS test found B14. L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) fixes it and the first part of B13: the native "Sign in" menu item reloads after the window closes.
+
 | ID  | Severity | Issue                                                                                                                                                                                                                                                                                                                                                        | Evidence                                                                               |
 | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | B1  | High     | Wayland global hotkeys are switched off on Linux kernel 7+. The guard works around a crash blamed on dbus-next's optional native `usocket` transport, which dbus-next can do without.                                                                                                                                                                        | `sandboxDetector.ts:36,183-199`, `dbusFallback.ts:437-440,496-505`                     |
@@ -244,6 +248,7 @@ IDs are referenced from [TODO.md](../TODO.md).
 | B11 | Medium   | Local prediction prompts and completions are written to the main-process log.                                                                                                                                                                                                                                                                                | `llmManager.ts:651-668`                                                                |
 | B12 | Low      | Orphaned E2E specs and vacuous release checks (see section 6).                                                                                                                                                                                                                                                                                               | `scripts/run-e2e-sequential.cjs`, `config/wdio/`                                       |
 | B13 | Low      | Smaller defects: the native "Sign in" menu reloads before the window closes; menu labels show the wrong shortcuts; the README says Ctrl+P for PDF (the binding is Ctrl/Cmd+Shift+P); Quick Chat can show a stale prediction; tab titles are polled every 3 s even when hidden; settings writes are not atomic and a corrupt file silently resets everything. | `menuManager.ts:311-318`, `useMenuDefinitions.ts:198`, `README.md`, `store.ts:104-160` |
+| B14 | High     | Gemini's own Sign in button shows Google's 401 "malformed request" page. The button navigates the Gemini iframe to `accounts.google.com`, and Google refuses its sign-in pages inside an iframe (`Sec-Fetch-Dest: iframe`). Only File > Sign in to Google opens a separate window.                                                                           | `mainWindow.ts:214-255`, `security.ts:28`                                              |
 
 ## 8. Upstream references to change
 

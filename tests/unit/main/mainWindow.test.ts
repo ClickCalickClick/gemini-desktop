@@ -128,6 +128,112 @@ describe('MainWindow', () => {
         });
     });
 
+    describe('sign-in from a Gemini tab', () => {
+        type FrameNavigateDetails = {
+            url: string;
+            isMainFrame: boolean;
+            frame: { url: string } | null;
+            preventDefault: ReturnType<typeof vi.fn>;
+        };
+
+        const GEMINI_TAB_URL = 'https://gemini.google.com/app';
+        // The link behind Gemini's own Sign in button
+        const SIGN_IN_URL =
+            'https://accounts.google.com/ServiceLogin?passive=1209600&continue=https%3A%2F%2Fgemini.google.com%2Fapp';
+
+        let win: any;
+        let authWindow: { once: ReturnType<typeof vi.fn> };
+        let authCallback: ReturnType<typeof vi.fn>;
+        let frameNavigateHandler: (details: FrameNavigateDetails) => void;
+
+        const navigateFrame = (url: string, frameUrl: string | null, isMainFrame = false): FrameNavigateDetails => {
+            const details: FrameNavigateDetails = {
+                url,
+                isMainFrame,
+                frame: frameUrl === null ? null : { url: frameUrl },
+                preventDefault: vi.fn(),
+            };
+            frameNavigateHandler(details);
+            return details;
+        };
+
+        beforeEach(() => {
+            authWindow = { once: vi.fn() };
+            authCallback = vi.fn().mockReturnValue(authWindow);
+            mainWindow.setAuthWindowCallback(authCallback);
+            win = mainWindow.create();
+            frameNavigateHandler = win.webContents.on.mock.calls.find(
+                (call: [string, unknown]) => call[0] === 'will-frame-navigate'
+            )[1];
+        });
+
+        it('opens the sign-in page in the auth window instead of the tab', () => {
+            const details = navigateFrame(SIGN_IN_URL, GEMINI_TAB_URL);
+
+            expect(details.preventDefault).toHaveBeenCalled();
+            expect(authCallback).toHaveBeenCalledWith(SIGN_IN_URL);
+        });
+
+        it('reloads the main window after the auth window closes', () => {
+            navigateFrame(SIGN_IN_URL, GEMINI_TAB_URL);
+            expect(win.reload).not.toHaveBeenCalled();
+
+            const [event, onClosed] = authWindow.once.mock.calls[0];
+            expect(event).toBe('closed');
+            onClosed();
+
+            expect(win.reload).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not reload a main window that is already destroyed', () => {
+            navigateFrame(SIGN_IN_URL, GEMINI_TAB_URL);
+            win.isDestroyed.mockReturnValue(true);
+
+            authWindow.once.mock.calls[0][1]();
+
+            expect(win.reload).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            [
+                'a hidden accounts frame that Gemini adds',
+                'https://accounts.google.com/RotateCookiesPage',
+                'about:blank',
+            ],
+            ['a new frame with no URL yet', SIGN_IN_URL, ''],
+            ['a navigation inside Gemini', 'https://gemini.google.com/app/abc123', GEMINI_TAB_URL],
+            ['an invalid URL', 'not a url', GEMINI_TAB_URL],
+        ])('leaves %s alone', (_name, url, frameUrl) => {
+            const details = navigateFrame(url, frameUrl);
+
+            expect(details.preventDefault).not.toHaveBeenCalled();
+            expect(authCallback).not.toHaveBeenCalled();
+        });
+
+        it('leaves main frame navigations to the will-navigate handler', () => {
+            const details = navigateFrame(SIGN_IN_URL, 'file:///app/index.html', true);
+
+            expect(details.preventDefault).not.toHaveBeenCalled();
+            expect(authCallback).not.toHaveBeenCalled();
+        });
+
+        it('ignores a frame that is already gone', () => {
+            const details = navigateFrame(SIGN_IN_URL, null);
+
+            expect(details.preventDefault).not.toHaveBeenCalled();
+            expect(authCallback).not.toHaveBeenCalled();
+        });
+
+        it('still keeps the sign-in page out of the tab when no auth callback is set', () => {
+            (mainWindow as any).createAuthWindowCallback = undefined;
+
+            const details = navigateFrame(SIGN_IN_URL, GEMINI_TAB_URL);
+
+            expect(details.preventDefault).toHaveBeenCalled();
+            expect(authCallback).not.toHaveBeenCalled();
+        });
+    });
+
     describe('window open handler', () => {
         it('opens external links in shell', () => {
             mainWindow.create();
