@@ -10,7 +10,7 @@
  * @module QuickChatSettings
  */
 
-import React, { memo, useCallback, useEffect, useId, useState } from 'react';
+import React, { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { createRendererLogger } from '../../utils';
 import { QUICK_CHAT_SETTINGS_TEST_IDS } from '../../utils/testIds';
@@ -111,6 +111,8 @@ export const QuickChatSettings = memo(function QuickChatSettings() {
     const [modelDraft, setModelDraft] = useState('');
     const [status, setStatus] = useState<AgentEngineStatus | null>(null);
     const [loading, setLoading] = useState(true);
+    /** The model last loaded or saved; the draft only follows it when it really changes. */
+    const knownModelRef = useRef('');
     const idPrefix = useId();
     const routingId = `${idPrefix}-routing`;
     const engineId = `${idPrefix}-engine`;
@@ -139,6 +141,7 @@ export const QuickChatSettings = memo(function QuickChatSettings() {
                     const loaded = await api.getAgentSettings();
                     if (!controller.signal.aborted && loaded) {
                         setSettings(loaded);
+                        knownModelRef.current = loaded.agentModel;
                         setModelDraft(loaded.agentModel);
                     }
                 }
@@ -157,7 +160,11 @@ export const QuickChatSettings = memo(function QuickChatSettings() {
             typeof api?.onAgentSettingsChanged === 'function'
                 ? api.onAgentSettingsChanged((changed) => {
                       setSettings(changed);
-                      setModelDraft(changed.agentModel);
+                      if (changed.agentModel !== knownModelRef.current) {
+                          // Only replace what the user is typing when the model itself changed.
+                          knownModelRef.current = changed.agentModel;
+                          setModelDraft(changed.agentModel);
+                      }
                       void refreshStatus();
                   })
                 : undefined;
@@ -180,6 +187,7 @@ export const QuickChatSettings = memo(function QuickChatSettings() {
                 const saved = await setAgentSettings(change);
                 if (saved) {
                     setSettings(saved);
+                    knownModelRef.current = saved.agentModel;
                 }
                 if (change.agentEngine !== undefined) {
                     await refreshStatus();
@@ -187,7 +195,10 @@ export const QuickChatSettings = memo(function QuickChatSettings() {
             } catch (error) {
                 logger.error('Failed to save agent settings:', error);
                 setSettings(previous);
-                setModelDraft(previous.agentModel);
+                if (change.agentModel !== undefined) {
+                    knownModelRef.current = previous.agentModel;
+                    setModelDraft(previous.agentModel);
+                }
             }
         },
         [refreshStatus, settings]

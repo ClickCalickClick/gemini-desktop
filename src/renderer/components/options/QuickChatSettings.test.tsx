@@ -144,6 +144,19 @@ describe('QuickChatSettings', () => {
         await waitFor(() => expect(screen.getByTestId('quick-chat-settings-routing')).toHaveValue('auto'));
     });
 
+    it('keeps the model being typed when another setting changes', async () => {
+        await renderSettings();
+        const model = screen.getByTestId('quick-chat-settings-model');
+        await act(async () => {
+            fireEvent.change(model, { target: { value: 'half-typed' } });
+        });
+        await act(async () => {
+            emitSettings({ ...SETTINGS, quickChatRoutingMode: 'web' });
+        });
+        expect(model).toHaveValue('half-typed');
+        expect(screen.getByTestId('quick-chat-settings-routing')).toHaveValue('web');
+    });
+
     it('follows settings changed elsewhere', async () => {
         await renderSettings();
         await act(async () => {

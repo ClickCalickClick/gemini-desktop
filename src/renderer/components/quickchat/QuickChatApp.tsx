@@ -22,7 +22,7 @@ import { SearchIcon, SendIcon } from './Icons';
 import { RouteChip } from './RouteChip';
 import { createRendererLogger } from '../../utils';
 import { QUICK_CHAT_TEST_IDS } from '../../utils/testIds';
-import { forceRoute, otherRoute, routePrompt } from '../../../shared/utils/quickChatRouter';
+import { forceRoute, otherRoute, parseRoutePrefix, routePrompt } from '../../../shared/utils/quickChatRouter';
 import type {
     AgentEngineStatus,
     AgentRunEvent,
@@ -47,6 +47,9 @@ const WINDOW_VERTICAL_PADDING = 16;
 
 /** Debounce for window resize requests while the panel changes size. */
 const RESIZE_DEBOUNCE_MS = 30;
+
+/** How long Stop waits for the CLI's done event before the panel treats the run as stopped. */
+export const STOP_TIMEOUT_MS = 5000;
 
 function errorMessage(error: unknown): string {
     return error instanceof Error && error.message ? error.message : 'Could not start the agent.';
@@ -78,6 +81,9 @@ function QuickChatApp(): React.ReactElement {
     const bufferedEventsRef = useRef<AgentRunEvent[]>([]);
     const stopRequestedRef = useRef(false);
     const runActiveRef = useRef(false);
+    const runStateRef = useRef(run);
+    const inputValueRef = useRef('');
+    const resetPanelRef = useRef<() => void>(() => {});
 
     // Ref for debounce timeout
     const predictionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,7 +96,9 @@ function QuickChatApp(): React.ReactElement {
 
     useEffect(() => {
         runActiveRef.current = runActive;
-    }, [runActive]);
+        runStateRef.current = run;
+        inputValueRef.current = inputValue;
+    }, [runActive, run, inputValue]);
 
     // Sync text prediction enabled state and model readiness from settings
     useEffect(() => {
@@ -224,6 +232,51 @@ function QuickChatApp(): React.ReactElement {
         };
     }, [panelVisible]);
 
+    // If the CLI never confirms a stop, treat the run as stopped after a few seconds
+    useEffect(() => {
+        if (run.phase !== 'stopping') {
+            return;
+        }
+        const timer = setTimeout(() => dispatch({ type: 'stopTimedOut' }), STOP_TIMEOUT_MS);
+        return () => clearTimeout(timer);
+    }, [run.phase]);
+
+    // Quick Chat hides on blur. When it is shown again with a finished answer and an empty input,
+    // start compact. A plan still waiting for Apply stays, so the user can look at the files first.
+    useEffect(() => {
+        let wasHidden = false;
+        const markHidden = () => {
+            wasHidden = true;
+        };
+        const maybeReset = () => {
+            if (!wasHidden || document.visibilityState === 'hidden') {
+                return;
+            }
+            wasHidden = false;
+            const state = runStateRef.current;
+            const planWaiting =
+                state.planState === 'pending' || state.planState === 'applying' || state.planState === 'undoing';
+            if (state.phase === 'done' && !planWaiting && !inputValueRef.current.trim()) {
+                resetPanelRef.current();
+            }
+        };
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                markHidden();
+            } else {
+                maybeReset();
+            }
+        };
+        window.addEventListener('blur', markHidden);
+        window.addEventListener('focus', maybeReset);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+            window.removeEventListener('blur', markHidden);
+            window.removeEventListener('focus', maybeReset);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+        };
+    }, []);
+
     // Cleanup timeout on unmount
     useEffect(() => {
         return () => {
@@ -238,12 +291,18 @@ function QuickChatApp(): React.ReactElement {
         inputRef.current?.focus();
     }, []);
 
+    const canFollowUp = run.phase === 'done' && Boolean(run.conversationId);
+
     const decision: RouteDecision = useMemo(() => {
         if (routeOverride) {
             return forceRoute(inputValue, routeOverride);
         }
-        return routePrompt(inputValue, { mode: routingMode, agentAvailable: agentStatus?.available ?? false });
-    }, [inputValue, routeOverride, routingMode, agentStatus]);
+        return routePrompt(inputValue, {
+            mode: routingMode,
+            agentAvailable: agentStatus?.available ?? false,
+            followUp: canFollowUp,
+        });
+    }, [inputValue, routeOverride, routingMode, agentStatus, canFollowUp]);
 
     /** Clear the panel, forget the conversation and shrink the window back to the input. */
     const resetPanel = useCallback(() => {
@@ -258,6 +317,10 @@ function QuickChatApp(): React.ReactElement {
         dispatch({ type: 'reset' });
         window.electronAPI?.resizeQuickChat?.(QUICK_CHAT_COMPACT_HEIGHT);
     }, []);
+
+    useEffect(() => {
+        resetPanelRef.current = resetPanel;
+    }, [resetPanel]);
 
     const clearInput = useCallback(() => {
         setInputValue('');
@@ -374,15 +437,12 @@ function QuickChatApp(): React.ReactElement {
 
     const handleApplyPlan = useCallback(async () => {
         const runId = run.runId;
-        if (!runId) {
+        const api = window.electronAPI;
+        if (!runId || !api) {
             return;
         }
         dispatch({ type: 'planApplying' });
         try {
-            const api = window.electronAPI;
-            if (!api) {
-                return;
-            }
             const result = await api.applyFilePlan(runId);
             dispatch({ type: 'planApplied', result });
         } catch (error) {
@@ -392,12 +452,12 @@ function QuickChatApp(): React.ReactElement {
     }, [run.runId]);
 
     const handleUndoPlan = useCallback(async () => {
+        const api = window.electronAPI;
+        if (!api) {
+            return;
+        }
         dispatch({ type: 'planUndoing' });
         try {
-            const api = window.electronAPI;
-            if (!api) {
-                return;
-            }
             const result = await api.undoLastFilePlan();
             dispatch({ type: 'planUndone', result });
         } catch (error) {
@@ -454,6 +514,10 @@ function QuickChatApp(): React.ReactElement {
             if (prediction) {
                 logger.log('Escape pressed, dismissing prediction');
                 setPrediction(null);
+            } else if (run.phase === 'stopping') {
+                // A second Escape while the CLI has not confirmed the stop: give up waiting and hide.
+                window.electronAPI?.cancelQuickChat();
+                resetPanel();
             } else if (isRunActive(run)) {
                 stopRun();
             } else {
@@ -474,7 +538,8 @@ function QuickChatApp(): React.ReactElement {
         (event: React.ChangeEvent<HTMLInputElement>) => {
             const newValue = event.target.value;
             setInputValue(newValue);
-            if (!newValue.trim()) {
+            if (!newValue.trim() || parseRoutePrefix(newValue)) {
+                // An empty prompt or a typed routing prefix replaces a route picked with the chip.
                 setRouteOverride(null);
             }
 

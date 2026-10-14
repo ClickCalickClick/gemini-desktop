@@ -50,6 +50,8 @@ describe('quickChatRouter', () => {
             // Documents
             ['summarise report.pdf', 'agent', 'documents'],
             ['summarize ~/Documents/thesis.docx in five bullet points', 'agent', 'documents'],
+            ['summarize ~/Documents/report.pdf', 'agent', 'documents'],
+            ['summarise "Q3 report.pdf"', 'agent', 'documents'],
             ['explain what contract.pdf says about termination', 'agent', 'documents'],
             ['translate notes.txt into German', 'agent', 'documents'],
             ['budget.xlsx', 'agent', 'documents'],
@@ -59,26 +61,48 @@ describe('quickChatRouter', () => {
             ['what does app.py do', 'agent', 'code'],
             ['git status of my project', 'agent', 'code'],
             ['run the tests in this repo', 'agent', 'code'],
-            ['why does the build fail', 'agent', 'code'],
+            ['why does the build fail in my project', 'agent', 'code'],
             ['find the TODOs in this codebase', 'agent', 'code'],
-            ['npm install fails with EACCES', 'agent', 'code'],
+            ['npm install fails in this repo', 'agent', 'code'],
+            ['run the tests in my project', 'agent', 'code'],
+            ['git diff', 'agent', 'code'],
             // System
             ['how much disk space do I have left', 'agent', 'system'],
+            ['how much disk space is left on my laptop', 'agent', 'system'],
+            ['why is my computer slow', 'agent', 'system'],
+            ["what's using memory on this machine", 'agent', 'system'],
             ['what is using all my CPU', 'agent', 'system'],
             ['how much RAM is free', 'agent', 'system'],
-            ['show running processes', 'agent', 'system'],
+            ['show running processes on this machine', 'agent', 'system'],
             ['are there any failed services', 'agent', 'system'],
             ['is ffmpeg installed', 'agent', 'system'],
             ['why is my wifi slow', 'agent', 'system'],
-            ['battery health', 'agent', 'system'],
+            ['how is my battery health', 'agent', 'system'],
             ['which kernel am I running', 'agent', 'system'],
             ['show the journalctl errors since boot', 'agent', 'system'],
-            ['pacman says the keyring is out of date', 'agent', 'system'],
-            ['how do I fix apt lock errors', 'agent', 'system'],
-            ['brew upgrade broke python', 'agent', 'system'],
+            ['pacman on my laptop says the keyring is out of date', 'agent', 'system'],
             ['restart the systemd unit for docker', 'agent', 'system'],
-            ['check the system logs for errors', 'agent', 'system'],
+            ['check the logs on this machine for errors', 'agent', 'system'],
             ['how old is my laptop', 'agent', 'system'],
+            ['which packages are installed on here', 'agent', 'system'],
+            // Ordinary questions that mention system or code words stay with Gemini
+            ['How does human memory work?', 'web'],
+            ["What's the best GPU under $500?", 'web'],
+            ['How do I brew better coffee?', 'web'],
+            ['Why does my phone battery drain so fast?', 'web'],
+            ['Is bluetooth 5.3 backward compatible?', 'web'],
+            ['Explain the Linux kernel scheduler', 'web'],
+            ['What is RAM?', 'web'],
+            ['Find me a good repo for learning Rust', 'web'],
+            ['What is a makefile?', 'web'],
+            ['What is the weather in Washington D.C. today?', 'web'],
+            ['how do I set up Alpine.js', 'web'],
+            ['Summarize theverge.com/review.html', 'web'],
+            ['how do I fix apt lock errors', 'web'],
+            ['what does e.g. mean', 'web'],
+            ['is Vue.js better than React', 'web'],
+            ['open www.example.com/index.html', 'web'],
+            ['weather forecast for budget.xlsx fans', 'web'],
             // Web cues
             ['draw a cat wearing a hat', 'web'],
             ['generate an image of a lighthouse at dusk', 'web'],
@@ -194,7 +218,37 @@ describe('quickChatRouter', () => {
         });
 
         it('always agent keeps the category', () => {
-            expect(routePrompt('how much disk space', { mode: 'agent', agentAvailable: true }).category).toBe('system');
+            expect(routePrompt('how much disk space do I have', { mode: 'agent', agentAvailable: true }).category).toBe(
+                'system'
+            );
+        });
+    });
+
+    describe('follow-ups', () => {
+        const FOLLOW_UP = { mode: 'auto' as const, agentAvailable: true, followUp: true };
+
+        it('sends an unprefixed follow-up to the agent', () => {
+            expect(routePrompt('and what about the second one?', FOLLOW_UP)).toMatchObject({
+                route: 'agent',
+                category: 'general',
+                reason: ROUTE_REASONS.followUp,
+                forced: false,
+            });
+        });
+
+        it('keeps the category the auto rules give', () => {
+            expect(routePrompt('now move them to my Documents folder', FOLLOW_UP).category).toBe('files');
+        });
+
+        it('lets web cues and prefixes win', () => {
+            expect(routePrompt('draw a chart of that', FOLLOW_UP).route).toBe('web');
+            expect(routePrompt('@web tell me more', FOLLOW_UP).route).toBe('web');
+        });
+
+        it('only applies in auto mode and with an agent', () => {
+            expect(routePrompt('and then?', { ...FOLLOW_UP, mode: 'web' }).route).toBe('web');
+            expect(routePrompt('and then?', { ...FOLLOW_UP, agentAvailable: false }).route).toBe('web');
+            expect(routePrompt('and then?', AUTO).route).toBe('web');
         });
     });
 
@@ -252,14 +306,23 @@ describe('quickChatRouter', () => {
 
         it('findFileNames ignores URLs and library names', () => {
             expect(findFileNames('see https://x.com/a.png and node.js')).toEqual([]);
+            expect(findFileNames('Washington D.C. and Alpine.js and x.md')).toEqual([]);
             expect(findFileNames('open "my report.pdf" and main.rs.')).toEqual([
-                { name: 'report.pdf', kind: 'documents' },
-                { name: 'main.rs', kind: 'code' },
+                { name: 'my report.pdf', kind: 'documents', quoted: true },
+                { name: 'main.rs', kind: 'code', quoted: false },
+            ]);
+            expect(findFileNames('copy src/Alpine.js')).toEqual([
+                { name: 'src/Alpine.js', kind: 'code', quoted: false },
             ]);
         });
 
         it('classifyPrompt has a reason for every agent route', () => {
-            for (const prompt of ['move ~/a ~/b', 'battery', 'run the tests', 'summarise a.pdf']) {
+            for (const prompt of [
+                'move ~/a ~/b',
+                'my battery level',
+                'run the tests in my project',
+                'summarise ab.pdf',
+            ]) {
                 const result = classifyPrompt(prompt);
                 expect(result.route).toBe('agent');
                 expect(result.reason).not.toBe('');

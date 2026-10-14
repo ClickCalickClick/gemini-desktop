@@ -30,6 +30,11 @@ export interface RouteOptions {
     mode: QuickChatRoutingMode;
     /** Whether an agent CLI is installed and usable. */
     agentAvailable: boolean;
+    /**
+     * True while Quick Chat shows an agent conversation that can be continued. In auto
+     * mode, prompts without a prefix or a web cue then go to the agent as a follow-up.
+     */
+    followUp?: boolean;
 }
 
 /** Result of classifying a prompt without looking at the mode or the agent's availability. */
@@ -72,6 +77,7 @@ export const ROUTE_REASONS = {
     modeAgent: 'Options: always the agent',
     pickedWeb: 'you picked Gemini',
     pickedAgent: 'you picked the agent',
+    followUp: 'follow-up to the agent',
 } as const;
 
 /** Chip label for a decision: "Gemini", "Agent" or "Agent · Files". */
@@ -217,17 +223,25 @@ export const FILE_EXTENSIONS = {
 
 const ALL_EXTENSIONS = Object.values(FILE_EXTENSIONS).flat();
 
-/** Library names that look like file names but are not ("node.js"). */
-const NOT_FILE_NAMES = /^(node|vue|next|nuxt|react|three|d3|chart|express|ember|backbone|socket|p5|deno|bun)\.js$/i;
+/** Library names that look like file names but are not ("node.js", "Alpine.js"). */
+const NOT_FILE_NAMES =
+    /^(?:node|vue|next|nuxt|react|three|d3|chart|express|ember|backbone|socket|p5|deno|bun|alpine|svelte|solid|angular|moment|lodash|jquery|anime|htmx|preact|ext|pixi|babylon|phaser|leaflet|paper|fabric|tone|ml5|brain|tensorflow)\.js$/i;
+
+/** URLs and host names ("https://...", "www.x.y", "theverge.com/review.html") are not local files. */
+const URL_LIKE =
+    /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.)|^[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|io|dev|ai|app|co|edu|gov|me|info|tv|uk|de|fr|eu|us|ca|au|ly|gg|so|xyz|site|blog|news)(?:[/:?#]|$)/i;
 
 /** Paths: `~/`, `/home/`, `/Users/`, `./`, `../`, a few system folders, and Windows drive paths. */
 export const PATH_PATTERN =
     /(?:^|[\s"'(`])(?:~[/\\]|~(?=$|[\s"'),.;:!?])|\.{1,2}\/|\/(?:home|Users|root|tmp|etc|var|usr|opt|mnt|media|srv)\/|[A-Za-z]:[\\/])/;
 
 const FILE_NAME_PATTERN = new RegExp(
-    `(?:^|[\\s"'(\`])([\\w\\-.*/~]*\\.(${ALL_EXTENSIONS.join('|')}))(?=$|[\\s"'),;:!?]|\\.(?:\\s|$))`,
+    `(?:^|[\\s"'(\`])([\\w\\-.*/~:]*\\.(${ALL_EXTENSIONS.join('|')}))(?=$|[\\s"'),;:!?]|\\.(?:\\s|$))`,
     'gi'
 );
+
+/** A file name in quotes or backticks ("my report.pdf"), which always counts. */
+const QUOTED_FILE_NAME_PATTERN = new RegExp(`["'\`]([^"'\`\\n]{2,}\\.(${ALL_EXTENSIONS.join('|')}))["'\`]`, 'gi');
 
 /** Well-known folders: "my Downloads", "Documents folder", "the home folder", "in Downloads". */
 export const FOLDER_PATTERN = new RegExp(
@@ -252,64 +266,73 @@ export const FILE_FIND_VERBS =
 export const DOCUMENT_READ_VERBS =
     /\b(?:summari[sz]e|summary|tl;?dr|read|explain|translate|proofread|review|outline|key\s+points|compare|what\s+does\s+.+\s+say|what\s+is\s+(?:this|it)\s+about)\b/i;
 
-/** Questions about this machine. */
-export const SYSTEM_PATTERN = new RegExp(
+/**
+ * Words that tie a question to this machine. System topics only count with one of
+ * these, so "What is RAM?" stays with Gemini and "what's using memory on this machine" does not.
+ */
+export const LOCAL_ANCHOR_PATTERN = new RegExp(
+    [
+        String.raw`\b(?:my|this|our)\s+(?:computer|laptop|pc|machine|system|mac|macbook|workstation|box|disks?|drives?|ssd|hard\s+drive|partition|install|installation|setup|distro|os)\b`,
+        String.raw`\bmy\s+(?:wi-?fi|battery|cpu|gpu|ram|memory|kernel|network|internet|bluetooth|fans?|processes|services|packages|logs|storage|space)\b`,
+        String.raw`\bdo\s+i\s+have\b`,
+        String.raw`\b(?:is|are)\s+(?:left|free|running)\b`,
+        String.raw`\b(?:is|are)\s+[\w.+-]+\s+installed\b`,
+        String.raw`\binstalled\s+(?:here|on\s+(?:my|this))\b`,
+        String.raw`\bon\s+here\b`,
+        String.raw`\b(?:am\s+i|i'?m)\s+(?:running|using|on)\b`,
+    ].join('|'),
+    'i'
+);
+
+/** The device itself, which is local on its own ("why is my computer slow"). */
+const DEVICE_PATTERN = /\b(?:my|this)\s+(?:computer|laptop|pc|machine|macbook|workstation)\b/i;
+
+/** System topics; they need {@link LOCAL_ANCHOR_PATTERN} to count. */
+export const SYSTEM_TOPIC_PATTERN = new RegExp(
     [
         String.raw`\bdisk\s+(?:space|usage|use)\b`,
         String.raw`\bfree\s+space\b`,
-        String.raw`\bstorage\s+(?:space|left|usage|use)\b`,
-        String.raw`\bhow\s+much\s+storage\b`,
+        String.raw`\bstorage\b`,
+        String.raw`\bspace\b`,
         String.raw`\bcpu\b`,
         String.raw`\bgpu\b`,
         String.raw`\bram\b`,
         String.raw`\bmemory\b`,
-        String.raw`\bprocess(?:es)?\s+(?:list|running|using|id)\b`,
-        String.raw`\b(?:running|background)\s+process(?:es)?\b`,
-        String.raw`\bprocesses\b`,
-        String.raw`\b(?:failed|running|systemd|system|background)\s+services?\b`,
-        String.raw`\bservice\s+(?:status|logs?)\b`,
-        String.raw`\bpackages?\s+(?:installed|updates?|manager)\b`,
-        String.raw`\b(?:update|upgrade)\s+(?:my\s+)?(?:system|packages)\b`,
+        String.raw`\bprocess(?:es)?\b`,
+        String.raw`\bservices?\b`,
+        String.raw`\bpackages?\b`,
         String.raw`\binstalled\b`,
         String.raw`\bwi-?fi\b`,
+        String.raw`\bnetwork\b`,
+        String.raw`\binternet\b`,
         String.raw`\bbluetooth\b`,
         String.raw`\bbattery\b`,
         String.raw`\bkernel\b`,
-        String.raw`\blogs\b`,
-        String.raw`\b(?:system|error|boot|kernel|service|crash)\s+log\b`,
-        String.raw`\bjournalctl\b`,
-        String.raw`\bsystemctl\b`,
-        String.raw`\bsystemd\b`,
+        String.raw`\blogs?\b`,
         String.raw`\bpacman\b`,
         String.raw`\bparu\b`,
         String.raw`\byay\b`,
         String.raw`\bapt(?:-get)?\b`,
         String.raw`\bdnf\b`,
         String.raw`\bflatpak\b`,
-        String.raw`\bbrew\b`,
         String.raw`\buptime\b`,
         String.raw`\bip\s+address\b`,
-        String.raw`\bmy\s+(?:computer|laptop|pc|machine|system)\b`,
-        String.raw`\bthis\s+(?:computer|laptop|pc|machine)\b`,
+        String.raw`\bfans?\b`,
+        String.raw`\btemperature\b`,
     ].join('|'),
     'i'
 );
 
-/** Code in a local repository. */
+/** Commands and phrases that only make sense on this machine, with or without an anchor. */
+export const SYSTEM_STRONG_PATTERN =
+    /\bjournalctl\b|\bsystemctl\b|\bsystemd\s+(?:unit|service)s?\b|\bfailed\s+services\b/i;
+
+/** Code in a local repository: needs "my project", "this repo", a version-control command and the like. */
 export const CODE_PATTERN = new RegExp(
     [
-        String.raw`\brepo(?:sitory)?\b`,
-        String.raw`\bgit\s+(?:status|log|diff|branch|commit|pull|push|stash|rebase|blame)\b`,
-        String.raw`\bmy\s+project\b`,
-        String.raw`\bthis\s+(?:codebase|project|repo|code)\b`,
-        String.raw`\bcodebase\b`,
-        String.raw`\brun\s+(?:the\s+)?(?:unit\s+)?tests?\b`,
-        String.raw`\b(?:failing|broken)\s+tests?\b`,
-        String.raw`\b(?:build|compile)\s+(?:it|this|the\s+(?:project|app|code)|my\s+(?:project|app|code))\b`,
-        String.raw`\bbuild\s+(?:fails?|failed|failing|errors?|is\s+broken)\b`,
-        String.raw`\bnpm\s+(?:install|run|test|ci)\b`,
-        String.raw`\bcargo\s+(?:build|test|run)\b`,
-        String.raw`\bmakefile\b`,
+        String.raw`\b(?:my|this|our)\s+(?:project|repo|repository|codebase|code|branch|tests?|build)\b`,
+        String.raw`\b(?:in|of)\s+this\s+(?:folder|directory)\b`,
+        String.raw`\bgit\s+(?:status|log|diff|branch|stash|blame)\b`,
     ].join('|'),
     'i'
 );
@@ -350,21 +373,53 @@ export const WEB_CUES: { pattern: RegExp; reason: string }[] = [
 
 type FileKind = keyof typeof FILE_EXTENSIONS;
 
-/** File names in the prompt, e.g. `report.pdf` or `src/main.ts`, with the kind of their extension. */
-export function findFileNames(text: string): { name: string; kind: FileKind }[] {
-    const found: { name: string; kind: FileKind }[] = [];
+/** Kind of file for an extension. */
+function fileKindOf(extension: string): FileKind | undefined {
+    return (Object.keys(FILE_EXTENSIONS) as FileKind[]).find((key) =>
+        (FILE_EXTENSIONS[key] as readonly string[]).includes(extension.toLowerCase())
+    );
+}
+
+/** True when a bare token looks like a local file name rather than a URL, host, abbreviation or library. */
+function looksLikeFileName(name: string): boolean {
+    if (URL_LIKE.test(name) || name.includes(':')) {
+        return false;
+    }
+    const base = name.split('/').pop() ?? name;
+    const stem = base.slice(0, base.lastIndexOf('.'));
+    // At least two characters before the dot ("*.iso" is a pattern and counts), and no abbreviations like "D.C".
+    if (!stem.includes('*') && stem.replace(/\./g, '').length < 2) {
+        return false;
+    }
+    if (/^(?:[A-Za-z]\.)+[A-Za-z]$/.test(base)) {
+        return false;
+    }
+    if (!name.includes('/') && (NOT_FILE_NAMES.test(base) || /^[A-Z][a-z0-9]*\.js$/.test(base))) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * File names in the prompt, e.g. `report.pdf` or `src/main.ts`, with the kind of their extension.
+ * Quoted names always count; bare names skip URLs, hosts, abbreviations ("D.C.") and libraries ("Alpine.js").
+ */
+export function findFileNames(text: string): { name: string; kind: FileKind; quoted: boolean }[] {
+    const found: { name: string; kind: FileKind; quoted: boolean }[] = [];
+    for (const match of text.matchAll(QUOTED_FILE_NAME_PATTERN)) {
+        const name = match[1] ?? '';
+        const kind = fileKindOf(match[2] ?? '');
+        if (kind && !URL_LIKE.test(name)) {
+            found.push({ name, kind, quoted: true });
+        }
+    }
     for (const match of text.matchAll(FILE_NAME_PATTERN)) {
         const name = match[1] ?? '';
-        const extension = (match[2] ?? '').toLowerCase();
-        if (!name || NOT_FILE_NAMES.test(name)) {
+        const kind = fileKindOf(match[2] ?? '');
+        if (!kind || !name || !looksLikeFileName(name) || found.some((file) => file.name.endsWith(name))) {
             continue;
         }
-        const kind = (Object.keys(FILE_EXTENSIONS) as FileKind[]).find((key) =>
-            (FILE_EXTENSIONS[key] as readonly string[]).includes(extension)
-        );
-        if (kind) {
-            found.push({ name, kind });
-        }
+        found.push({ name, kind, quoted: false });
     }
     return found;
 }
@@ -406,13 +461,11 @@ function classifyLocal(text: string, fileKinds: FileKind[], place: 'path' | 'fil
 export function classifyPrompt(text: string): PromptClassification {
     const fileNames = findFileNames(text);
     const fileKinds = fileNames.map((file) => file.kind);
+    const hasPath = PATH_PATTERN.test(text);
 
-    // 1. Strong local cues: a path or a file name.
-    if (PATH_PATTERN.test(text)) {
-        return classifyLocal(text, fileKinds, 'path');
-    }
-    if (fileNames.length > 0) {
-        return classifyLocal(text, fileKinds, 'file');
+    // 1. Strong local cues: a path or a quoted file name.
+    if (hasPath || fileNames.some((file) => file.quoted)) {
+        return classifyLocal(text, fileKinds, hasPath ? 'path' : 'file');
     }
 
     // 2. Web cues beat the weaker local cues below.
@@ -421,7 +474,10 @@ export function classifyPrompt(text: string): PromptClassification {
         return { route: 'web', reason: webCue };
     }
 
-    // 3. Well-known folders.
+    // 3. Bare file names and well-known folders.
+    if (fileNames.length > 0) {
+        return classifyLocal(text, fileKinds, 'file');
+    }
     if (FOLDER_PATTERN.test(text)) {
         return classifyLocal(text, fileKinds, 'folder');
     }
@@ -431,8 +487,12 @@ export function classifyPrompt(text: string): PromptClassification {
         return { route: 'agent', category: 'code', reason: 'asks about local code' };
     }
 
-    // 5. Questions about this machine.
-    if (SYSTEM_PATTERN.test(text)) {
+    // 5. Questions about this machine: a system topic with a local anchor, or the device itself.
+    if (
+        SYSTEM_STRONG_PATTERN.test(text) ||
+        DEVICE_PATTERN.test(text) ||
+        (SYSTEM_TOPIC_PATTERN.test(text) && LOCAL_ANCHOR_PATTERN.test(text))
+    ) {
         return { route: 'agent', category: 'system', reason: 'asks about this computer' };
     }
 
@@ -476,6 +536,13 @@ export function routePrompt(text: string, options: RouteOptions): RouteDecision 
         decision = { route: 'agent', category: agentCategoryFor(prompt), reason: ROUTE_REASONS.modeAgent };
     } else {
         decision = classifyPrompt(prompt);
+        if (options.followUp && !findWebCue(prompt)) {
+            decision = {
+                route: 'agent',
+                category: decision.category ?? 'general',
+                reason: ROUTE_REASONS.followUp,
+            };
+        }
     }
 
     if (decision.route === 'agent' && !options.agentAvailable) {
