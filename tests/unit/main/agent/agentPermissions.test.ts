@@ -145,6 +145,23 @@ describe('agentPermissions', () => {
             expect(readAllowRules(settingsFile)).toEqual(['command(ls)', 'command(free)']);
         });
 
+        it('puts a file back byte for byte after removing the only rules it added', () => {
+            for (const original of [
+                '{\n  "trustedWorkspaces": [\n    "/home/u/Claude"\n  ]\n}',
+                '{\n    "permissions": {\n        "deny": ["command(rm)"]\n    }\n}\n',
+            ]) {
+                writeSettings(original);
+                updateAllowRules(settingsFile, { add: ['command(df -h)'] });
+                expect(readAllowRules(settingsFile)).toEqual(['command(df -h)']);
+                updateAllowRules(settingsFile, { remove: ['command(df -h)'] });
+                expect(fs.readFileSync(settingsFile, 'utf8')).toBe(
+                    original.includes('deny')
+                        ? '{\n    "permissions": {\n        "deny": [\n            "command(rm)"\n        ]\n    }\n}\n'
+                        : original
+                );
+            }
+        });
+
         it('does not write when nothing changes', () => {
             writeSettings('{"permissions":{"allow":["command(df)"]}}');
             const before = fs.statSync(settingsFile).mtimeMs;
@@ -354,6 +371,15 @@ describe('agentPermissions', () => {
                 'df -h > /tmp/out',
                 'echo $(rm x)',
                 'xdotool type hi',
+                'df -h /; if true; then rm -rf ~; fi',
+                'df && command rm -rf ~',
+                'df; time rm x',
+                'df; builtin rm x',
+                'for f in *; do rm $f; done',
+                'df; coproc rm x',
+                'env rm x',
+                'nice -n 5 rm x',
+                'timeout 5s rm x',
             ]) {
                 expect(needsCaution(command)).toBe(true);
             }

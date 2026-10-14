@@ -651,6 +651,10 @@ export default class AgentManager {
 
     private buildArgs(engine: AgentEngineId, prompt: string, request: AgentRunRequest, model: string): string[] {
         const args = ['-p', prompt, '--output-format', 'stream-json'];
+        // Settings validation refuses such ids; never let one be read as another flag.
+        if (model.startsWith('-')) {
+            model = '';
+        }
         if (engine === 'antigravity') {
             args.push('--print-timeout', CLI_PRINT_TIMEOUT);
             if (ANTIGRAVITY_SANDBOX) {

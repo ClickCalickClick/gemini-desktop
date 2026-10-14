@@ -71,8 +71,11 @@ export const MAX_RULE_TARGET_LENGTH = 2000;
  */
 const SHELL_METACHARACTERS = /[|&;<>()$`\\"'*?[\]{}!#\r\n]/;
 
-/** Control characters and invisible formatting characters (bidi overrides, zero-width spaces). */
-const INVISIBLE_CHARACTERS = /[\p{Cc}\p{Cf}]/u;
+/**
+ * Control characters, invisible formatting characters (bidi overrides, zero-width spaces)
+ * and spaces other than the plain one, which look like a space but are not one to a shell.
+ */
+const INVISIBLE_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/u;
 
 /** True for a plain program name (no path, no shell syntax). */
 function isPlainCommandName(word: string): boolean {
@@ -583,9 +586,59 @@ const READING_COMMANDS = new Set([
 ]);
 
 /**
- * True when any command in a line can change or delete things: its first word (in each
- * part of a pipeline or chain, and after a path) is a state-changing command, the line
- * redirects output into a file, or it substitutes a command.
+ * Shell keywords and wrappers that run the word after them as the command (`if rm x`,
+ * `do rm $f`, `command rm`, `env rm`, `nice -n 5 rm`, `timeout 5 rm`). Their options and
+ * numeric arguments are skipped too.
+ */
+const COMMAND_PREFIX_WORDS = new Set([
+    'if',
+    'then',
+    'else',
+    'elif',
+    'do',
+    'while',
+    'until',
+    '!',
+    '{',
+    'command',
+    'builtin',
+    'exec',
+    'time',
+    'coproc',
+    'env',
+    'nice',
+    'nohup',
+    'timeout',
+    'stdbuf',
+    'ionice',
+    'xargs',
+]);
+
+/** The word a part of a command line runs, past assignments, keywords and wrappers. */
+function commandWordOf(words: string[]): string | undefined {
+    let afterWrapper = false;
+    for (const word of words) {
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
+            continue;
+        }
+        if (COMMAND_PREFIX_WORDS.has(word)) {
+            afterWrapper = true;
+            continue;
+        }
+        // A wrapper's options and arguments (`-n 5`, `5s`).
+        if (afterWrapper && (word.startsWith('-') || /^\d+(\.\d+)?[smhd]?$/.test(word))) {
+            continue;
+        }
+        return word;
+    }
+    return undefined;
+}
+
+/**
+ * True when any command in a line can change or delete things: the word it runs (in each
+ * part of a pipeline or chain, past shell keywords and wrappers, and after a path) is a
+ * state-changing command, the line redirects output into a file, or it substitutes a
+ * command.
  */
 export function needsCaution(commandLine: string): boolean {
     // Command substitution can run anything.
@@ -599,8 +652,7 @@ export function needsCaution(commandLine: string): boolean {
         .split(/\|\||&&|[|;&\n]/)
         .map((part) => tokenize(part))
         .some((words) => {
-            // Skip leading variable assignments (`LANG=C df`).
-            const first = words.find((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word));
+            const first = commandWordOf(words);
             if (!first) {
                 return false;
             }
@@ -797,6 +849,16 @@ function updateOnce(file: string, add: string[], remove: Set<string>, afterRead?
     const rawAllow: unknown[] = Array.isArray(permissions.allow) ? permissions.allow : [];
     const nextAllow = [...rawAllow.filter((rule) => typeof rule !== 'string' || !remove.has(rule)), ...added];
     const next: JsonObject = { ...settings, permissions: { ...permissions, allow: nextAllow } };
+    // Removing the app's last rule takes out the keys adding it created, so a file the app
+    // only borrowed goes back to what it was.
+    if (nextAllow.length === 0) {
+        const { allow: _allow, ...otherPermissions } = permissions;
+        if (Object.keys(otherPermissions).length > 0) {
+            next.permissions = otherPermissions;
+        } else {
+            delete next.permissions;
+        }
+    }
 
     let mode = 0o600;
     try {
@@ -804,7 +866,9 @@ function updateOnce(file: string, add: string[], remove: Set<string>, afterRead?
     } catch {
         // New file.
     }
-    writeFileAtomic(target, `${JSON.stringify(next, null, detectIndent(text))}\n`, mode, () => {
+    // Keep the file's final newline, or its lack of one.
+    const newline = text === null || text.endsWith('\n') ? '\n' : '';
+    writeFileAtomic(target, `${JSON.stringify(next, null, detectIndent(text))}${newline}`, mode, () => {
         if (fingerprint(target) !== before) {
             throw new FileChangedError();
         }

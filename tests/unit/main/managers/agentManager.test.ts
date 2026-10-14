@@ -587,7 +587,8 @@ describe('AgentManager', () => {
     describe('blocked commands and allow rules (Antigravity CLI)', () => {
         const recordFile = () => path.join(layout.userData, 'agent-permissions.json');
         const readRecord = () => JSON.parse(fs.readFileSync(recordFile(), 'utf8'));
-        const readAllow = (): string[] => JSON.parse(fs.readFileSync(agySettingsFile(), 'utf8')).permissions.allow;
+        const readAllow = (): string[] =>
+            JSON.parse(fs.readFileSync(agySettingsFile(), 'utf8')).permissions?.allow ?? [];
         const env = (extra: Record<string, string> = {}) => ({
             PATH: fakePath(layout.bin),
             FAKE_HOME: layout.home,

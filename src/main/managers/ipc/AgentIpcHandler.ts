@@ -29,7 +29,8 @@ import type {
 const ROUTING_MODES: readonly QuickChatRoutingMode[] = ['auto', 'web', 'agent'];
 const ENGINE_PREFERENCES: readonly AgentEnginePreference[] = ['auto', 'antigravity', 'gemini-cli'];
 export const MAX_AGENT_MODEL_LENGTH = 100;
-const AGENT_MODEL_PATTERN = /^[A-Za-z0-9._:-]*$/;
+/** A model id; never starting with `-`, so it cannot be read as another CLI flag. */
+const AGENT_MODEL_PATTERN = /^(?:[A-Za-z0-9._:][A-Za-z0-9._:-]*)?$/;
 
 const DEFAULT_SETTINGS: AgentSettings = {
     quickChatRoutingMode: 'auto',
@@ -65,7 +66,9 @@ export function validateAgentSettingsUpdate(update: unknown): Partial<AgentSetti
         }
         const model = candidate.agentModel.trim();
         if (model.length > MAX_AGENT_MODEL_LENGTH || !AGENT_MODEL_PATTERN.test(model)) {
-            throw new Error('The model name may only use letters, digits and . _ : - (up to 100 characters).');
+            throw new Error(
+                'The model name may only use letters, digits and . _ : - and may not start with - (up to 100 characters).'
+            );
         }
         result.agentModel = model;
     }

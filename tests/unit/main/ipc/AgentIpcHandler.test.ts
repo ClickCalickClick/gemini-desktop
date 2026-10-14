@@ -171,6 +171,9 @@ describe('AgentIpcHandler', () => {
 
         it('rejects invalid values without saving anything', () => {
             expect(() => invoke(IPC_CHANNELS.AGENT_SETTINGS_SET, {}, { agentModel: 'a b' })).toThrow('model name');
+            expect(() =>
+                invoke(IPC_CHANNELS.AGENT_SETTINGS_SET, {}, { agentModel: '--dangerously-skip-permissions' })
+            ).toThrow('model name');
             expect(() => invoke(IPC_CHANNELS.AGENT_SETTINGS_SET, {}, { quickChatRoutingMode: 'x' })).toThrow(
                 'routing mode'
             );

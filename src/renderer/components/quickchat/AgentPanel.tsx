@@ -154,10 +154,10 @@ function lastingPrefixes(blocked: BlockedCommand[]): { rules: string[]; prefixes
     return { rules, prefixes: rules.map((rule) => rule.replace(/^command\((.*)\)$/s, '$1')) };
 }
 
-/** A command line with control and invisible formatting characters made visible as `\u{…}`. */
+/** A command line with control, invisible formatting and unusual space characters made visible as `\u{…}`. */
 function visibleCommand(command: string): string {
     return command.replace(
-        /[\p{Cc}\p{Cf}]/gu,
+        /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/gu,
         (char) => `\\u{${(char.codePointAt(0) ?? 0).toString(16).toUpperCase()}}`
     );
 }

@@ -140,7 +140,6 @@ export const LOOKUP_COMMAND_GROUPS: readonly LookupCommandGroup[] = [
             'ip -br link show',
             'nmcli general status',
             'nmcli device status',
-            'nmcli connection show',
             'networkctl status',
             'networkctl list',
             'resolvectl status',
