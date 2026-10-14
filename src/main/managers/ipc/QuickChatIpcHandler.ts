@@ -58,6 +58,21 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
         ipcMain.on(IPC_CHANNELS.QUICK_CHAT_CANCEL, () => {
             this._handleCancel();
         });
+
+        ipcMain.on(IPC_CHANNELS.QUICK_CHAT_RESIZE, (_event, height: unknown) => {
+            this._handleResize(height);
+        });
+    }
+
+    private _handleResize(height: unknown): void {
+        try {
+            if (typeof height !== 'number' || !Number.isFinite(height)) {
+                return;
+            }
+            this.deps.windowManager.resizeQuickChat(height);
+        } catch (error) {
+            this.handleError('resizing quick chat', error);
+        }
     }
 
     private _cleanupExpiredRequests(): void {
@@ -264,6 +279,7 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
         ipcMain.removeAllListeners(IPC_CHANNELS.GEMINI_READY);
         ipcMain.removeAllListeners(IPC_CHANNELS.QUICK_CHAT_HIDE);
         ipcMain.removeAllListeners(IPC_CHANNELS.QUICK_CHAT_CANCEL);
+        ipcMain.removeAllListeners(IPC_CHANNELS.QUICK_CHAT_RESIZE);
         this.pendingRequests.clear();
         this.latestRequestByTab.clear();
     }

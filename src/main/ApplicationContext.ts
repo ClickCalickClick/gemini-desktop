@@ -8,6 +8,7 @@ import type LlmManager from './managers/llmManager';
 import type NotificationManager from './managers/notificationManager';
 import type ExportManager from './managers/exportManager';
 import type MenuManager from './managers/menuManager';
+import type AgentManager from './managers/agentManager';
 
 export interface CoreManagers {
     readonly windowManager: WindowManager;
@@ -17,6 +18,7 @@ export interface CoreManagers {
     readonly updateManager: UpdateManager;
     readonly llmManager: LlmManager;
     readonly exportManager: ExportManager;
+    readonly agentManager: AgentManager;
     readonly ipcManager: IpcManager;
 }
 

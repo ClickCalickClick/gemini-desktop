@@ -163,6 +163,74 @@ describe('QuickChatWindow', () => {
         });
     });
 
+    describe('resizeToContent', () => {
+        const createSizedWindow = (bounds = { x: 100, y: 200, width: 600, height: 80 }, zoomFactor = 1) => {
+            const win = quickChatWindow.create() as any;
+            let resizable = false;
+            win.getBounds = vi.fn(() => ({ ...bounds }));
+            win.setBounds = vi.fn();
+            win.isResizable = vi.fn(() => resizable);
+            win.setResizable = vi.fn((flag: boolean) => {
+                resizable = flag;
+            });
+            win.webContents.getZoomFactor = vi.fn(() => zoomFactor);
+            return win;
+        };
+
+        it('keeps the width and top edge and toggles resizable around the change', () => {
+            const win = createSizedWindow();
+            quickChatWindow.resizeToContent(300);
+            expect(win.setBounds).toHaveBeenCalledWith({ x: 100, y: 200, width: 600, height: 300 });
+            expect(win.setResizable.mock.calls).toEqual([[true], [false]]);
+        });
+
+        it('clamps to 64..640 CSS pixels, scales by the zoom factor and stays on screen', () => {
+            const win = createSizedWindow(undefined, 1.5);
+            quickChatWindow.resizeToContent(10);
+            expect(win.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({ height: 96 }));
+            quickChatWindow.resizeToContent(5000);
+            expect(win.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({ height: 880 }));
+        });
+
+        it('keeps the bottom edge inside the work area', () => {
+            const win = createSizedWindow({ x: 0, y: 900, width: 600, height: 80 });
+            quickChatWindow.resizeToContent(600);
+            expect(win.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({ height: 180 }));
+        });
+
+        it('does nothing for invalid heights, the same height or no window', () => {
+            quickChatWindow.resizeToContent(300);
+            const win = createSizedWindow();
+            for (const value of [NaN, Infinity, '300', null]) {
+                quickChatWindow.resizeToContent(value);
+            }
+            quickChatWindow.resizeToContent(80);
+            expect(win.setBounds).not.toHaveBeenCalled();
+            expect(win.setResizable).not.toHaveBeenCalled();
+        });
+
+        it('only changes the size on Wayland', async () => {
+            const previous = process.env.XDG_SESSION_TYPE;
+            process.env.XDG_SESSION_TYPE = 'wayland';
+            vi.resetModules();
+            try {
+                const { default: WaylandQuickChatWindow } = await import('../../../src/main/windows/quickChatWindow');
+                quickChatWindow = new WaylandQuickChatWindow(false);
+                const win = createSizedWindow();
+                quickChatWindow.resizeToContent(400);
+                expect(win.setSize).toHaveBeenCalledWith(600, 400);
+                expect(win.setBounds).not.toHaveBeenCalled();
+            } finally {
+                if (previous === undefined) {
+                    delete process.env.XDG_SESSION_TYPE;
+                } else {
+                    process.env.XDG_SESSION_TYPE = previous;
+                }
+                vi.resetModules();
+            }
+        });
+    });
+
     describe('getWindow', () => {
         it('returns null when no Quick Chat window exists', () => {
             expect(quickChatWindow.getWindow()).toBeNull();
