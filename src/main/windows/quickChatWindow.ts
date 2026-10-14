@@ -20,6 +20,7 @@ import {
     QUICK_CHAT_WIDTH,
 } from '../utils/constants';
 import { getPreloadPath } from '../utils/paths';
+import { getPlatformAdapter } from '../platform/platformAdapterFactory';
 
 /**
  * Quick Chat floating window.
@@ -127,8 +128,10 @@ export default class QuickChatWindow extends BaseWindow {
             return;
         }
         this._suppressBlurUntil = Date.now() + 500;
-        this.window.show();
-        this.window.focus();
+        // On GNOME Wayland a window that is open but not focused cannot raise itself without an
+        // activation token, so the adapter hides and shows it again (B16, L21). A second instance's
+        // XDG_ACTIVATION_TOKEN cannot be used here: Electron has no API to apply one to a window.
+        getPlatformAdapter().bringToFront(this.window);
     }
 
     private handleBlur(): void {

@@ -11,7 +11,7 @@ Primary files and folders:
 - `src/shared/constants/urls.ts` — the fork's GitHub repository and every link derived from it (release notes, issues, License, Disclaimer, the notify-only update check)
 - `src/shared/types/ipc.ts` — typed preload/renderer contract (`ElectronAPI`)
 - `src/shared/types/tabs.ts` — shared tab state and payload shapes
-- `src/shared/types/hotkeys.ts` — hotkey ids, accelerators and `PlatformHotkeyStatus`; while its `registrationPending` is true the desktop is still asking the user to approve the shortcuts, and the main process sends the final status on `PLATFORM_HOTKEY_STATUS_CHANGED`
+- `src/shared/types/hotkeys.ts` — hotkey ids, accelerators and `PlatformHotkeyStatus`; while its `registrationPending` is true the desktop is still asking the user to approve the shortcuts, and the main process sends the final status on `PLATFORM_HOTKEY_STATUS_CHANGED`; `COPILOT_KEY_ACCELERATOR` (`Shift+Super+F23`) is the Options preset for Copilot keys
 - `src/shared/types/` — cross-boundary payloads and state types
 - `src/shared/types/agent.ts` — hybrid Quick Chat contract: routes, `RouteDecision`, agent settings and status, run requests and `AgentRunEvent`s, file plans
 - `src/shared/utils/` — shared pure helpers safe to reuse across boundaries
