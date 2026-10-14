@@ -13,6 +13,10 @@ const linuxExecutable = '"/opt/Gemini Desktop/gemini-desktop"';
 // ~/.local/share/applications at runtime instead (src/main/utils/quickChatLauncher.ts).
 const quickChatDesktopFile = path.join(__dirname, '..', 'build', 'linux', 'gemini-desktop-quick-chat.desktop');
 
+// Extra fpm arguments for the deb, rpm and pacman targets (electron-builder only accepts `fpm` per
+// target, not under `linux`): fpm's dir source maps <file>=<path in the package>.
+const fpmExtraFiles = [`${quickChatDesktopFile}=/usr/share/applications/gemini-desktop-quick-chat.desktop`];
+
 /**
  * The main desktop entry, with a "Quick Chat" action in its right-click menu.
  * @param {string} quickChatExec - The Exec line of the action
@@ -178,8 +182,6 @@ module.exports = {
         // The deb Maintainer and the pacman packager. Without it, fpm uses the upstream author.
         maintainer: 'ClickCalickClick <16350651+ClickCalickClick@users.noreply.github.com>',
         desktop: linuxDesktop(`${linuxExecutable} --quick-chat`),
-        // fpm options apply to the deb, rpm and pacman targets, which all use fpm
-        fpm: [`${quickChatDesktopFile}=/usr/share/applications/gemini-desktop-quick-chat.desktop`],
     },
     // The AppImage's own entry starts AppRun; AppImage integration tools rewrite its Exec lines to
     // the AppImage's path, the action's included.
@@ -208,6 +210,7 @@ module.exports = {
             'libasound2',
         ],
         recommends: ['libayatana-appindicator3-1'],
+        fpm: fpmExtraFiles,
     },
     rpm: {
         depends: [
@@ -221,6 +224,7 @@ module.exports = {
             '(libuuid or libuuid1)',
             'alsa-lib',
         ],
+        fpm: fpmExtraFiles,
     },
     // The pacman defaults pull in all of ffmpeg (Electron bundles its own), the archived http-parser
     // and libappindicator-gtk3, which Arch only has as a provides. This list follows Arch's own
@@ -239,6 +243,7 @@ module.exports = {
             'hicolor-icon-theme',
             'mesa',
         ],
+        fpm: fpmExtraFiles,
     },
     // Builds use --publish never. This only names the repository that AppImage and Windows
     // builds check for updates (app-update.yml); without it electron-builder guesses from .git.

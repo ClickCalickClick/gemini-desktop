@@ -13,6 +13,8 @@ Primary files and folders:
 - `src/main/windows/` — window creation/lifecycle
 - `src/main/platform/` — OS-specific behavior
 - `src/main/utils/` — main-process utilities
+- `src/main/utils/launchArgs.ts` — the app's own flags: `--quick-chat` (also passed as single-instance data) and `--hidden`
+- `src/main/utils/quickChatLauncher.ts` — writes the Gemini Quick Chat launcher to `~/.local/share/applications` for AppImage and tar.gz installs; it only rewrites or removes a file marked `X-Gemini-Desktop-Generated=true`
 
 ## Manager Pattern
 
@@ -41,6 +43,9 @@ A manager announces a change by emitting an event on `windowManager`, for exampl
 - Connecting dbus-next with its default address: for `unix:path=` and `unix:abstract=` addresses it loads the native `usocket` module, which crashes the app on Linux kernel 7+ (B1). Use `connectSessionBus()` in `utils/dbusFallback.ts`, which converts the address for Node's `net` module; the package leaves `usocket` out
 - Calling `show()` and `focus()` to bring the main window to the front: GNOME on Wayland refuses the app's request to raise a window that is already open, so it stays behind other apps (B16). Call `windowManager.focusMainWindow()`, which goes through `PlatformAdapter.bringToFront()`; the Wayland adapter hides and shows the window again
 - Adding `process.on('SIGTERM' | 'SIGINT' | 'SIGHUP')` listeners while the app starts on Linux: Node.js installs a signal's handler only for its first listener, so they stop `utils/terminationSignals.ts` from taking these signals over from Electron once the app is ready (B15)
+
+- Reading `process.argv` for a new flag in `main.ts` without going through `utils/launchArgs.ts`: a second instance's flags arrive in the `second-instance` event (and Chromium may reorder or drop them), not in the running app's `process.argv`
+- Hardcoding the install path of the Linux packages: the Quick Chat action, `build/linux/gemini-desktop-quick-chat.desktop` and `scripts/release/check-arch-install.sh` all use `/opt/Gemini Desktop/gemini-desktop`; change them together with `productName`
 
 ## When You Change Files Here
 

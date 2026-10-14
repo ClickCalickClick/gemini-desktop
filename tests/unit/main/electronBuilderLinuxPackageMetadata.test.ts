@@ -18,7 +18,6 @@ type ElectronBuilderConfig = {
         synopsis?: string;
         maintainer?: string;
         desktop?: DesktopConfig;
-        fpm?: string[];
     };
     appImage?: {
         desktop?: DesktopConfig;
@@ -26,12 +25,15 @@ type ElectronBuilderConfig = {
     deb?: {
         depends?: string[];
         recommends?: string[];
+        fpm?: string[];
     };
     rpm?: {
         depends?: string[];
+        fpm?: string[];
     };
     pacman?: {
         depends?: string[];
+        fpm?: string[];
     };
     toolsets?: {
         appimage?: string | null;
@@ -124,8 +126,13 @@ describe('electron-builder Linux package metadata', () => {
     });
 
     it('installs the Gemini Quick Chat launcher with the deb, rpm and pacman packages (H7)', () => {
-        const mappings = builderConfig.linux?.fpm ?? [];
-        const mapping = mappings.find((arg) =>
+        // electron-builder's schema rejects `fpm` under `linux`, so each fpm target carries it
+        const [debFpm, rpmFpm, pacmanFpm] = [builderConfig.deb?.fpm, builderConfig.rpm?.fpm, builderConfig.pacman?.fpm];
+        expect(rpmFpm).toEqual(debFpm);
+        expect(pacmanFpm).toEqual(debFpm);
+        expect((builderConfig.linux as Record<string, unknown> | undefined)?.fpm).toBeUndefined();
+
+        const mapping = (debFpm ?? []).find((arg) =>
             arg.endsWith('=/usr/share/applications/gemini-desktop-quick-chat.desktop')
         );
         expect(mapping).toBeDefined();
