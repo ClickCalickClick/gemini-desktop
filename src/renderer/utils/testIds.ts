@@ -108,6 +108,15 @@ export const QUICK_CHAT_TEST_IDS = {
     QUICK_CHAT_AGENT_CONTINUE_WEB: 'quick-chat-agent-continue-web',
 } as const;
 
+export const QUICK_CHAT_SETTINGS_TEST_IDS = {
+    QUICK_CHAT_SETTINGS: 'quick-chat-settings',
+    QUICK_CHAT_SETTINGS_ROUTING: 'quick-chat-settings-routing',
+    QUICK_CHAT_SETTINGS_ENGINE: 'quick-chat-settings-engine',
+    QUICK_CHAT_SETTINGS_MODEL: 'quick-chat-settings-model',
+    QUICK_CHAT_SETTINGS_STATUS: 'quick-chat-settings-status',
+    QUICK_CHAT_SETTINGS_RECHECK: 'quick-chat-settings-recheck',
+} as const;
+
 export const TAB_TEST_IDS = {
     TAB_BAR: 'tab-bar',
     TAB_NEW_BUTTON: 'tab-new-button',
@@ -128,5 +137,6 @@ export const TEST_IDS = {
     ...OPTIONS_TEST_IDS,
     ...ABOUT_TEST_IDS,
     ...QUICK_CHAT_TEST_IDS,
+    ...QUICK_CHAT_SETTINGS_TEST_IDS,
     ...TAB_TEST_IDS,
 } as const;

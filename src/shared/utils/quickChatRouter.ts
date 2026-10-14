@@ -107,9 +107,13 @@ export function parseRoutePrefix(text: string): RoutePrefix | null {
     if (!match) {
         return null;
     }
-    const prefix = match[1];
+    const prefix = match[1] ?? '';
+    const route = PREFIX_ROUTES[prefix.toLowerCase()];
+    if (!route) {
+        return null;
+    }
     return {
-        route: PREFIX_ROUTES[prefix.toLowerCase()],
+        route,
         prefix,
         rest: text.slice(match[0].length).trim(),
     };
@@ -350,9 +354,9 @@ type FileKind = keyof typeof FILE_EXTENSIONS;
 export function findFileNames(text: string): { name: string; kind: FileKind }[] {
     const found: { name: string; kind: FileKind }[] = [];
     for (const match of text.matchAll(FILE_NAME_PATTERN)) {
-        const name = match[1];
-        const extension = match[2].toLowerCase();
-        if (NOT_FILE_NAMES.test(name)) {
+        const name = match[1] ?? '';
+        const extension = (match[2] ?? '').toLowerCase();
+        if (!name || NOT_FILE_NAMES.test(name)) {
             continue;
         }
         const kind = (Object.keys(FILE_EXTENSIONS) as FileKind[]).find((key) =>

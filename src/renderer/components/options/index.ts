@@ -11,3 +11,4 @@ export { TextPredictionSettings } from './TextPredictionSettings';
 export { NotificationSettings } from './NotificationSettings';
 export { StartupSettings } from './StartupSettings';
 export { ChatBehaviorSettings } from './ChatBehaviorSettings';
+export { QuickChatSettings } from './QuickChatSettings';

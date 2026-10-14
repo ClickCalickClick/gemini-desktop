@@ -124,6 +124,14 @@ describe('OptionsWindow', () => {
             expect(screen.getByTestId('mock-individual-hotkey-toggles')).toBeInTheDocument();
         });
 
+        it('should display the Quick Chat section', async () => {
+            await renderWithAct(<OptionsWindow />);
+            const section = screen.getByTestId('options-quick-chat');
+            expect(section).toHaveClass('options-section');
+            expect(section.querySelector('h2')).toHaveTextContent('Quick Chat');
+            expect(section.querySelector('.options-section__content')).toBeInTheDocument();
+        });
+
         it('should display Updates section', async () => {
             await renderWithAct(<OptionsWindow />);
             expect(screen.getByText('Updates')).toBeInTheDocument();
