@@ -239,3 +239,61 @@ export function parseAcceleratorParts(accelerator: string, platform: string | un
         }
     });
 }
+
+/** Desktop modifier names (GTK `<Shift>`, KDE `Meta+`), mapped to keycap labels */
+const DESKTOP_MODIFIER_LABELS: Record<string, string> = {
+    shift: 'Shift',
+    control: 'Ctrl',
+    ctrl: 'Ctrl',
+    primary: 'Ctrl',
+    alt: 'Alt',
+    super: 'Super',
+    meta: 'Super',
+    logo: 'Super',
+    mod4: 'Super',
+    hyper: 'Hyper',
+};
+
+/** Keysym names a desktop may report, mapped to friendlier keycap labels */
+const DESKTOP_KEY_LABELS: Record<string, string> = {
+    // The Copilot key: xkeyboard-config 2.44 and later give Shift+Super+F23 this keysym
+    XF86Assistant: 'Copilot',
+    space: '␣',
+    Return: 'Enter',
+};
+
+function desktopKeyLabel(key: string): string {
+    if (DESKTOP_KEY_LABELS[key]) return DESKTOP_KEY_LABELS[key];
+    if (key.startsWith('XF86')) return key.slice(4);
+    return key.length === 1 ? key.toUpperCase() : key;
+}
+
+/**
+ * Split the key a desktop reports for a portal shortcut into keycap labels. GNOME describes it as
+ * "Press <Shift><Super>XF86Assistant" (in the user's language), KDE as a chord such as
+ * "Meta+Shift+F23".
+ *
+ * @param description - The portal's trigger description
+ * @returns Keycap labels, or an empty array when no key is bound
+ */
+export function parseDesktopTrigger(description: string | undefined): string[] {
+    const text = description?.trim();
+    if (!text) return [];
+
+    const gtk = /((?:<[A-Za-z0-9_]+>)+)([^\s<>]+)/.exec(text);
+    if (gtk) {
+        const [, modifierText = '', key = ''] = gtk;
+        const modifiers = [...modifierText.matchAll(/<([A-Za-z0-9_]+)>/g)].map((m) => {
+            const name = m[1] ?? '';
+            return DESKTOP_MODIFIER_LABELS[name.toLowerCase()] ?? name;
+        });
+        return [...modifiers, desktopKeyLabel(key)];
+    }
+
+    // A single key ("Press F13") or a KDE-style chord: the last word is the key
+    const lastWord = text.split(/\s+/).pop() ?? '';
+    const parts = lastWord.split('+').filter(Boolean);
+    return parts.map((part, index) =>
+        index < parts.length - 1 ? (DESKTOP_MODIFIER_LABELS[part.toLowerCase()] ?? part) : desktopKeyLabel(part)
+    );
+}
