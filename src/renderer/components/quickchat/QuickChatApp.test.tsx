@@ -114,6 +114,36 @@ describe('QuickChatApp', () => {
             const input = screen.getByTestId('quick-chat-input');
             expect(document.activeElement).toBe(input);
         });
+
+        it('puts the cursor back in the input when Quick Chat is shown again', async () => {
+            render(<QuickChatApp />);
+            await waitForInitialization();
+            const input = screen.getByTestId('quick-chat-input');
+            const submit = screen.getByTestId('quick-chat-submit');
+            submit.removeAttribute('disabled');
+            act(() => submit.focus());
+            expect(document.activeElement).toBe(submit);
+
+            act(() => {
+                window.dispatchEvent(new Event('focus'));
+            });
+
+            expect(document.activeElement).toBe(input);
+        });
+
+        it('puts the cursor in the input when the page becomes visible', async () => {
+            render(<QuickChatApp />);
+            await waitForInitialization();
+            const input = screen.getByTestId('quick-chat-input');
+            act(() => input.blur());
+            expect(document.activeElement).not.toBe(input);
+
+            act(() => {
+                document.dispatchEvent(new Event('visibilitychange'));
+            });
+
+            expect(document.activeElement).toBe(input);
+        });
     });
 
     describe('Input Handling', () => {

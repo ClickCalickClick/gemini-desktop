@@ -82,6 +82,7 @@ export interface MockWebContents {
     getURL: ReturnType<typeof vi.fn>;
     isDestroyed: ReturnType<typeof vi.fn>;
     setZoomFactor: ReturnType<typeof vi.fn>;
+    focus: ReturnType<typeof vi.fn>;
 
     // Optional scroll capture methods
     capturePage?: ReturnType<typeof vi.fn>;
@@ -145,6 +146,7 @@ export function createMockWebContents(options: MockWebContentsOptions = {}): Moc
         getURL: vi.fn().mockReturnValue(url),
         isDestroyed: isDestroyed ? vi.fn(isDestroyed) : vi.fn().mockReturnValue(false),
         setZoomFactor: vi.fn(),
+        focus: vi.fn(),
         _reset() {
             mock.send.mockClear();
             mock.on.mockClear();
@@ -154,6 +156,7 @@ export function createMockWebContents(options: MockWebContentsOptions = {}): Moc
             mock.getURL.mockClear();
             mock.isDestroyed.mockClear();
             mock.setZoomFactor.mockClear();
+            mock.focus.mockClear();
             if (mock.capturePage) mock.capturePage.mockClear();
             if (mock.printToPDF) mock.printToPDF.mockClear();
             if (mock.mainFrame) {
