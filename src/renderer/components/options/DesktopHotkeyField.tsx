@@ -31,7 +31,12 @@ export function DesktopHotkeyField({ hotkeyId, desktopTrigger, disabled }: Deskt
     const openDesktopDialog = useCallback(async () => {
         setMessage(null);
         const opened = await window.electronAPI?.changeHotkeysInDesktop?.();
-        if (!opened) {
+        if (opened) {
+            // GNOME's editor saves nothing for modifiers alone, such as Alt+Super
+            setMessage(
+                'Click the pencil next to the shortcut, then press the keys. Include a regular key such as Space.'
+            );
+        } else {
             setMessage('Your desktop could not open its shortcut dialog. Change the keys in its Settings, under Apps.');
         }
     }, []);
@@ -66,7 +71,7 @@ export function DesktopHotkeyField({ hotkeyId, desktopTrigger, disabled }: Deskt
                 data-testid={`hotkey-change-in-desktop-${hotkeyId}`}
                 onClick={openDesktopDialog}
                 disabled={disabled}
-                title="Opens your desktop's shortcut dialog. Press the key you want there, such as the Copilot key."
+                title="Opens your desktop's shortcut settings. Press the key you want there, such as the Copilot key."
             >
                 Change…
             </button>
