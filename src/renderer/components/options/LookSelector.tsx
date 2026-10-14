@@ -10,10 +10,11 @@
  * <LookSelector />
  */
 
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useRef } from 'react';
 import { useLook } from '../../context/LookContext';
 import { createRendererLogger } from '../../utils';
 import { getWindowControlsLayout } from '../../utils/windowControlsLayout';
+import { DESKTOP_LOOK_NAMES, DESKTOP_LOOKS } from '../../../shared/constants/looks';
 import type { DesktopLook, DesktopLookPreference } from '../../../shared/types/look';
 import './LookSelector.css';
 
@@ -30,21 +31,27 @@ interface LookOption {
     accent: string;
 }
 
-/** Every look, in the order they are listed. */
+/** The default accent each look's preview shows. */
+const PREVIEW_ACCENTS: Record<DesktopLookPreference, string> = {
+    auto: '#888888',
+    default: '#8ab4f8',
+    gnome: '#3584e4',
+    kde: '#3daee9',
+    xfce: '#398ee7',
+    cinnamon: '#35a854',
+    mate: '#6f9a45',
+    budgie: '#1a73e8',
+    elementary: '#3689e6',
+    cosmic: '#63d0df',
+    macos: '#007aff',
+    windows: '#0067c0',
+};
+
+/** Auto, then every look in the shared order. */
 // eslint-disable-next-line react-refresh/only-export-components -- option list exported for tests
 export const LOOK_OPTIONS: LookOption[] = [
-    { id: 'auto', label: 'Auto', accent: '#888888' },
-    { id: 'default', label: 'Default', accent: '#8ab4f8' },
-    { id: 'gnome', label: 'GNOME', accent: '#3584e4' },
-    { id: 'kde', label: 'KDE Plasma', accent: '#3daee9' },
-    { id: 'xfce', label: 'Xfce', accent: '#398ee7' },
-    { id: 'cinnamon', label: 'Cinnamon', accent: '#35a854' },
-    { id: 'mate', label: 'MATE', accent: '#6f9a45' },
-    { id: 'budgie', label: 'Budgie', accent: '#1a73e8' },
-    { id: 'elementary', label: 'elementary OS', accent: '#3689e6' },
-    { id: 'cosmic', label: 'COSMIC', accent: '#63d0df' },
-    { id: 'macos', label: 'macOS', accent: '#007aff' },
-    { id: 'windows', label: 'Windows', accent: '#0067c0' },
+    { id: 'auto', label: 'Auto', accent: PREVIEW_ACCENTS.auto },
+    ...DESKTOP_LOOKS.map((look) => ({ id: look, label: DESKTOP_LOOK_NAMES[look], accent: PREVIEW_ACCENTS[look] })),
 ];
 
 /** The text of the Auto card, naming the detected desktop. */
@@ -63,7 +70,11 @@ interface LookCardProps {
     /** The look the preview draws ('auto' draws the look it resolves to) */
     previewLook: DesktopLook;
     isSelected: boolean;
+    /** 0 for the one card in the tab order (roving tabindex), -1 for the others */
+    tabIndex: 0 | -1;
     onSelect: (id: DesktopLookPreference) => void;
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>, id: DesktopLookPreference) => void;
+    cardRef: (element: HTMLDivElement | null) => void;
 }
 
 /** Mini titlebar showing where the window controls sit in this look. */
@@ -80,26 +91,26 @@ function ControlsPreview({ look }: { look: DesktopLook }) {
     );
 }
 
-const LookCard = memo(function LookCard({ option, label, previewLook, isSelected, onSelect }: LookCardProps) {
-    const handleKeyDown = useCallback(
-        (event: React.KeyboardEvent) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                onSelect(option.id);
-            }
-        },
-        [onSelect, option.id]
-    );
-
+const LookCard = memo(function LookCard({
+    option,
+    label,
+    previewLook,
+    isSelected,
+    tabIndex,
+    onSelect,
+    onKeyDown,
+    cardRef,
+}: LookCardProps) {
     return (
         <div
             className={`look-card${isSelected ? ' look-card--selected' : ''}`}
             onClick={() => onSelect(option.id)}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(event) => onKeyDown(event, option.id)}
+            ref={cardRef}
             role="radio"
             aria-checked={isSelected}
             aria-label={`${label} look`}
-            tabIndex={0}
+            tabIndex={tabIndex}
             data-testid={`look-card-${option.id}`}
             style={{ '--look-card-accent': option.accent } as React.CSSProperties}
         >
@@ -115,9 +126,14 @@ const LookCard = memo(function LookCard({ option, label, previewLook, isSelected
 
 /**
  * Look selector with one card per look.
+ *
+ * Follows the WAI-ARIA radio group pattern: one tab stop (the selected card, or the first card
+ * when none is), Arrow keys move focus and select (Left/Up previous, Right/Down next, wrapping),
+ * Home and End go to the first and last card, Enter and Space select.
  */
 export const LookSelector = memo(function LookSelector() {
     const { look, setLook } = useLook();
+    const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
 
     const handleSelect = useCallback(
         (id: DesktopLookPreference) => {
@@ -127,10 +143,52 @@ export const LookSelector = memo(function LookSelector() {
         [setLook]
     );
 
+    const handleKeyDown = useCallback(
+        (event: React.KeyboardEvent<HTMLDivElement>, id: DesktopLookPreference) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleSelect(id);
+                return;
+            }
+            const index = LOOK_OPTIONS.findIndex((option) => option.id === id);
+            const last = LOOK_OPTIONS.length - 1;
+            let next: number;
+            switch (event.key) {
+                case 'ArrowLeft':
+                case 'ArrowUp':
+                    next = index <= 0 ? last : index - 1;
+                    break;
+                case 'ArrowRight':
+                case 'ArrowDown':
+                    next = index >= last ? 0 : index + 1;
+                    break;
+                case 'Home':
+                    next = 0;
+                    break;
+                case 'End':
+                    next = last;
+                    break;
+                default:
+                    return;
+            }
+            event.preventDefault();
+            const nextOption = LOOK_OPTIONS[next];
+            if (nextOption) {
+                cardRefs.current[next]?.focus();
+                handleSelect(nextOption.id);
+            }
+        },
+        [handleSelect]
+    );
+
+    const hasSelection = LOOK_OPTIONS.some((option) => option.id === look.preference);
+
     // The look Auto resolves to: the option named like the detected desktop (names match the main process)
-    const autoLook = (LOOK_OPTIONS.find((option) => option.id !== 'auto' && option.label === look.detectedDesktop)
-        ?.id ?? 'default') as DesktopLook;
-    const appliedLabel = LOOK_OPTIONS.find((option) => option.id === look.effectiveLook)?.label ?? 'Default';
+    const autoLook: DesktopLook =
+        DESKTOP_LOOKS.find(
+            (candidate) => candidate !== 'default' && DESKTOP_LOOK_NAMES[candidate] === look.detectedDesktop
+        ) ?? 'default';
+    const appliedLabel = DESKTOP_LOOK_NAMES[look.effectiveLook];
 
     return (
         <div className="look-selector-container" data-testid="look-selector">
@@ -142,9 +200,14 @@ export const LookSelector = memo(function LookSelector() {
                 </span>
             </div>
             <div className="look-selector-cards" role="radiogroup" aria-label="Look selection">
-                {LOOK_OPTIONS.map((option) => (
+                {LOOK_OPTIONS.map((option, index) => (
                     <LookCard
                         key={option.id}
+                        cardRef={(element) => {
+                            cardRefs.current[index] = element;
+                        }}
+                        tabIndex={(hasSelection ? look.preference === option.id : index === 0) ? 0 : -1}
+                        onKeyDown={handleKeyDown}
                         option={option}
                         label={option.id === 'auto' ? getAutoLabel(look.detectedDesktop) : option.label}
                         previewLook={option.id === 'auto' ? autoLook : option.id}

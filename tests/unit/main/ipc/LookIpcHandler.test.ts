@@ -51,9 +51,11 @@ vi.mock('electron', () => ({
 function createFakeWatcher() {
     let resolveStart: (accent: string | null) => void = () => {};
     let onChange: (accent: string | null) => void = () => {};
+    let onLost: () => void = () => {};
     const watcher = {
-        start: vi.fn((callback: (accent: string | null) => void) => {
+        start: vi.fn((callback: (accent: string | null) => void, lost?: () => void) => {
             onChange = callback;
+            onLost = lost ?? (() => {});
             return new Promise<string | null>((resolve) => {
                 resolveStart = resolve;
             });
@@ -64,6 +66,7 @@ function createFakeWatcher() {
         watcher: watcher as AccentWatcherLike & typeof watcher,
         finishStart: (accent: string | null) => resolveStart(accent),
         emitChange: (accent: string | null) => onChange(accent),
+        loseBus: () => onLost(),
     };
 }
 
@@ -272,6 +275,79 @@ describe('LookIpcHandler', () => {
             handler.initialize();
             await flush();
             expect(mockLogger.error).toHaveBeenCalled();
+        });
+
+        it('stops the watcher and forgets the accent when the look goes back to default', async () => {
+            mockStore.set('desktopLook', 'gnome');
+            const { handler, fake, createAccentWatcher } = createHandler();
+            handler.initialize();
+            fake.finishStart('#3584e4');
+            await flush();
+
+            setLook('default');
+            expect(fake.watcher.stop).toHaveBeenCalled();
+            expect(mockBrowserWindow._mockWindow.webContents.send).toHaveBeenLastCalledWith(
+                IPC_CHANNELS.LOOK_CHANGED,
+                expect.objectContaining({ effectiveLook: 'default', accentColor: null })
+            );
+
+            setLook('gnome');
+            expect(createAccentWatcher).toHaveBeenCalledTimes(2);
+        });
+
+        it('starts a new watcher on the next look:set after the bus is lost', async () => {
+            mockStore.set('desktopLook', 'gnome');
+            const { handler, fake, createAccentWatcher } = createHandler({ accentRetryDelayMs: 60_000 });
+            handler.initialize();
+            fake.finishStart('#3584e4');
+            await flush();
+
+            fake.loseBus();
+            expect(fake.watcher.stop).toHaveBeenCalled();
+            expect(mockLogger.warn).toHaveBeenCalled();
+            // The last accent stays applied meanwhile
+            expect(getLook()).toMatchObject({ accentColor: '#3584e4' });
+
+            setLook('kde');
+            expect(createAccentWatcher).toHaveBeenCalledTimes(2);
+            handler.unregister();
+        });
+
+        it('retries once after a delay when the bus is lost', async () => {
+            vi.useFakeTimers();
+            try {
+                mockStore.set('desktopLook', 'gnome');
+                const { handler, fake, createAccentWatcher } = createHandler({ accentRetryDelayMs: 1000 });
+                handler.initialize();
+                fake.loseBus();
+                expect(createAccentWatcher).toHaveBeenCalledTimes(1);
+
+                vi.advanceTimersByTime(1000);
+                expect(createAccentWatcher).toHaveBeenCalledTimes(2);
+
+                // Unregister cancels a pending retry
+                fake.loseBus();
+                handler.unregister();
+                vi.advanceTimersByTime(5000);
+                expect(createAccentWatcher).toHaveBeenCalledTimes(2);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('does not retry after the look went back to default', () => {
+            vi.useFakeTimers();
+            try {
+                mockStore.set('desktopLook', 'gnome');
+                const { handler, fake, createAccentWatcher } = createHandler({ accentRetryDelayMs: 1000 });
+                handler.initialize();
+                fake.loseBus();
+                setLook('default');
+                vi.advanceTimersByTime(5000);
+                expect(createAccentWatcher).toHaveBeenCalledTimes(1);
+            } finally {
+                vi.useRealTimers();
+            }
         });
 
         it('stops the watcher on unregister', () => {

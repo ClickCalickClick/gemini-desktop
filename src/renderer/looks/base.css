@@ -11,7 +11,8 @@
  * Variables a look sets (fallbacks in parentheses):
  *   --look-font                 Interface font stack
  *   --look-accent               The desktop's default accent; --desktop-accent wins when present
- *   --look-accent-fg            Text on the accent (#fff)
+ *   --look-accent-fg            Text on the look's default accent (#fff); --desktop-accent-fg (set by
+ *                               LookProvider from the desktop accent's contrast) wins when present
  *   --look-radius-card          Options sections and cards (8px)
  *   --look-radius-button        Buttons (6px)
  *   --look-focus-ring           Focus outline color (accent at 50%)
@@ -91,7 +92,7 @@
 }
 
 [data-look]:not([data-look='default']) .titlebar-menu-item:hover {
-    color: var(--look-accent-fg, #fff);
+    color: var(--desktop-accent-fg, var(--look-accent-fg, #fff));
 }
 
 /* ============================================================================
@@ -190,7 +191,7 @@
 }
 
 [data-look]:not([data-look='default']) .theme-card__checkmark {
-    color: var(--look-accent-fg, #fff);
+    color: var(--desktop-accent-fg, var(--look-accent-fg, #fff));
 }
 
 /* Switches */

@@ -24,7 +24,7 @@ import type { DesktopLookPreference, LookData } from '../../../shared/types/look
 
 /** The parts of DesktopAccentWatcher the handler uses (a fake in tests). */
 export interface AccentWatcherLike {
-    start(onChange: (accent: string | null) => void): Promise<string | null>;
+    start(onChange: (accent: string | null) => void, onLost?: () => void): Promise<string | null>;
     stop(): void;
 }
 
@@ -36,7 +36,12 @@ export interface LookIpcHandlerOptions {
     env?: NodeJS.ProcessEnv;
     /** Creates the accent watcher */
     createAccentWatcher?: (options: DesktopAccentWatcherOptions) => AccentWatcherLike;
+    /** Delay before the one retry after the session bus connection is lost */
+    accentRetryDelayMs?: number;
 }
+
+/** Wait this long before reading the accent again after the session bus connection is lost. */
+const ACCENT_RETRY_DELAY_MS = 30_000;
 
 /**
  * Handler for desktop look IPC channels.
@@ -48,6 +53,8 @@ export class LookIpcHandler extends BaseIpcHandler {
     private readonly createAccentWatcher: (options: DesktopAccentWatcherOptions) => AccentWatcherLike;
     private accentWatcher: AccentWatcherLike | null = null;
     private accentColor: string | null = null;
+    private readonly accentRetryDelayMs: number;
+    private accentRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(deps: IpcHandlerDependencies, options: LookIpcHandlerOptions = {}) {
         super(deps);
@@ -56,6 +63,7 @@ export class LookIpcHandler extends BaseIpcHandler {
         this.detected = detectDesktop(this.platform, this.env);
         this.createAccentWatcher =
             options.createAccentWatcher ?? ((watcherOptions) => new DesktopAccentWatcher(watcherOptions));
+        this.accentRetryDelayMs = options.accentRetryDelayMs ?? ACCENT_RETRY_DELAY_MS;
     }
 
     register(): void {
@@ -72,7 +80,7 @@ export class LookIpcHandler extends BaseIpcHandler {
             this.logger.log(
                 `Desktop detected: ${this.detected.name ?? 'unknown'} (look: ${this.getLookData().effectiveLook})`
             );
-            this.ensureAccentWatcher();
+            this.syncAccentWatcher();
         } catch (error) {
             this.handleError('initializing desktop look', error);
         }
@@ -106,23 +114,36 @@ export class LookIpcHandler extends BaseIpcHandler {
                 return;
             }
             this.deps.store.set('desktopLook', look);
+            // Before the broadcast, so going back to 'default' drops the accent in the same message
+            this.syncAccentWatcher();
             const data = this.getLookData();
             this.logger.log(`Look set to: ${look} (effective: ${data.effectiveLook})`);
             this.broadcastToAllWindows(IPC_CHANNELS.LOOK_CHANGED, data);
-            this.ensureAccentWatcher();
         } catch (error) {
             this.handleError('setting the look', error, { requestedLook: String(look) });
         }
     }
 
     /**
-     * Start the accent watcher on Linux once a look other than 'default' applies.
-     * Broadcasts look:changed when the first read finds an accent and on every later change.
+     * Run the accent watcher exactly while it is needed: on Linux with a look other than 'default'.
+     * Starting it broadcasts look:changed when the first read finds an accent and on every later
+     * change; going back to 'default' stops it and forgets the accent.
      */
-    private ensureAccentWatcher(): void {
-        if (this.accentWatcher || this.platform !== 'linux' || this.getLookData().effectiveLook === 'default') {
+    private syncAccentWatcher(): void {
+        const needed = this.platform === 'linux' && this.getLookData().effectiveLook !== 'default';
+        if (!needed) {
+            this.clearAccentRetry();
+            if (this.accentWatcher) {
+                this.accentWatcher.stop();
+                this.accentWatcher = null;
+            }
+            this.accentColor = null;
             return;
         }
+        if (this.accentWatcher) {
+            return;
+        }
+
         const watcher = this.createAccentWatcher({
             platform: this.platform,
             env: this.env,
@@ -138,15 +159,40 @@ export class LookIpcHandler extends BaseIpcHandler {
             this.broadcastToAllWindows(IPC_CHANNELS.LOOK_CHANGED, this.getLookData());
         };
 
+        // The session bus connection failed: drop this watcher so the next look:set, or one
+        // delayed retry, starts a new one. The last accent stays applied meanwhile.
+        const lost = (): void => {
+            if (this.accentWatcher !== watcher) {
+                return;
+            }
+            this.logger.warn('Lost the session bus connection for the desktop accent; will retry');
+            watcher.stop();
+            this.accentWatcher = null;
+            this.clearAccentRetry();
+            this.accentRetryTimer = setTimeout(() => {
+                this.accentRetryTimer = null;
+                this.syncAccentWatcher();
+            }, this.accentRetryDelayMs);
+            this.accentRetryTimer.unref?.();
+        };
+
         watcher
-            .start(update)
+            .start(update, lost)
             .then(update)
             .catch((error: unknown) => this.handleError('reading the desktop accent color', error));
+    }
+
+    private clearAccentRetry(): void {
+        if (this.accentRetryTimer) {
+            clearTimeout(this.accentRetryTimer);
+            this.accentRetryTimer = null;
+        }
     }
 
     unregister(): void {
         ipcMain.removeHandler(IPC_CHANNELS.LOOK_GET);
         ipcMain.removeAllListeners(IPC_CHANNELS.LOOK_SET);
+        this.clearAccentRetry();
         this.accentWatcher?.stop();
         this.accentWatcher = null;
     }

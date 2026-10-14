@@ -30,9 +30,9 @@
     --look-close-hover-bg: #da4453;
     --look-close-hover-fg: #ffffff;
 
-    /* Breeze Dark */
-    --bg-primary: #202326;
-    --bg-secondary: #292c30;
+    /* Breeze Dark: view #1b1e20 for content, window #2a2e32 for panels and chrome */
+    --bg-primary: #1b1e20;
+    --bg-secondary: #2a2e32;
     --bg-tertiary: #4d5257;
     --text-primary: #fcfcfc;
     --text-secondary: #a1a9b1;
@@ -45,7 +45,7 @@
     --look-tabbar-bg: #2a2e32;
     --look-switch-off-bg: #4d5257;
 
-    --look-qc-bg: rgba(32, 35, 38, 0.95);
+    --look-qc-bg: rgba(42, 46, 50, 0.95);
     --look-qc-border: rgba(252, 252, 252, 0.14);
     --look-qc-radius: 6px;
     --look-qc-backdrop: blur(16px);

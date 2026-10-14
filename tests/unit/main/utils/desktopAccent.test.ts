@@ -322,9 +322,28 @@ describe('desktopAccent', () => {
                 ReadOne: () => ({ body: [variant('(ddd)', [0, 0, 0])] }),
                 AddMatch: () => ({ body: [] }),
             });
-            await linuxWatcher(dbus).start(vi.fn());
+            const onLost = vi.fn();
+            await linuxWatcher(dbus).start(vi.fn(), onLost);
             bus.emit('error', new Error('connection reset'));
             expect(bus.disconnect).toHaveBeenCalled();
+            expect(onLost).toHaveBeenCalledTimes(1);
+
+            // Already disconnected: a second error does not report the loss again
+            bus.emit('error', new Error('again'));
+            expect(onLost).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not report a loss after stop', async () => {
+            const { bus, dbus } = createFakeDBus({
+                ReadOne: () => ({ body: [variant('(ddd)', [0, 0, 0])] }),
+                AddMatch: () => ({ body: [] }),
+            });
+            const onLost = vi.fn();
+            const watcher = linuxWatcher(dbus);
+            await watcher.start(vi.fn(), onLost);
+            watcher.stop();
+            bus.emit('error', new Error('closed'));
+            expect(onLost).not.toHaveBeenCalled();
         });
     });
 });

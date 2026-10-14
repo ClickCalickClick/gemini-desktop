@@ -31,8 +31,8 @@ A manager announces a change by emitting an event on `windowManager`, for exampl
 ## Desktop Look
 
 - `src/main/managers/ipc/LookIpcHandler.ts` handles `look:get` and `look:set` (validated against `DesktopLookPreference`, saved as `desktopLook`, default `'default'`) and broadcasts `look:changed` with `LookData` to every window.
-- `src/main/utils/desktopLook.ts` holds the pure detection: macOS → `macos`, Windows → `windows`, Linux from `XDG_CURRENT_DESKTOP` (colon list, in order), then `XDG_SESSION_DESKTOP` and `DESKTOP_SESSION`; unknown desktops resolve 'auto' to `default`.
-- `src/main/utils/desktopAccent.ts` (`DesktopAccentWatcher`) reads `org.freedesktop.appearance` `accent-color` from the XDG Settings portal (`ReadOne`, falling back to `Read`), follows `SettingChanged`, and on KDE falls back to `~/.config/kdeglobals`. It only starts on Linux once a look other than `default` applies, connects dbus-next with `getSessionBusAddress()` (never the native `usocket` module), uses 1.5 s timeouts and fails soft to a null accent.
+- `src/main/utils/desktopLook.ts` holds the pure detection (the look list and names come from `src/shared/constants/looks.ts`): macOS → `macos`, Windows → `windows`, Linux from `XDG_CURRENT_DESKTOP` (colon list, in order), then `XDG_SESSION_DESKTOP` and `DESKTOP_SESSION`; unknown desktops resolve 'auto' to `default`.
+- `src/main/utils/desktopAccent.ts` (`DesktopAccentWatcher`) reads `org.freedesktop.appearance` `accent-color` from the XDG Settings portal (`ReadOne`, falling back to `Read`), follows `SettingChanged`, and on KDE falls back to `~/.config/kdeglobals`. It only starts on Linux once a look other than `default` applies, connects dbus-next with `getSessionBusAddress()` (never the native `usocket` module), uses 1.5 s timeouts and fails soft to a null accent. The handler stops the watcher when the look goes back to `default`, and when the session bus connection is lost it drops the watcher so the next `look:set`, or one retry 30 s later, starts a new one.
 
 ## Canonical Examples
 

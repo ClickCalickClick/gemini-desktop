@@ -20,7 +20,9 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createRendererLogger } from '../utils';
-import type { DesktopLook, DesktopLookPreference, LookData } from '../../shared/types/look';
+import { getAccentForeground, isSafeAccentColor } from '../utils/accentColor';
+import { isDesktopLook, isDesktopLookPreference } from '../../shared/constants/looks';
+import type { DesktopLookPreference, LookData } from '../../shared/types/look';
 
 const logger = createRendererLogger('[LookContext]');
 
@@ -45,23 +47,6 @@ export const DEFAULT_LOOK_DATA: LookData = {
     accentColor: null,
 };
 
-const KNOWN_LOOKS: readonly DesktopLook[] = [
-    'default',
-    'gnome',
-    'kde',
-    'xfce',
-    'cinnamon',
-    'mate',
-    'budgie',
-    'elementary',
-    'cosmic',
-    'macos',
-    'windows',
-];
-
-/** Accent colors are only applied in these simple forms, so nothing else reaches the stylesheet. */
-const SAFE_COLOR = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+%?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+\s*)?\))$/i;
-
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -76,34 +61,37 @@ export function normalizeLookData(data: unknown): LookData | null {
         return null;
     }
     const candidate = data as Partial<LookData>;
-    if (!KNOWN_LOOKS.includes(candidate.effectiveLook as DesktopLook)) {
+    if (!isDesktopLook(candidate.effectiveLook)) {
         return null;
     }
-    const preference =
-        candidate.preference === 'auto' || KNOWN_LOOKS.includes(candidate.preference as DesktopLook)
-            ? (candidate.preference as DesktopLookPreference)
-            : 'default';
+    const preference: DesktopLookPreference = isDesktopLookPreference(candidate.preference)
+        ? candidate.preference
+        : 'default';
     return {
         preference,
-        effectiveLook: candidate.effectiveLook as DesktopLook,
+        effectiveLook: candidate.effectiveLook,
         detectedDesktop: typeof candidate.detectedDesktop === 'string' ? candidate.detectedDesktop : null,
         accentColor:
-            typeof candidate.accentColor === 'string' && SAFE_COLOR.test(candidate.accentColor.trim())
+            typeof candidate.accentColor === 'string' && isSafeAccentColor(candidate.accentColor)
                 ? candidate.accentColor.trim()
                 : null,
     };
 }
 
 /**
- * Apply a look to the document: `data-look` and the `--desktop-accent` variable.
+ * Apply a look to the document: `data-look`, the `--desktop-accent` variable and
+ * `--desktop-accent-fg`, black or white text for that accent, whichever contrasts more.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- helper exported for tests and non-React entries
 export function applyLookToDom(data: LookData, root: HTMLElement = document.documentElement): void {
     root.setAttribute('data-look', data.effectiveLook);
-    if (data.accentColor) {
+    const foreground = data.accentColor ? getAccentForeground(data.accentColor) : null;
+    if (data.accentColor && foreground) {
         root.style.setProperty('--desktop-accent', data.accentColor);
+        root.style.setProperty('--desktop-accent-fg', foreground);
     } else {
         root.style.removeProperty('--desktop-accent');
+        root.style.removeProperty('--desktop-accent-fg');
     }
 }
 
