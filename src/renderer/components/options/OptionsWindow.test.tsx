@@ -132,6 +132,14 @@ describe('OptionsWindow', () => {
             expect(section.querySelector('.options-section__content')).toBeInTheDocument();
         });
 
+        it('should display the Tray Icon section with its setting', async () => {
+            await renderWithAct(<OptionsWindow />);
+            const section = screen.getByTestId('options-tray-icon');
+            expect(section).toHaveClass('options-section');
+            expect(section.querySelector('h2')).toHaveTextContent('Tray Icon');
+            expect(screen.getByLabelText('Tray icon opens')).toBeInTheDocument();
+        });
+
         it('should display Updates section', async () => {
             await renderWithAct(<OptionsWindow />);
             expect(screen.getByText('Updates')).toBeInTheDocument();

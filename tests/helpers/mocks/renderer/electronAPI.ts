@@ -236,6 +236,10 @@ export function createMockElectronAPI(overrides: MockElectronAPIOverrides = {}):
             accentColor: null,
         }),
         setLook: vi.fn(),
+
+        // Tray API
+        getTrayClickAction: vi.fn().mockResolvedValue('quickChat'),
+        setTrayClickAction: vi.fn(),
         onLookChanged: vi.fn().mockReturnValue(defaultUnsubscribe),
 
         // Hybrid Quick Chat: agent engine

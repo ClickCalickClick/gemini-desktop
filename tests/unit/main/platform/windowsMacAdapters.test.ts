@@ -164,6 +164,12 @@ describe('WindowsAdapter', () => {
         });
     });
 
+    describe('getTrayIconFilename()', () => {
+        it('should return icon.ico on Windows', () => {
+            expect(adapter.getTrayIconFilename()).toBe('icon.ico');
+        });
+    });
+
     describe('shouldDisableUpdates()', () => {
         it('should return true when PORTABLE_EXECUTABLE_DIR is set', () => {
             const env = { PORTABLE_EXECUTABLE_DIR: 'C:\\Portable' } as NodeJS.ProcessEnv;
@@ -491,6 +497,12 @@ describe('MacAdapter', () => {
     describe('getAppIconFilename()', () => {
         it('should return icon.png on macOS', () => {
             expect(adapter.getAppIconFilename()).toBe('icon.png');
+        });
+    });
+
+    describe('getTrayIconFilename()', () => {
+        it('should return icon-mac-trayTemplate.png on macOS', () => {
+            expect(adapter.getTrayIconFilename()).toBe('icon-mac-trayTemplate.png');
         });
     });
 

@@ -18,6 +18,7 @@ import type { ToastPayload } from './toast';
 import type { TextPredictionSettings } from './text-prediction';
 import type { AgentEngineStatus, AgentRunEvent, AgentRunRequest, AgentSettings, FileActionResult } from './agent';
 import type { DesktopLookPreference, LookData } from './look';
+import type { TrayClickAction } from './tray';
 import type { GeminiNavigatePayload, GeminiReadyPayload, TabsState, TabShortcutPayload } from './tabs';
 
 /**
@@ -351,6 +352,22 @@ export interface ElectronAPI {
      * @param enabled - Whether to enable start minimized to tray
      */
     setStartMinimized: (enabled: boolean) => void;
+
+    // =========================================================================
+    // Tray API
+    // =========================================================================
+
+    /**
+     * Get what clicking the tray icon opens (default 'quickChat').
+     * @returns Promise resolving to the saved tray click action
+     */
+    getTrayClickAction: () => Promise<TrayClickAction>;
+
+    /**
+     * Set what clicking the tray icon opens. Invalid values are ignored.
+     * @param action - 'quickChat' or 'mainWindow'
+     */
+    setTrayClickAction: (action: TrayClickAction) => void;
 
     // =========================================================================
     // Text Prediction API

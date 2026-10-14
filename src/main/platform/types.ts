@@ -18,7 +18,7 @@ export type TitleBarStyle = 'hidden' | undefined;
 
 export type AppIconFilename = 'icon.ico' | 'icon.png';
 
-export type TrayIconFilename = 'icon.ico' | 'icon.png' | 'icon-mac-trayTemplate.png';
+export type TrayIconFilename = 'icon.ico' | 'icon.png' | 'icon-tray.png' | 'icon-mac-trayTemplate.png';
 
 /**
  * How global hotkeys should be registered on this platform.

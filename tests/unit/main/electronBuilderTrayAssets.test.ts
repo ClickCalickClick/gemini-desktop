@@ -31,23 +31,24 @@ const matchesAnyPattern = (patterns: string[] | undefined, filename: string): bo
     });
 };
 
-describe('electron-builder tray template assets', () => {
-    it('includes tray template assets via extraFiles filter', () => {
+describe('electron-builder tray icon assets', () => {
+    it('includes the tray icon assets via extraFiles filter', () => {
         const configPath = resolveBuildPath('config', 'electron-builder.config.cjs');
         const config = require(configPath) as ElectronBuilderConfig;
 
         const buildEntry = config.extraFiles?.find((entry) => entry.from === 'build' && entry.to === 'resources');
         expect(buildEntry).toBeDefined();
 
-        const templateAssets = ['icon-mac-trayTemplate.png', 'icon-mac-trayTemplate@2x.png'];
+        // icon-tray.png is the Linux tray icon; the template images are macOS's
+        const templateAssets = ['icon-tray.png', 'icon-mac-trayTemplate.png', 'icon-mac-trayTemplate@2x.png'];
         templateAssets.forEach((asset) => {
             expect(matchesAnyPattern(buildEntry?.filter, asset)).toBe(true);
         });
     });
 
-    it('ensures tray template assets exist in build directory', () => {
+    it('ensures the tray icon assets exist in build directory', () => {
         const buildDir = resolveBuildPath('build');
-        const assets = ['icon-mac-trayTemplate.png', 'icon-mac-trayTemplate@2x.png'];
+        const assets = ['icon-tray.png', 'icon-mac-trayTemplate.png', 'icon-mac-trayTemplate@2x.png'];
 
         assets.forEach((asset) => {
             expect(fs.existsSync(path.join(buildDir, asset))).toBe(true);

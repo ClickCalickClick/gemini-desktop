@@ -72,6 +72,7 @@ logger.log('Crash reporter initialized', {
 
 import WindowManager from './managers/windowManager';
 import IpcManager from './managers/ipcManager';
+import { readTrayClickAction } from './managers/ipc/TrayIpcHandler';
 import MenuManager from './managers/menuManager';
 import HotkeyManager from './managers/hotkeyManager';
 import TrayManager from './managers/trayManager';
@@ -87,6 +88,7 @@ import TerminationSignals from './utils/terminationSignals';
 import { parseLaunchOptions, wantsQuickChat, type SingleInstanceData } from './utils/launchArgs';
 import { ensureQuickChatLauncher } from './utils/quickChatLauncher';
 import type { ApplicationContext, E2EGlobals, ReadyManagers } from './ApplicationContext';
+import type { TrayClickAction } from '../shared/types/tray';
 
 // Path to the production build
 const distIndexPath = getDistHtmlPath('index.html');
@@ -161,7 +163,11 @@ function initializeManagers(): void {
 
     // Create tray and badge managers
     logger.debug('initializeManagers() - creating TrayManager');
-    const trayManager = new TrayManager(windowManager);
+    // IpcManager (created below) owns the user preferences; the tray reads its click action
+    // from them at click time, which is always after initializeManagers() has finished.
+    const trayManager = new TrayManager(windowManager, {
+        getClickAction: (): TrayClickAction => readTrayClickAction(ipcManager.store),
+    });
     logger.debug('initializeManagers() - TrayManager created');
 
     logger.debug('initializeManagers() - creating BadgeManager');

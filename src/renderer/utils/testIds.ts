@@ -118,6 +118,11 @@ export const QUICK_CHAT_SETTINGS_TEST_IDS = {
     QUICK_CHAT_SETTINGS_RECHECK: 'quick-chat-settings-recheck',
 } as const;
 
+export const TRAY_ICON_SETTINGS_TEST_IDS = {
+    TRAY_ICON_SETTINGS: 'tray-icon-settings',
+    TRAY_CLICK_ACTION: 'tray-click-action-select',
+} as const;
+
 export const TAB_TEST_IDS = {
     TAB_BAR: 'tab-bar',
     TAB_NEW_BUTTON: 'tab-new-button',

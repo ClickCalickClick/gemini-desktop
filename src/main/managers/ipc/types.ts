@@ -15,6 +15,7 @@ import type AgentManager from '../agentManager';
 import type { Logger } from '../../types';
 import type { AgentEnginePreference, QuickChatRoutingMode } from '../../../shared/types/agent';
 import type { DesktopLookPreference } from '../../../shared/types/look';
+import type { TrayClickAction } from '../../../shared/types/tray';
 
 /**
  * User preferences structure for settings store.
@@ -55,6 +56,8 @@ export interface UserPreferences extends Record<string, unknown> {
     quickChatRoutingMode: QuickChatRoutingMode;
     agentEngine: AgentEnginePreference;
     agentModel: string;
+    // What clicking the tray icon opens (see src/shared/types/tray.ts)
+    trayClickAction: TrayClickAction;
 }
 
 /**

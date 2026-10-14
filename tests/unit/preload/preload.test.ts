@@ -132,6 +132,19 @@ describe('Preload Script', () => {
         });
     });
 
+    describe('Tray API', () => {
+        it('getTrayClickAction should invoke IPC handler', async () => {
+            (ipcRendererMock.invoke as any).mockResolvedValue('mainWindow');
+            await expect(exposedAPI.getTrayClickAction()).resolves.toBe('mainWindow');
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('tray-click-action:get');
+        });
+
+        it('setTrayClickAction should send IPC message', () => {
+            exposedAPI.setTrayClickAction('quickChat');
+            expect(ipcRendererMock.send).toHaveBeenCalledWith('tray-click-action:set', 'quickChat');
+        });
+    });
+
     describe('Tabs API', () => {
         it('onTabTitleUpdated should register listener and return unsubscribe', () => {
             const callback = vi.fn();

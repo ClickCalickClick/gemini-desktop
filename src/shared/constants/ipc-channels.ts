@@ -131,6 +131,10 @@ export const IPC_CHANNELS = {
     START_MINIMIZED_GET: 'start-minimized:get',
     START_MINIMIZED_SET: 'start-minimized:set',
 
+    // Tray icon
+    TRAY_CLICK_ACTION_GET: 'tray-click-action:get',
+    TRAY_CLICK_ACTION_SET: 'tray-click-action:set',
+
     // Text Prediction (local LLM inference)
     TEXT_PREDICTION_GET_ENABLED: 'text-prediction:get-enabled',
     TEXT_PREDICTION_SET_ENABLED: 'text-prediction:set-enabled',

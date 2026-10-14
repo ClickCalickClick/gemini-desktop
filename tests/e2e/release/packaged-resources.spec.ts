@@ -99,6 +99,7 @@ describe('Release Build: Packaged Resources', () => {
 
                 const hasIco = fs.existsSync(path.join(resourcesPath, 'icon.ico'));
                 const hasPng = fs.existsSync(path.join(resourcesPath, 'icon.png'));
+                const hasTrayPng = fs.existsSync(path.join(resourcesPath, 'icon-tray.png'));
 
                 // List all files in resources for debugging
                 const files = fs.readdirSync(resourcesPath);
@@ -107,6 +108,7 @@ describe('Release Build: Packaged Resources', () => {
                     success: true,
                     hasIco,
                     hasPng,
+                    hasTrayPng,
                     files,
                     platform: process.platform,
                 };
@@ -129,6 +131,10 @@ describe('Release Build: Packaged Resources', () => {
             expect(iconInfo.hasIco).toBe(true);
         } else {
             expect(iconInfo.hasPng).toBe(true);
+        }
+        if (iconInfo.platform === 'linux') {
+            // The Linux tray icon (TrayManager falls back to icon.png without it)
+            expect(iconInfo.hasTrayPng).toBe(true);
         }
     });
 
