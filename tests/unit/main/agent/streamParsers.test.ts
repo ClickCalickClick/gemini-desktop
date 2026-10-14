@@ -71,6 +71,9 @@ describe('parseAntigravityEvent', () => {
             { kind: 'init', conversationId: 'c1' },
         ]);
         expect(parseAntigravityEvent({ event: 'init' })).toEqual([{ kind: 'init' }]);
+        expect(
+            parseAntigravityEvent({ event: 'init', conversation_id: 'c1', init: { permission_mode: 'always-proceed' } })
+        ).toEqual([{ kind: 'init', conversationId: 'c1', permissionMode: 'always-proceed' }]);
     });
 
     it('turns agent text deltas into text events and ignores user input and subagents', () => {

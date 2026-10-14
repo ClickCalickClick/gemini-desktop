@@ -2,8 +2,9 @@
  * A fake agent CLI for tests: a small Node script installed as `agy` or `gemini` in a
  * temporary bin folder. The prompt picks its behaviour with `MODE:<name>`.
  *
- * Modes: text (default), partial, plan, badplan, auth, fail, hang, noresult, apikey.
- * It writes its arguments and working directory to `$FAKE_ARGS_FILE` when set.
+ * Modes: text (default), partial, plan, badplan, auth, fail, hang, turbo (reports a permission
+ * mode that runs tools without asking), noresult, apikey. It writes its arguments, working
+ * directory, the workspace's entries and its input copies to `$FAKE_ARGS_FILE` when set.
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -20,7 +21,19 @@ if (args[0] === '--version') {
     process.exit(0);
 }
 if (process.env.FAKE_ARGS_FILE) {
-    fs.writeFileSync(process.env.FAKE_ARGS_FILE, JSON.stringify({ args, cwd: process.cwd() }));
+    const listInputs = () => {
+        try {
+            return fs.readdirSync(path.join(process.cwd(), 'inputs')).flatMap((run) =>
+                fs.readdirSync(path.join(process.cwd(), 'inputs', run)).map((name) => run + '/' + name)
+            );
+        } catch {
+            return [];
+        }
+    };
+    fs.writeFileSync(
+        process.env.FAKE_ARGS_FILE,
+        JSON.stringify({ args, cwd: process.cwd(), files: fs.readdirSync(process.cwd()).sort(), inputs: listInputs() })
+    );
 }
 const prompt = args[args.indexOf('-p') + 1] || '';
 const mode = (prompt.match(/MODE:(\w+)/) || [])[1] || 'text';
@@ -47,12 +60,17 @@ if (mode === 'fail') {
     process.stderr.write('line one\nsomething broke\n');
     process.exit(3);
 }
-if (mode === 'hang') {
-    out(isGemini ? { type: 'init', session_id: 's-hang' } : { event: 'init', conversation_id: 'c-hang', init: {} });
+if (mode === 'hang' || mode === 'turbo') {
+    const init = mode === 'turbo' ? { permission_mode: 'always-proceed' } : { permission_mode: 'request-review' };
+    out(isGemini ? { type: 'init', session_id: 's-hang' } : { event: 'init', conversation_id: 'c-hang', init });
     process.on('SIGINT', () => {
         if (!process.env.FAKE_IGNORE_SIGINT) process.exit(130);
     });
-    setInterval(() => {}, 1000);
+    setInterval(() => {
+        if (process.env.FAKE_CHATTY || mode === 'turbo') {
+            out({ event: 'step_update', step_update: { step_type: 'agent_response', text_delta: 'tick ' } });
+        }
+    }, 20);
     return;
 }
 

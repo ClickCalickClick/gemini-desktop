@@ -237,10 +237,33 @@ export async function gatherContext(prompt: string, options: ContextOptions): Pr
 
     let text = sections.join('\n\n');
     if (text.length > maxChars) {
-        text = `${text.slice(0, maxChars)}\n… (cut short)`;
+        text = cutShort(text, maxChars);
     }
     return { text, locations: described, copiedFiles };
 }
+
+/** Cut text to `length` UTF-16 units without splitting a surrogate pair, and say so. */
+function cutShort(text: string, length: number): string {
+    if (text.length <= length) {
+        return text;
+    }
+    if (length <= 0) {
+        return '';
+    }
+    let end = length;
+    const last = text.charCodeAt(end - 1);
+    if (last >= 0xd800 && last <= 0xdbff) {
+        end--;
+    }
+    return `${text.slice(0, end)}\n… (cut short)`;
+}
+
+/**
+ * Largest prompt argument in UTF-8 bytes. Linux refuses a single argument over 128 KiB
+ * (MAX_ARG_STRLEN) with E2BIG, and file names in other scripts take several bytes per
+ * character.
+ */
+export const MAX_PROMPT_BYTES = 100_000;
 
 export interface BuildPromptOptions {
     prompt: string;
@@ -248,13 +271,38 @@ export interface BuildPromptOptions {
     engine: AgentEngineId;
     context: string;
     homeDir: string;
+    /** Defaults to {@link MAX_PROMPT_BYTES}. */
+    maxBytes?: number;
 }
 
 /**
- * Wrap the user's request with the app's instructions and context. A plain question with
+ * Wrap the user's request with the app's instructions and context, keeping the result
+ * under `maxBytes` UTF-8 bytes by cutting the context short first. A plain question with
  * no context is passed as it is.
  */
-export function buildAgentPrompt({ prompt, category, engine, context, homeDir }: BuildPromptOptions): string {
+export function buildAgentPrompt(options: BuildPromptOptions): string {
+    const maxBytes = options.maxBytes ?? MAX_PROMPT_BYTES;
+    const fits = (text: string): boolean => Buffer.byteLength(text, 'utf8') <= maxBytes;
+    const full = wrapPrompt(options);
+    if (fits(full)) {
+        return full;
+    }
+    // Find the longest context that fits (binary search on its length).
+    let low = 0;
+    let high = options.context.length;
+    while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (fits(wrapPrompt({ ...options, context: cutShort(options.context, middle) }))) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    // The prompt itself is at most 20,000 characters, so it fits on its own.
+    return wrapPrompt({ ...options, context: cutShort(options.context, low) });
+}
+
+function wrapPrompt({ prompt, category, engine, context, homeDir }: BuildPromptOptions): string {
     const contextBlock = context
         ? `The app gathered this read-only information about the user's files for you:\n\n${context}\n\n`
         : '';
