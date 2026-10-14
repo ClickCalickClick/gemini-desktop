@@ -42,6 +42,7 @@ import type LlmManager from './llmManager';
 import type NotificationManager from './notificationManager';
 import type ExportManager from './exportManager';
 import type AgentManager from './agentManager';
+import ScreenshotManager from './screenshotManager';
 import type { ModelStatus } from './llmManager';
 import type { ThemePreference, Logger } from '../types';
 import { DEFAULT_ACCELERATORS } from '../../shared/types/hotkeys';
@@ -183,6 +184,7 @@ export default class IpcManager {
             notificationManager: notificationManager || null,
             exportManager: exportManager || null,
             agentManager: agentManager || null,
+            screenshotManager: new ScreenshotManager({ windowManager }),
         };
         this.handlerDeps = handlerDeps;
 

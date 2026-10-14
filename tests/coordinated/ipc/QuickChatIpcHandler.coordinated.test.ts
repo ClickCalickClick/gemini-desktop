@@ -33,6 +33,9 @@ vi.mock('../../../src/main/utils/injectionScript', () => ({
         withAutoSubmit() {
             return this;
         }
+        withSubmitWait() {
+            return this;
+        }
         build() {
             return 'mocked-injection-script';
         }

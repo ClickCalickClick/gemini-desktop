@@ -46,7 +46,7 @@ export interface DBusShortcutConfig {
 /**
  * D-Bus session bus connection interface.
  */
-interface DBusConnection {
+export interface DBusConnection {
     /** Unique bus name assigned by the D-Bus daemon (e.g., ':1.123') */
     name?: string;
     /** Send a method call built with dbus-next's Message class and wait for its reply */
@@ -116,8 +116,8 @@ export interface DBusRegistrationOptions {
 /** Whether to enable verbose D-Bus debug logging (heartbeat, message body dumps) */
 const DEBUG_DBUS = process.env.DEBUG_DBUS === '1' || process.env.DEBUG_DBUS === 'true';
 
-const PORTAL_BUS_NAME = 'org.freedesktop.portal.Desktop';
-const PORTAL_OBJECT_PATH = '/org/freedesktop/portal/desktop';
+export const PORTAL_BUS_NAME = 'org.freedesktop.portal.Desktop';
+export const PORTAL_OBJECT_PATH = '/org/freedesktop/portal/desktop';
 const GLOBAL_SHORTCUTS_INTERFACE = 'org.freedesktop.portal.GlobalShortcuts';
 const HOST_REGISTRY_INTERFACE = 'org.freedesktop.host.portal.Registry';
 
@@ -469,7 +469,7 @@ export function getSessionBusAddress(env: NodeJS.ProcessEnv = process.env): stri
 /**
  * Connect to the session bus without loading dbus-next's native `usocket` module.
  */
-function connectSessionBus(dbusNext: typeof import('dbus-next')): DBusConnection {
+export function connectSessionBus(dbusNext: typeof import('dbus-next')): DBusConnection {
     const busAddress = getSessionBusAddress();
     if (!busAddress) {
         throw new Error('No D-Bus session bus address to connect to');
@@ -484,7 +484,7 @@ function connectSessionBus(dbusNext: typeof import('dbus-next')): DBusConnection
  * file of that name is installed (an AppImage that was never integrated) and before version 1.19;
  * then it keeps its own guess at the app id and the registration goes on.
  */
-async function registerAppId(bus: DBusConnection, dbusNext: typeof import('dbus-next')): Promise<void> {
+export async function registerAppId(bus: DBusConnection, dbusNext: typeof import('dbus-next')): Promise<void> {
     try {
         await bus.call?.(
             new dbusNext.Message({
@@ -522,7 +522,7 @@ async function registerAppId(bus: DBusConnection, dbusNext: typeof import('dbus-
  * @param timeoutMs - Maximum time to wait for the response
  * @returns The response code and results dict
  */
-function waitForPortalResponse(
+export function waitForPortalResponse(
     bus: DBusConnection,
     requestPath: string,
     timeoutMs: number
@@ -532,6 +532,7 @@ function waitForPortalResponse(
             bus.removeListener?.('message', handler);
             reject(new Error(`Portal Response timeout (${timeoutMs}ms) on ${requestPath}`));
         }, timeoutMs);
+        timeout.unref?.();
 
         function handler(msg: DBusMessage) {
             if (

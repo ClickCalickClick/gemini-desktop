@@ -16,6 +16,7 @@ import type {
 import type { UpdateInfo, DownloadProgress } from './updates';
 import type { ToastPayload } from './toast';
 import type { TextPredictionSettings } from './text-prediction';
+import type { QuickChatSubmitOptions, ScreenshotCaptureResult, ScreenshotMode } from './screenshot';
 import type {
     AgentEngineStatus,
     AgentModelList,
@@ -103,8 +104,14 @@ export interface ElectronAPI {
     // Quick Chat API
     // =========================================================================
 
-    /** Submit quick chat text to main window */
-    submitQuickChat: (text: string) => void;
+    /** Submit quick chat text to main window, with an attached screenshot's id if any */
+    submitQuickChat: (text: string, options?: QuickChatSubmitOptions) => void;
+
+    /** Hide Quick Chat, take a screenshot (whole screen, or an area the user picks) and show Quick Chat again */
+    captureQuickChatScreenshot: (mode: ScreenshotMode) => Promise<ScreenshotCaptureResult>;
+
+    /** Forget a screenshot the user removed from Quick Chat */
+    discardQuickChatScreenshot: (id: string) => void;
 
     /** Hide the quick chat window */
     hideQuickChat: () => void;

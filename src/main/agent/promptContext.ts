@@ -271,6 +271,8 @@ export interface BuildPromptOptions {
     engine: AgentEngineId;
     context: string;
     homeDir: string;
+    /** Images the user attached (a Quick Chat screenshot), as paths relative to the workspace. */
+    attachments?: string[];
     /** Defaults to {@link MAX_PROMPT_BYTES}. */
     maxBytes?: number;
 }
@@ -302,10 +304,23 @@ export function buildAgentPrompt(options: BuildPromptOptions): string {
     return wrapPrompt({ ...options, context: cutShort(options.context, low) });
 }
 
-function wrapPrompt({ prompt, category, engine, context, homeDir }: BuildPromptOptions): string {
+/** Tell the agent where the attached images are. Gemini CLI reads `@path` into the prompt itself. */
+function describeAttachments(engine: AgentEngineId, attachments: string[] | undefined): string {
+    if (!attachments || attachments.length === 0) {
+        return '';
+    }
+    const list = attachments.map((file) => (engine === 'gemini-cli' ? `@${file}` : file)).join(', ');
+    return (
+        `The user attached a screenshot of their screen: ${list} (in your workspace). ` +
+        'Look at the image before you answer; the request is probably about it.\n\n'
+    );
+}
+
+function wrapPrompt({ prompt, category, engine, context, homeDir, attachments }: BuildPromptOptions): string {
     const contextBlock = context
         ? `The app gathered this read-only information about the user's files for you:\n\n${context}\n\n`
         : '';
+    const attachmentBlock = describeAttachments(engine, attachments);
 
     if (category === 'files') {
         const format =
@@ -321,8 +336,12 @@ function wrapPrompt({ prompt, category, engine, context, homeDir }: BuildPromptO
             '- If the request is unclear or nothing should change, return no actions and explain why in the summary.',
             `- ${format}`,
             '',
-            `${contextBlock}User request:\n${prompt}`,
+            `${attachmentBlock}${contextBlock}User request:\n${prompt}`,
         ].join('\n');
+    }
+
+    if (!context && attachmentBlock) {
+        return `${attachmentBlock}User request:\n${prompt}`;
     }
 
     if (!context) {
@@ -333,6 +352,6 @@ function wrapPrompt({ prompt, category, engine, context, homeDir }: BuildPromptO
     return (
         "Note from the Gemini Desktop app: you run in a scratch workspace, cannot read the user's files directly, " +
         'and must not change files outside the workspace.\n\n' +
-        `${contextBlock}User request:\n${prompt}`
+        `${attachmentBlock}${contextBlock}User request:\n${prompt}`
     );
 }

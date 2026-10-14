@@ -224,5 +224,72 @@ describe('promptContext', () => {
             expect(gemini).toContain('```json');
             expect(gemini).not.toContain('read-only information');
         });
+
+        describe('attachments', () => {
+            const base = { prompt: 'what is this?', context: '', homeDir: '/h' } as const;
+
+            it('names the plain path for Antigravity', () => {
+                const prompt = buildAgentPrompt({
+                    ...base,
+                    category: 'general',
+                    engine: 'antigravity',
+                    attachments: ['inputs/r1/screenshot.png'],
+                });
+                expect(prompt).toContain('screenshot of their screen: inputs/r1/screenshot.png (in your workspace)');
+                expect(prompt).not.toContain('@inputs/');
+            });
+
+            it('uses @path for Gemini CLI', () => {
+                const prompt = buildAgentPrompt({
+                    ...base,
+                    category: 'general',
+                    engine: 'gemini-cli',
+                    attachments: ['inputs/r1/screenshot.png'],
+                });
+                expect(prompt).toContain('@inputs/r1/screenshot.png');
+            });
+
+            it('wraps a question without context in a note and the user request', () => {
+                const prompt = buildAgentPrompt({
+                    ...base,
+                    category: 'general',
+                    engine: 'antigravity',
+                    attachments: ['inputs/r1/screenshot.png'],
+                });
+                expect(prompt.startsWith('The user attached a screenshot')).toBe(true);
+                expect(prompt.endsWith('User request:\nwhat is this?')).toBe(true);
+                expect(prompt).not.toContain('scratch workspace');
+            });
+
+            it('adds the note before the context for questions with context', () => {
+                const prompt = buildAgentPrompt({
+                    ...base,
+                    category: 'documents',
+                    engine: 'antigravity',
+                    context: 'File /h/a.txt',
+                    attachments: ['inputs/r1/screenshot.png'],
+                });
+                expect(prompt).toContain('scratch workspace');
+                expect(prompt.indexOf('The user attached a screenshot')).toBeLessThan(prompt.indexOf('File /h/a.txt'));
+            });
+
+            it('adds the note to file tasks', () => {
+                const prompt = buildAgentPrompt({
+                    ...base,
+                    category: 'files',
+                    engine: 'gemini-cli',
+                    attachments: ['inputs/r1/screenshot.png'],
+                });
+                expect(prompt).toContain('```json');
+                expect(prompt).toContain('The user attached a screenshot of their screen: @inputs/r1/screenshot.png');
+                expect(prompt.endsWith('User request:\nwhat is this?')).toBe(true);
+            });
+
+            it('leaves the prompt alone for an empty list', () => {
+                expect(buildAgentPrompt({ ...base, category: 'general', engine: 'antigravity', attachments: [] })).toBe(
+                    'what is this?'
+                );
+            });
+        });
     });
 });

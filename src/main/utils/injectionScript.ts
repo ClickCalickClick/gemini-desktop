@@ -133,6 +133,7 @@ export class InjectionScriptBuilder {
     private text: string = '';
     private config: InjectionConfig = DEFAULT_INJECTION_CONFIG;
     private autoSubmit: boolean = true;
+    private submitWaitMs: number = 0;
 
     /**
      * Set the text to inject into the editor.
@@ -176,6 +177,18 @@ export class InjectionScriptBuilder {
      */
     withAutoSubmit(autoSubmit: boolean): this {
         this.autoSubmit = autoSubmit;
+        return this;
+    }
+
+    /**
+     * Wait up to this long for a disabled submit button to become enabled (while Gemini uploads
+     * an attached image) instead of giving up at once.
+     *
+     * @param waitMs - Longest wait in milliseconds; 0 checks once
+     * @returns this (for chaining)
+     */
+    withSubmitWait(waitMs: number): this {
+        this.submitWaitMs = Math.max(0, Math.floor(waitMs));
         return this;
     }
 
@@ -225,6 +238,7 @@ export class InjectionScriptBuilder {
         const submitDelay = this.config.submitDelayMs;
         const logLevelPriority = getLogLevelPriority(this.config.logLevel);
         const autoSubmit = this.autoSubmit;
+        const submitWaitMs = this.submitWaitMs;
 
         return `
 (function() {
@@ -542,10 +556,20 @@ export class InjectionScriptBuilder {
         if (shouldAutoSubmit) {
             logger.debug('Scheduling submit button click in ${submitDelay}ms');
             
-            setTimeout(() => {
+            const submitWaitMs = ${submitWaitMs};
+            const submitStartedAt = Date.now();
+            const trySubmit = () => {
                 logger.debug('Looking for submit button');
                 
                 const submitButton = safeQuerySelector(buttonSelectors);
+                const isDisabled = submitButton &&
+                    (submitButton.disabled || submitButton.getAttribute('aria-disabled') === 'true');
+                
+                if ((!submitButton || isDisabled) && Date.now() - submitStartedAt < submitWaitMs) {
+                    // An attached image is still uploading
+                    setTimeout(trySubmit, 250);
+                    return;
+                }
                 
                 if (!submitButton) {
                     logger.error('Submit button not found. Tried selectors:', buttonSelectors);
@@ -562,7 +586,8 @@ export class InjectionScriptBuilder {
                 } else {
                     logger.error('Failed to click submit button');
                 }
-            }, ${submitDelay});
+            };
+            setTimeout(trySubmit, ${submitDelay});
             
             result.details.submitScheduled = true;
         } else {

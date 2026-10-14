@@ -80,12 +80,13 @@ describe('AgentIpcHandler', () => {
         return fn(...args);
     };
 
-    const createHandler = (withManager = true) => {
+    const createHandler = (withManager = true, screenshotManager: unknown = undefined) => {
         handler = new AgentIpcHandler({
             store,
             logger,
             windowManager,
             agentManager: withManager ? agentManager : null,
+            screenshotManager,
         } as unknown as IpcHandlerDependencies);
         handler.register();
     };
@@ -275,6 +276,58 @@ describe('AgentIpcHandler', () => {
             });
             cancel?.({}, 'run-1');
             expect(logger.error).toHaveBeenCalled();
+        });
+
+        describe('with a screenshot', () => {
+            const screenshotId = '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b';
+            const png = Buffer.from('png');
+            let screenshotManager: { take: ReturnType<typeof vi.fn>; discard: ReturnType<typeof vi.fn> };
+
+            beforeEach(() => {
+                screenshotManager = { take: vi.fn(() => png), discard: vi.fn() };
+                mockIpcMain._reset();
+                createHandler(true, screenshotManager);
+            });
+
+            it('takes the screenshot by id and passes it to the run', async () => {
+                const request = { prompt: 'what is this?', category: 'general', screenshotId };
+                await expect(invoke(IPC_CHANNELS.AGENT_RUN, { sender }, request)).resolves.toEqual({ runId: 'run-1' });
+                expect(screenshotManager.take).toHaveBeenCalledWith(screenshotId);
+                const options = agentManager.run.mock.calls[0]?.[1] as { screenshot?: Buffer };
+                expect(options.screenshot).toBe(png);
+            });
+
+            it('refuses the run when the screenshot is gone', async () => {
+                screenshotManager.take.mockReturnValueOnce(null);
+                await expect(
+                    invoke(IPC_CHANNELS.AGENT_RUN, { sender }, { prompt: 'hi', category: 'general', screenshotId })
+                ).rejects.toThrow('The screenshot is no longer available. Take it again.');
+                expect(agentManager.run).not.toHaveBeenCalled();
+            });
+
+            it('refuses the run when there is no screenshot manager', async () => {
+                mockIpcMain._reset();
+                createHandler(true, null);
+                await expect(
+                    invoke(IPC_CHANNELS.AGENT_RUN, { sender }, { prompt: 'hi', category: 'general', screenshotId })
+                ).rejects.toThrow('The screenshot is no longer available. Take it again.');
+                expect(agentManager.run).not.toHaveBeenCalled();
+            });
+
+            it('rejects a malformed screenshot id without taking anything', async () => {
+                await expect(
+                    invoke(IPC_CHANNELS.AGENT_RUN, { sender }, { prompt: 'hi', category: 'general', screenshotId: 'x' })
+                ).rejects.toThrow('Invalid screenshot id.');
+                expect(screenshotManager.take).not.toHaveBeenCalled();
+                expect(agentManager.run).not.toHaveBeenCalled();
+            });
+
+            it('passes no screenshot key without a screenshot id', async () => {
+                await invoke(IPC_CHANNELS.AGENT_RUN, { sender }, { prompt: 'hi', category: 'general' });
+                expect(screenshotManager.take).not.toHaveBeenCalled();
+                const options = agentManager.run.mock.calls[0]?.[1] as Record<string, unknown>;
+                expect(options).not.toHaveProperty('screenshot');
+            });
         });
 
         it('refuses to run without a manager', async () => {

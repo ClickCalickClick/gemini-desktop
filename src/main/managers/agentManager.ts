@@ -78,11 +78,14 @@ import type {
     FileActionPlan,
     FileActionResult,
 } from '../../shared/types/agent';
+import { SCREENSHOT_ID_PATTERN } from '../../shared/types/screenshot';
 import type { Logger } from '../types';
 
 export const AGENT_TASK_CATEGORIES: readonly AgentTaskCategory[] = ['files', 'system', 'documents', 'code', 'general'];
 export const MAX_PROMPT_LENGTH = 20_000;
 const CONVERSATION_ID_PATTERN = /^[A-Za-z0-9._:-]{1,200}$/;
+/** The attached screenshot's file name inside the run's inputs folder. */
+export const SCREENSHOT_FILE_NAME = 'screenshot.png';
 
 /** The CLI's own limit per run (`--print-timeout`). */
 export const CLI_PRINT_TIMEOUT = '5m';
@@ -121,6 +124,8 @@ const SAFE_PERMISSION_MODES = ['request-review', 'strict'];
 export interface AgentRunOptions {
     enginePreference: AgentEnginePreference;
     model: string;
+    /** A PNG screenshot the user attached in Quick Chat; the run gets a copy in its workspace. */
+    screenshot?: Buffer;
     /** Receives the run's events. */
     emit: (event: AgentRunEvent) => void;
 }
@@ -225,7 +230,7 @@ export function validateRunRequest(request: unknown): AgentRunRequest {
         throw new Error('Invalid agent request.');
     }
     const candidate = request as Record<string, unknown>;
-    const { prompt, category, conversationId } = candidate;
+    const { prompt, category, conversationId, screenshotId } = candidate;
     if (typeof prompt !== 'string' || prompt.trim().length === 0) {
         throw new Error('The prompt is empty.');
     }
@@ -235,13 +240,20 @@ export function validateRunRequest(request: unknown): AgentRunRequest {
     if (typeof category !== 'string' || !AGENT_TASK_CATEGORIES.includes(category as AgentTaskCategory)) {
         throw new Error('Invalid agent task category.');
     }
+    const valid: AgentRunRequest = { prompt, category: category as AgentTaskCategory };
     if (conversationId !== undefined && conversationId !== null && conversationId !== '') {
         if (typeof conversationId !== 'string' || !CONVERSATION_ID_PATTERN.test(conversationId)) {
             throw new Error('Invalid conversation id.');
         }
-        return { prompt, category: category as AgentTaskCategory, conversationId };
+        valid.conversationId = conversationId;
     }
-    return { prompt, category: category as AgentTaskCategory };
+    if (screenshotId !== undefined && screenshotId !== null && screenshotId !== '') {
+        if (typeof screenshotId !== 'string' || !SCREENSHOT_ID_PATTERN.test(screenshotId)) {
+            throw new Error('Invalid screenshot id.');
+        }
+        valid.screenshotId = screenshotId;
+    }
+    return valid;
 }
 
 /** What a run's `done` event reports. */
@@ -518,12 +530,24 @@ export default class AgentManager {
             return;
         }
 
+        const attachments: string[] = [];
+        if (options.screenshot) {
+            const inputsDir = path.join(workspaceDir, 'inputs', run.runId);
+            await fs.promises.mkdir(inputsDir, { recursive: true });
+            await fs.promises.writeFile(path.join(inputsDir, SCREENSHOT_FILE_NAME), options.screenshot);
+            attachments.push(`${inputsRelativeDir}/${SCREENSHOT_FILE_NAME}`);
+            if (run.finished) {
+                return;
+            }
+        }
+
         const prompt = buildAgentPrompt({
             prompt: request.prompt,
             category: request.category,
             engine: status.engine,
             context: context.text,
             homeDir,
+            attachments,
         });
         const args = this.buildArgs(status.engine, prompt, request, options.model);
 
@@ -551,6 +575,7 @@ export default class AgentManager {
             promptLength: request.prompt.length,
             contextLocations: context.locations,
             copiedFiles: context.copiedFiles,
+            screenshot: attachments.length > 0,
             followUp: Boolean(request.conversationId),
             resume: run.resume ?? null,
             temporaryRules: run.temporaryRules.length,

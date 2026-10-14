@@ -7,6 +7,11 @@
  * switch it. Agent answers stream into a panel under the input, and the window
  * grows to fit it.
  *
+ * The camera button attaches a screenshot to the next prompt (H10): Quick Chat
+ * hides, the main process takes it, and the Gemini tab or the agent gets the image
+ * with the prompt. Shift+click (or Ctrl+Shift+S / Cmd+Shift+S for the whole
+ * screen) picks an area first where the desktop offers it.
+ *
  * Keys: Enter sends to the shown route, Ctrl+Enter (Cmd+Enter on macOS) to the
  * other one, Tab accepts a text prediction, Escape dismisses a prediction, stops
  * a running agent, dismisses the approval card for blocked commands, or hides Quick Chat.
@@ -18,7 +23,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } 
 
 import { AgentPanel } from './AgentPanel';
 import { agentRunReducer, buildContinueInGeminiPrompt, INITIAL_AGENT_RUN_STATE, isRunActive } from './agentRunState';
-import { SearchIcon, SendIcon } from './Icons';
+import { CameraIcon, SearchIcon, SendIcon } from './Icons';
 import { RouteChip } from './RouteChip';
 import { createRendererLogger } from '../../utils';
 import { QUICK_CHAT_TEST_IDS } from '../../utils/testIds';
@@ -32,6 +37,7 @@ import type {
     QuickChatRoutingMode,
     RouteDecision,
 } from '../../../shared/types/agent';
+import type { ScreenshotMode, ScreenshotPreview } from '../../../shared/types/screenshot';
 import './QuickChat.css';
 
 /** Logger for Quick Chat component. Never pass prompt text or agent output to it. */
@@ -51,6 +57,12 @@ const RESIZE_DEBOUNCE_MS = 30;
 
 /** How long Stop waits for the CLI's done event before the panel treats the run as stopped. */
 export const STOP_TIMEOUT_MS = 5000;
+
+/** How long after a screenshot Quick Chat's own hide and show events are still ignored. */
+export const CAPTURE_SETTLE_MS = 1000;
+
+/** How long a screenshot error stays under the input. */
+export const SCREENSHOT_ERROR_MS = 8000;
 
 function errorMessage(error: unknown): string {
     return error instanceof Error && error.message ? error.message : 'Could not start the agent.';
@@ -86,6 +98,16 @@ function QuickChatApp(): React.ReactElement {
     const inputValueRef = useRef('');
     const resetPanelRef = useRef<() => void>(() => {});
 
+    // Screenshot attached to the next prompt (H10)
+    const [screenshot, setScreenshot] = useState<ScreenshotPreview | null>(null);
+    const [capturing, setCapturing] = useState(false);
+    const [screenshotError, setScreenshotError] = useState<string | null>(null);
+    const screenshotRef = useRef<ScreenshotPreview | null>(null);
+    /** True while a screenshot is taken and shortly after: Quick Chat's hide and show are its own. */
+    const capturingRef = useRef(false);
+    const captureInFlightRef = useRef(false);
+    const captureSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     // Ref for debounce timeout
     const predictionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -94,12 +116,14 @@ function QuickChatApp(): React.ReactElement {
     const isMac = window.electronAPI?.platform === 'darwin';
     const runActive = isRunActive(run);
     const panelVisible = run.phase !== 'idle';
+    const expanded = panelVisible || Boolean(screenshotError);
 
     useEffect(() => {
         runActiveRef.current = runActive;
         runStateRef.current = run;
         inputValueRef.current = inputValue;
-    }, [runActive, run, inputValue]);
+        screenshotRef.current = screenshot;
+    }, [runActive, run, inputValue, screenshot]);
 
     // Sync text prediction enabled state and model readiness from settings
     useEffect(() => {
@@ -193,11 +217,17 @@ function QuickChatApp(): React.ReactElement {
         });
     }, []);
 
-    // Grow the window to fit the panel while it is showing
+    // Grow the window to fit the panel (or a screenshot error) while it is showing
+    const wasExpandedRef = useRef(false);
     useEffect(() => {
-        if (!panelVisible) {
+        if (!expanded) {
+            if (wasExpandedRef.current) {
+                wasExpandedRef.current = false;
+                window.electronAPI?.resizeQuickChat?.(QUICK_CHAT_COMPACT_HEIGHT);
+            }
             return;
         }
+        wasExpandedRef.current = true;
         const element = containerRef.current;
         if (!element) {
             return;
@@ -231,7 +261,16 @@ function QuickChatApp(): React.ReactElement {
                 clearTimeout(timer);
             }
         };
-    }, [panelVisible]);
+    }, [expanded]);
+
+    // A screenshot error goes away after a while
+    useEffect(() => {
+        if (!screenshotError) {
+            return;
+        }
+        const timer = setTimeout(() => setScreenshotError(null), SCREENSHOT_ERROR_MS);
+        return () => clearTimeout(timer);
+    }, [screenshotError]);
 
     // If the CLI never confirms a stop, treat the run as stopped after a few seconds
     useEffect(() => {
@@ -249,6 +288,17 @@ function QuickChatApp(): React.ReactElement {
         let wasHidden = false;
         let doneWhenHidden = false;
         const markHidden = () => {
+            // Quick Chat hides itself while a screenshot is taken; that is not the user leaving.
+            if (capturingRef.current) {
+                return;
+            }
+            // Never keep a screenshot around for a later, unrelated prompt.
+            const attached = screenshotRef.current;
+            if (attached) {
+                screenshotRef.current = null;
+                window.electronAPI?.discardQuickChatScreenshot?.(attached.id);
+                setScreenshot(null);
+            }
             if (!wasHidden) {
                 doneWhenHidden = runStateRef.current.phase === 'done';
             }
@@ -354,15 +404,77 @@ function QuickChatApp(): React.ReactElement {
         setRouteOverride(null);
     }, []);
 
+    /** The attached screenshot's id for the prompt being sent; the screenshot leaves Quick Chat. */
+    const takeAttachedScreenshot = useCallback((): string | undefined => {
+        const attached = screenshotRef.current;
+        screenshotRef.current = null;
+        setScreenshot(null);
+        setScreenshotError(null);
+        return attached?.id;
+    }, []);
+
+    const removeScreenshot = useCallback(() => {
+        const id = takeAttachedScreenshot();
+        if (id) {
+            window.electronAPI?.discardQuickChatScreenshot?.(id);
+        }
+        inputRef.current?.focus();
+    }, [takeAttachedScreenshot]);
+
+    const takeScreenshot = useCallback(async (mode: ScreenshotMode) => {
+        const api = window.electronAPI;
+        if (captureInFlightRef.current || typeof api?.captureQuickChatScreenshot !== 'function') {
+            return;
+        }
+        captureInFlightRef.current = true;
+        capturingRef.current = true;
+        if (captureSettleTimerRef.current) {
+            clearTimeout(captureSettleTimerRef.current);
+            captureSettleTimerRef.current = null;
+        }
+        setCapturing(true);
+        setScreenshotError(null);
+        try {
+            const result = await api.captureQuickChatScreenshot(mode);
+            if (result.status === 'captured') {
+                // The main process keeps only the latest screenshot.
+                screenshotRef.current = result.preview;
+                setScreenshot(result.preview);
+                // Ghost text is not drawn beside the thumbnail, so a hidden prediction must not take Tab or Escape.
+                setPrediction(null);
+            } else if (result.status === 'error') {
+                setScreenshotError(result.error);
+            }
+        } catch (error) {
+            logger.error('Failed to take a screenshot:', error);
+            setScreenshotError('The screenshot could not be taken.');
+        } finally {
+            captureInFlightRef.current = false;
+            setCapturing(false);
+            inputRef.current?.focus();
+            // Showing Quick Chat again can hide and show the window once more (GNOME Wayland, L21),
+            // and those events may arrive after this answer.
+            captureSettleTimerRef.current = setTimeout(() => {
+                captureSettleTimerRef.current = null;
+                capturingRef.current = false;
+            }, CAPTURE_SETTLE_MS);
+        }
+    }, []);
+
     const sendToWeb = useCallback(
         (prompt: string) => {
-            window.electronAPI?.submitQuickChat(prompt);
+            const screenshotId = takeAttachedScreenshot();
+            if (screenshotId) {
+                window.electronAPI?.submitQuickChat(prompt, { screenshotId });
+            } else {
+                window.electronAPI?.submitQuickChat(prompt);
+            }
             clearInput();
             if (panelVisible) {
                 resetPanel();
             }
         },
-        [clearInput, panelVisible, resetPanel]
+        [clearInput, panelVisible, resetPanel, takeAttachedScreenshot]
     );
 
     /** Follow a run whose id just arrived: replay the events buffered while it started. */
@@ -396,8 +508,12 @@ function QuickChatApp(): React.ReactElement {
             }
             const category = target.category ?? 'general';
             clearInput();
+            const screenshotId = takeAttachedScreenshot();
 
             if (agentStatus && !agentStatus.available) {
+                if (screenshotId) {
+                    api.discardQuickChatScreenshot?.(screenshotId);
+                }
                 dispatch({
                     type: 'setupMissing',
                     prompt: target.prompt,
@@ -420,6 +536,7 @@ function QuickChatApp(): React.ReactElement {
                     prompt: target.prompt,
                     category,
                     conversationId: run.conversationId ?? undefined,
+                    ...(screenshotId ? { screenshotId } : {}),
                 });
                 attachRun(runId, token);
             } catch (error) {
@@ -431,7 +548,7 @@ function QuickChatApp(): React.ReactElement {
                 dispatch({ type: 'startFailed', error: errorMessage(error) });
             }
         },
-        [agentStatus, attachRun, clearInput, run.conversationId, runActive]
+        [agentStatus, attachRun, clearInput, run.conversationId, runActive, takeAttachedScreenshot]
     );
 
     /**
@@ -579,6 +696,12 @@ function QuickChatApp(): React.ReactElement {
      */
     const handleKeyDown = useCallback(
         (event: React.KeyboardEvent<HTMLInputElement>) => {
+            const modifier = isMac ? event.metaKey : event.ctrlKey;
+            if (modifier && event.shiftKey && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                void takeScreenshot('screen');
+                return;
+            }
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 const swap = isMac ? event.metaKey : event.ctrlKey;
@@ -597,7 +720,7 @@ function QuickChatApp(): React.ReactElement {
                 setPrediction(null);
             }
         },
-        [decision.route, handleSubmit, inputValue, isMac, prediction, send]
+        [decision.route, handleSubmit, inputValue, isMac, prediction, send, takeScreenshot]
     );
 
     /** Escape anywhere in Quick Chat: dismiss the prediction, stop the agent, or hide Quick Chat. */
@@ -620,6 +743,12 @@ function QuickChatApp(): React.ReactElement {
                 // Escape dismisses the approval card (without resuming) before it hides Quick Chat.
                 handleDismissCommands();
             } else {
+                const attached = screenshotRef.current;
+                if (attached) {
+                    screenshotRef.current = null;
+                    setScreenshot(null);
+                    window.electronAPI?.discardQuickChatScreenshot?.(attached.id);
+                }
                 window.electronAPI?.cancelQuickChat();
                 if (panelVisible) {
                     resetPanel();
@@ -663,7 +792,7 @@ function QuickChatApp(): React.ReactElement {
                 try {
                     const result = await window.electronAPI?.predictText(newValue);
                     // Only set prediction if we got a result and input hasn't changed
-                    if (result) {
+                    if (result && !screenshotRef.current) {
                         setPrediction(result);
                     }
                 } catch {
@@ -679,12 +808,20 @@ function QuickChatApp(): React.ReactElement {
 
     const hasText = Boolean(inputValue.trim());
     const submitDisabled = !hasText || (decision.route === 'agent' && runActive);
-    const placeholder = run.conversationId ? 'Ask a follow-up…' : 'Ask Gemini...';
+    const placeholder = screenshot
+        ? 'Ask about the screenshot…'
+        : run.conversationId
+          ? 'Ask a follow-up…'
+          : 'Ask Gemini...';
+    const areaHint = window.electronAPI?.platform === 'win32' ? '' : '; Shift+click to pick an area';
+    const screenshotTitle = screenshot
+        ? `Take a new screenshot${areaHint ? ` (${areaHint.slice(2)})` : ''}`
+        : `Attach a screenshot (${isMac ? 'Cmd' : 'Ctrl'}+Shift+S${areaHint})`;
 
     return (
         <div
             ref={containerRef}
-            className={`quick-chat-container${panelVisible ? ' quick-chat-container--expanded' : ''}`}
+            className={`quick-chat-container${expanded ? ' quick-chat-container--expanded' : ''}`}
             data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_CONTAINER}
             onKeyDown={handleContainerKeyDown}
         >
@@ -692,8 +829,26 @@ function QuickChatApp(): React.ReactElement {
                 <div className="quick-chat-icon" aria-hidden="true">
                     <SearchIcon />
                 </div>
+                {screenshot && (
+                    <div
+                        className="quick-chat-screenshot-chip"
+                        title={`Screenshot attached (${screenshot.width}×${screenshot.height})`}
+                        data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_SCREENSHOT_CHIP}
+                    >
+                        <img src={screenshot.thumbnailDataUrl} alt="Attached screenshot" />
+                        <button
+                            type="button"
+                            className="quick-chat-screenshot-remove"
+                            onClick={removeScreenshot}
+                            aria-label="Remove screenshot"
+                            data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_SCREENSHOT_REMOVE}
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
                 {/* Ghost text overlay - shows current input + prediction */}
-                {prediction && (
+                {prediction && !screenshot && (
                     <div
                         className="quick-chat-ghost-text"
                         aria-hidden="true"
@@ -724,6 +879,17 @@ function QuickChatApp(): React.ReactElement {
                 )}
                 <button
                     type="button"
+                    className={`quick-chat-screenshot-button${screenshot ? ' quick-chat-screenshot-button--attached' : ''}`}
+                    onClick={(event) => void takeScreenshot(event.shiftKey ? 'area' : 'screen')}
+                    disabled={capturing}
+                    title={screenshotTitle}
+                    aria-label={screenshot ? 'Take a new screenshot' : 'Attach a screenshot'}
+                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_SCREENSHOT_BUTTON}
+                >
+                    <CameraIcon />
+                </button>
+                <button
+                    type="button"
                     className="quick-chat-submit"
                     onClick={handleSubmit}
                     disabled={submitDisabled}
@@ -733,6 +899,15 @@ function QuickChatApp(): React.ReactElement {
                     <SendIcon />
                 </button>
             </div>
+            {screenshotError && (
+                <div
+                    className="quick-chat-screenshot-error"
+                    role="alert"
+                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_SCREENSHOT_ERROR}
+                >
+                    {screenshotError}
+                </div>
+            )}
             {panelVisible && (
                 <AgentPanel
                     state={run}

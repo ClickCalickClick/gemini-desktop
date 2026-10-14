@@ -14,6 +14,7 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
 
 import { BaseIpcHandler } from './BaseIpcHandler';
+import { validateRunRequest } from '../agentManager';
 import { IPC_CHANNELS } from '../../utils/constants';
 import type {
     AgentEnginePreference,
@@ -179,7 +180,12 @@ export class AgentIpcHandler extends BaseIpcHandler {
         if (!manager) {
             throw new Error('The agent engine is not available in this build.');
         }
-        return manager.run(request, this.runOptions(event.sender));
+        const { screenshotId } = validateRunRequest(request);
+        const screenshot = screenshotId ? this.deps.screenshotManager?.take(screenshotId) : null;
+        if (screenshotId && !screenshot) {
+            throw new Error('The screenshot is no longer available. Take it again.');
+        }
+        return manager.run(request, { ...this.runOptions(event.sender), ...(screenshot ? { screenshot } : {}) });
     }
 
     private async handleApproveCommands(
