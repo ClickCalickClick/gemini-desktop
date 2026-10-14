@@ -72,6 +72,7 @@ logger.log('Crash reporter initialized', {
 
 import WindowManager from './managers/windowManager';
 import IpcManager from './managers/ipcManager';
+import { readTrayClickAction } from './managers/ipc/TrayIpcHandler';
 import MenuManager from './managers/menuManager';
 import HotkeyManager from './managers/hotkeyManager';
 import TrayManager from './managers/trayManager';
@@ -87,6 +88,8 @@ import TerminationSignals from './utils/terminationSignals';
 import { parseLaunchOptions, wantsQuickChat, type SingleInstanceData } from './utils/launchArgs';
 import { ensureQuickChatLauncher } from './utils/quickChatLauncher';
 import type { ApplicationContext, E2EGlobals, ReadyManagers } from './ApplicationContext';
+import { DEFAULT_TRAY_CLICK_ACTION } from '../shared/types/tray';
+import type { TrayClickAction } from '../shared/types/tray';
 
 // Path to the production build
 const distIndexPath = getDistHtmlPath('index.html');
@@ -161,7 +164,13 @@ function initializeManagers(): void {
 
     // Create tray and badge managers
     logger.debug('initializeManagers() - creating TrayManager');
-    const trayManager = new TrayManager(windowManager);
+    // IpcManager owns the user preferences and is created below (it needs UpdateManager, which
+    // needs the tray). The tray reads its click action through appContext at click time, so a
+    // click before the managers exist gets the default instead of touching ipcManager early.
+    const trayManager = new TrayManager(windowManager, {
+        getClickAction: (): TrayClickAction =>
+            appContext ? readTrayClickAction(appContext.ipcManager.store) : DEFAULT_TRAY_CLICK_ACTION,
+    });
     logger.debug('initializeManagers() - TrayManager created');
 
     logger.debug('initializeManagers() - creating BadgeManager');

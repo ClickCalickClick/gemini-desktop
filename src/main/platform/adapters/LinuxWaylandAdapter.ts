@@ -115,7 +115,7 @@ export class LinuxWaylandAdapter implements PlatformAdapter {
     }
 
     getTrayIconFilename(): TrayIconFilename {
-        return 'icon.png';
+        return 'icon-tray.png';
     }
 
     shouldDisableUpdates(env: NodeJS.ProcessEnv): boolean {

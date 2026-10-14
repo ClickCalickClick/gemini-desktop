@@ -54,3 +54,4 @@ Group specs by feature behavior, not by helper implementation detail.
 - Missing `ensureSingleWindow()` in `afterEach`
 - Hardcoding ad-hoc timeouts instead of wait utility constants/options
 - Duplicating WDIO config instead of extending `wdio.base.conf.js`
+- Expecting a tray click to restore the main window: it opens Quick Chat by default (`trayClickAction`). Use `TrayPage.clickAndWaitForWindow()`/`restoreWindowViaTrayClick()`, which set the click to `mainWindow` for that click, `setTrayClickAction()` from `helpers/trayActions.ts`, or the `'show'` tray action

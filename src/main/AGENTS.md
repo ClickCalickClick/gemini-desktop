@@ -14,7 +14,7 @@ Primary files and folders:
 - `src/main/platform/` — OS-specific behavior
 - `src/main/utils/` — main-process utilities
 - `src/main/utils/launchArgs.ts` — the app's own flags: `--quick-chat` (also passed as single-instance data) and `--hidden`
-- `src/main/utils/quickChatLauncher.ts` — writes the Gemini Quick Chat launcher to `~/.local/share/applications` when the app runs as an AppImage (`$APPIMAGE`), and removes its own launcher in deb, rpm and pacman installs, which ship one; tar.gz and `release/linux-unpacked` runs write nothing, and `GEMINI_DESKTOP_NO_LAUNCHER=1` (set by `wdio.base.conf.js` and `scripts/live-check.mjs`) turns it off. It only rewrites or removes a file marked `X-Gemini-Desktop-Generated=true`
+- `src/main/utils/quickChatLauncher.ts` — writes the Gemini Quick Chat launcher to `~/.local/share/applications` when the app runs as an AppImage (`$APPIMAGE`), with a copy of `resources/icon-quick-chat.png` as its icon, and removes its own launcher in deb, rpm and pacman installs, which ship one; tar.gz and `release/linux-unpacked` runs write nothing, and `GEMINI_DESKTOP_NO_LAUNCHER=1` (set by `wdio.base.conf.js` and `scripts/live-check.mjs`) turns it off. It only rewrites or removes a file marked `X-Gemini-Desktop-Generated=true`
 
 ## Manager Pattern
 
@@ -33,6 +33,12 @@ A manager announces a change by emitting an event on `windowManager`, for exampl
 - `src/main/managers/ipc/LookIpcHandler.ts` handles `look:get` and `look:set` (validated against `DesktopLookPreference`, saved as `desktopLook`, default `'default'`) and broadcasts `look:changed` with `LookData` to every window.
 - `src/main/utils/desktopLook.ts` holds the pure detection (the look list and names come from `src/shared/constants/looks.ts`): macOS → `macos`, Windows → `windows`, Linux from `XDG_CURRENT_DESKTOP` (colon list, in order), then `XDG_SESSION_DESKTOP` and `DESKTOP_SESSION`; unknown desktops resolve 'auto' to `default`.
 - `src/main/utils/desktopAccent.ts` (`DesktopAccentWatcher`) reads `org.freedesktop.appearance` `accent-color` from the XDG Settings portal (`ReadOne`, falling back to `Read`), follows `SettingChanged`, and on KDE falls back to `~/.config/kdeglobals`. It only starts on Linux once a look other than `default` applies, connects dbus-next with `getSessionBusAddress()` (never the native `usocket` module), uses 1.5 s timeouts and fails soft to a null accent. The handler stops the watcher when the look goes back to `default`, and when the session bus connection is lost it drops the watcher so the next `look:set`, or one retry 30 s later, starts a new one.
+
+## Tray
+
+- `src/main/managers/trayManager.ts` builds the tray from `TRAY_MENU_ITEMS` (`utils/constants.ts`: Quick Chat, Show Gemini Desktop, separator, Quit) and loads the icon file named by `PlatformAdapter.getTrayIconFilename()` from the resources folder, `build/` in development (`icon-tray.png` on Linux, `icon.ico` on Windows, `icon-mac-trayTemplate.png` on macOS), falling back to the app icon when it is missing.
+- The Tray `click` handler calls the injected `getClickAction()` at click time and opens Quick Chat (`windowManager.showQuickChat()`) or the main window (`restoreFromTray()`). `main.ts` passes a getter that reads `trayClickAction` from `IpcManager`'s user preferences through `readTrayClickAction()`; without one the click opens Quick Chat. `executeTrayAction('click')` follows the same setting, `'show'` always restores the main window. On macOS Electron emits `click` and shows the context menu on the same left click (`tray_icon_cocoa.mm`), so the setting works there too, alongside the menu.
+- `src/main/managers/ipc/TrayIpcHandler.ts` handles `tray-click-action:get` and `tray-click-action:set` (validated with `isTrayClickAction`, saved as `trayClickAction`, default `'quickChat'`).
 
 ## Canonical Examples
 

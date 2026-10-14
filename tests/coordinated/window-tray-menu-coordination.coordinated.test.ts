@@ -4,6 +4,7 @@ import WindowManager from '../../src/main/managers/windowManager';
 import TrayManager from '../../src/main/managers/trayManager';
 import MenuManager from '../../src/main/managers/menuManager';
 import { platformAdapterPresets, useMockPlatformAdapter, resetPlatformAdapterForTests } from '../helpers/mocks';
+import type { TrayClickAction } from '../../src/shared/types/tray';
 
 const pathsMocks = vi.hoisted(() => ({
     getIconPath: vi.fn(() => '/mock/icon.png'),
@@ -42,6 +43,8 @@ describe('WindowManager ↔ TrayManager ↔ MenuManager State Coordination', () 
     let windowManager: WindowManager;
     let trayManager: TrayManager;
     let menuManager: MenuManager;
+    /** What a tray click opens; most tests here check the restore path, so they use 'mainWindow'. */
+    let trayClickAction: TrayClickAction;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -61,7 +64,8 @@ describe('WindowManager ↔ TrayManager ↔ MenuManager State Coordination', () 
             useMockPlatformAdapter(platformAdapter);
             pathsMocks.getTrayIconPath.mockReturnValue('/mock/icon.png');
             windowManager = new WindowManager(false);
-            trayManager = new TrayManager(windowManager);
+            trayClickAction = 'mainWindow';
+            trayManager = new TrayManager(windowManager, { getClickAction: () => trayClickAction });
             menuManager = new MenuManager(windowManager);
         });
 
@@ -145,6 +149,50 @@ describe('WindowManager ↔ TrayManager ↔ MenuManager State Coordination', () 
 
                 expect(pathsMocks.getTrayIconPath).toHaveBeenCalled();
                 expect(pathsMocks.getTrayIconPath()).toContain('icon.png');
+            });
+        });
+
+        describe('Tray click action setting', () => {
+            it('should open Quick Chat on tray click when the setting is quickChat, leaving the main window hidden', () => {
+                trayClickAction = 'quickChat';
+                const mainWindow = windowManager.createMainWindow();
+                const tray = trayManager.createTray();
+
+                windowManager.hideToTray();
+                expect(mainWindow.isVisible()).toBe(false);
+
+                (tray as any).simulateClick();
+
+                const quickChatWindow = windowManager.getQuickChatWindow();
+                expect(quickChatWindow).toBeTruthy();
+                expect(quickChatWindow?.isVisible()).toBe(true);
+                expect(mainWindow.isVisible()).toBe(false);
+            });
+
+            it('should open Quick Chat by default when no setting is injected', () => {
+                const defaultTrayManager = new TrayManager(windowManager);
+                const mainWindow = windowManager.createMainWindow();
+                const tray = defaultTrayManager.createTray();
+                windowManager.hideToTray();
+
+                (tray as any).simulateClick();
+
+                expect(windowManager.getQuickChatWindow()?.isVisible()).toBe(true);
+                expect(mainWindow.isVisible()).toBe(false);
+            });
+
+            it('should follow a setting changed after the tray was created', () => {
+                const mainWindow = windowManager.createMainWindow();
+                const tray = trayManager.createTray();
+                windowManager.hideToTray();
+
+                trayClickAction = 'quickChat';
+                (tray as any).simulateClick();
+                expect(mainWindow.isVisible()).toBe(false);
+
+                trayClickAction = 'mainWindow';
+                (tray as any).simulateClick();
+                expect(mainWindow.isVisible()).toBe(true);
             });
         });
 
@@ -386,7 +434,7 @@ describe('WindowManager ↔ TrayManager ↔ MenuManager State Coordination', () 
                 } else if (platform === 'win32') {
                     expect(filename).toBe('icon.ico');
                 } else if (platform === 'linux') {
-                    expect(filename).toBe('icon.png');
+                    expect(filename).toBe('icon-tray.png');
                 }
             });
         });

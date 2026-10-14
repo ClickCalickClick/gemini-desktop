@@ -249,6 +249,12 @@ describe('LinuxWaylandAdapter', () => {
         });
     });
 
+    describe('getTrayIconFilename()', () => {
+        it('should return icon-tray.png (the full-size tray icon for the top bar)', () => {
+            expect(adapter.getTrayIconFilename()).toBe('icon-tray.png');
+        });
+    });
+
     describe('shouldDisableUpdates()', () => {
         it('should return true when APPIMAGE is not set', () => {
             const env = {} as NodeJS.ProcessEnv;
@@ -623,6 +629,12 @@ describe('LinuxX11Adapter', () => {
     describe('getAppIconFilename()', () => {
         it('should return icon.png on Linux', () => {
             expect(adapter.getAppIconFilename()).toBe('icon.png');
+        });
+    });
+
+    describe('getTrayIconFilename()', () => {
+        it('should return icon-tray.png (the full-size tray icon for the top bar)', () => {
+            expect(adapter.getTrayIconFilename()).toBe('icon-tray.png');
         });
     });
 

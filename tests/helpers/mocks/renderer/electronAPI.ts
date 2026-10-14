@@ -239,6 +239,10 @@ export function createMockElectronAPI(overrides: MockElectronAPIOverrides = {}):
         setLook: vi.fn(),
         onLookChanged: vi.fn().mockReturnValue(defaultUnsubscribe),
 
+        // Tray API
+        getTrayClickAction: vi.fn().mockResolvedValue('quickChat'),
+        setTrayClickAction: vi.fn(),
+
         // Hybrid Quick Chat: agent engine
         resizeQuickChat: vi.fn(),
         getAgentStatus: vi.fn().mockResolvedValue({ engine: null, available: false, error: 'No agent CLI found' }),

@@ -122,9 +122,19 @@ vi.mock('../../../src/main/managers/windowManager', () => {
     };
 });
 
+const mockTray = vi.hoisted(() => ({
+    /** getClickAction passed to each TrayManager */
+    getters: [] as Array<() => unknown>,
+    /** What getClickAction returned when called inside the TrayManager constructor */
+    duringConstruction: [] as unknown[],
+    /** The saved trayClickAction the IpcManager mock's store returns */
+    saved: 'mainWindow' as unknown,
+}));
+
 vi.mock('../../../src/main/managers/ipcManager', () => {
     return {
         default: class IpcManager {
+            store = { get: vi.fn((key: string) => (key === 'trayClickAction' ? mockTray.saved : undefined)) };
             setupIpcHandlers = vi.fn();
             getTabStateIpcHandler = vi.fn().mockReturnValue(null);
             setNotificationManager = vi.fn();
@@ -154,8 +164,12 @@ vi.mock('../../../src/main/managers/trayManager', () => {
         default: class TrayManager {
             createTray = vi.fn();
             destroyTray = vi.fn();
-            constructor() {
-                return;
+            constructor(_windowManager: unknown, options?: { getClickAction?: () => unknown }) {
+                if (options?.getClickAction) {
+                    mockTray.getters.push(options.getClickAction);
+                    // A click this early must not reach ipcManager before it exists
+                    mockTray.duringConstruction.push(options.getClickAction());
+                }
             }
         },
     };
@@ -289,6 +303,31 @@ describe('main.ts', () => {
             ([flag, value]) => flag === 'enable-features' && value === 'GlobalShortcutsPortal'
         );
         expect(hasGlobalShortcutsPortal).toBe(false);
+    });
+
+    describe('tray click action', () => {
+        beforeEach(() => {
+            mockTray.getters.length = 0;
+            mockTray.duringConstruction.length = 0;
+            mockTray.saved = 'mainWindow';
+        });
+
+        it('opens Quick Chat for a click before the managers exist, without touching IpcManager', async () => {
+            await import('../../../src/main/main');
+
+            expect(mockTray.duringConstruction).toEqual(['quickChat']);
+        });
+
+        it('reads the saved setting at click time once the managers exist', async () => {
+            await import('../../../src/main/main');
+            const getClickAction = mockTray.getters[0];
+
+            expect(getClickAction()).toBe('mainWindow');
+            mockTray.saved = 'quickChat';
+            expect(getClickAction()).toBe('quickChat');
+            mockTray.saved = 'bogus';
+            expect(getClickAction()).toBe('quickChat');
+        });
     });
 
     describe('second-instance', () => {

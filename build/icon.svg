@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Gemini Desktop app icon "Twin Sparks": two sparkles (Gemini, the twins) on an indigo tile. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2f6b"/>
+      <stop offset="1" stop-color="#151838"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cc4ff"/>
+      <stop offset=".55" stop-color="#8b7bff"/>
+      <stop offset="1" stop-color="#e58cff"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="12" width="112" height="108" rx="24" fill="#0e1029"/>
+  <rect x="8" y="8" width="112" height="108" rx="24" fill="url(#tile)"/>
+  <path d="M56.000 26.000 Q62.400 59.600 96.000 66.000 Q62.400 72.400 56.000 106.000 Q49.600 72.400 16.000 66.000 Q49.600 59.600 56.000 26.000 Z" fill="url(#spark)"/>
+  <path d="M92.000 17.000 Q94.720 31.280 109.000 34.000 Q94.720 36.720 92.000 51.000 Q89.280 36.720 75.000 34.000 Q89.280 31.280 92.000 17.000 Z" fill="url(#spark)"/>
+</svg>

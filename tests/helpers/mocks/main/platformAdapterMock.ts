@@ -104,7 +104,7 @@ export const platformAdapterPresets = {
         return createMockPlatformAdapter({
             id: 'linux-wayland',
             getAppIconFilename: vi.fn().mockReturnValue('icon.png'),
-            getTrayIconFilename: vi.fn().mockReturnValue('icon.png'),
+            getTrayIconFilename: vi.fn().mockReturnValue('icon-tray.png'),
             getHotkeyRegistrationPlan: vi.fn().mockReturnValue(
                 createDefaultPlan({
                     mode: 'wayland-dbus',
@@ -130,7 +130,7 @@ export const platformAdapterPresets = {
         return createMockPlatformAdapter({
             id: 'linux-wayland',
             getAppIconFilename: vi.fn().mockReturnValue('icon.png'),
-            getTrayIconFilename: vi.fn().mockReturnValue('icon.png'),
+            getTrayIconFilename: vi.fn().mockReturnValue('icon-tray.png'),
             getHotkeyRegistrationPlan: vi.fn().mockReturnValue(
                 createDefaultPlan({
                     mode: 'wayland-dbus',
@@ -155,7 +155,7 @@ export const platformAdapterPresets = {
         return createMockPlatformAdapter({
             id: 'linux-wayland',
             getAppIconFilename: vi.fn().mockReturnValue('icon.png'),
-            getTrayIconFilename: vi.fn().mockReturnValue('icon.png'),
+            getTrayIconFilename: vi.fn().mockReturnValue('icon-tray.png'),
             getHotkeyRegistrationPlan: vi.fn().mockReturnValue(
                 createDefaultPlan({
                     mode: 'wayland-dbus',
@@ -180,7 +180,7 @@ export const platformAdapterPresets = {
         return createMockPlatformAdapter({
             id: 'linux-wayland',
             getAppIconFilename: vi.fn().mockReturnValue('icon.png'),
-            getTrayIconFilename: vi.fn().mockReturnValue('icon.png'),
+            getTrayIconFilename: vi.fn().mockReturnValue('icon-tray.png'),
             getHotkeyRegistrationPlan: vi.fn().mockReturnValue(
                 createDefaultPlan({
                     mode: 'wayland-dbus',
@@ -205,7 +205,7 @@ export const platformAdapterPresets = {
         return createMockPlatformAdapter({
             id: 'linux-wayland',
             getAppIconFilename: vi.fn().mockReturnValue('icon.png'),
-            getTrayIconFilename: vi.fn().mockReturnValue('icon.png'),
+            getTrayIconFilename: vi.fn().mockReturnValue('icon-tray.png'),
             getHotkeyRegistrationPlan: vi.fn().mockReturnValue(
                 createDefaultPlan({
                     mode: 'disabled',
@@ -227,7 +227,7 @@ export const platformAdapterPresets = {
         return createMockPlatformAdapter({
             id: 'linux-x11',
             getAppIconFilename: vi.fn().mockReturnValue('icon.png'),
-            getTrayIconFilename: vi.fn().mockReturnValue('icon.png'),
+            getTrayIconFilename: vi.fn().mockReturnValue('icon-tray.png'),
             getHotkeyRegistrationPlan: vi.fn().mockReturnValue(
                 createDefaultPlan({
                     mode: 'disabled',

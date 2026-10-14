@@ -355,8 +355,8 @@ export interface TrayMenuItem {
  * TrayManager iterates over these to build the context menu.
  */
 export const TRAY_MENU_ITEMS: Record<string, TrayMenuItem> = {
-    SHOW: { label: 'Show Gemini Desktop', id: 'show' },
     QUICK_CHAT: { label: 'Quick Chat', id: 'quickChat' },
+    SHOW: { label: 'Show Gemini Desktop', id: 'show' },
     SEPARATOR: { label: '', id: 'separator', isSeparator: true },
     QUIT: { label: 'Quit', id: 'quit' },
 };
