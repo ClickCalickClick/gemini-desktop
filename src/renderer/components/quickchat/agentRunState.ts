@@ -55,6 +55,7 @@ export type AgentRunAction =
     | { type: 'assigned'; runId: string }
     | { type: 'event'; event: AgentRunEvent }
     | { type: 'stopRequested' }
+    | { type: 'stopTimedOut' }
     | { type: 'startFailed'; error: string }
     | { type: 'setupMissing'; prompt: string; category: AgentTaskCategory; error: string }
     | { type: 'planApplying' }
@@ -100,7 +101,8 @@ export function needsSetupHint(error: string | null | undefined): boolean {
 }
 
 function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
-    if (event.runId !== state.runId) {
+    // Ignore other runs, and anything that arrives after this run ended.
+    if (event.runId !== state.runId || state.phase === 'done' || state.phase === 'idle') {
         return state;
     }
     switch (event.type) {
@@ -153,7 +155,8 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 phase: 'done',
                 status: event.status,
                 error: event.error ?? null,
-                text: state.text || event.response,
+                // For file runs the response is the plan summary, which the plan box already shows.
+                text: state.text || (state.plan ? '' : event.response),
                 conversationId: event.conversationId ?? state.conversationId,
                 tools: state.tools.map((step) => (step.state === 'ACTIVE' ? { ...step, state: 'DONE' } : step)),
             };
@@ -176,6 +179,8 @@ export function agentRunReducer(state: AgentRunState, action: AgentRunAction): A
             return { ...state, runId: action.runId };
         case 'event':
             return applyEvent(state, action.event);
+        case 'stopTimedOut':
+            return state.phase === 'stopping' ? { ...state, phase: 'done', status: 'CANCELED' } : state;
         case 'stopRequested':
             return isRunActive(state) ? { ...state, phase: 'stopping' } : state;
         case 'startFailed':

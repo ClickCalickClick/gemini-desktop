@@ -111,6 +111,10 @@ function ToolStepRow({ step }: { step: ToolStep }): React.ReactElement {
 }
 
 function resultText(result: FileActionResult, verb: string): string {
+    if (result.applied === 0 && result.failed.length > 0) {
+        // A refusal (for example a path outside the home folder) or every action failing.
+        return 'Nothing changed.';
+    }
     const count = `${result.applied} change${result.applied === 1 ? '' : 's'}`;
     const failures = result.failed.length > 0 ? `, ${result.failed.length} failed` : '';
     return `${verb} ${count}${failures}.`;
@@ -122,8 +126,8 @@ function FailureList({ result }: { result: FileActionResult | null }): React.Rea
     }
     return (
         <ul className="qc-plan__failures">
-            {result.failed.map((failure) => (
-                <li key={failure.id}>{failure.error}</li>
+            {result.failed.map((failure, index) => (
+                <li key={`${failure.id}-${index}`}>{failure.error}</li>
             ))}
         </ul>
     );
@@ -156,6 +160,14 @@ export function AgentPanel({
             ? (state.error ?? STATUS_MESSAGES[state.status] ?? 'The agent failed.')
             : null;
     const showHint = state.phase === 'done' && needsSetupHint(state.error);
+    // One short announcement per state change for screen readers, instead of a live region on the streaming text.
+    const announcement = active
+        ? state.phase === 'stopping'
+            ? 'Stopping the agent'
+            : 'The agent is working'
+        : state.phase === 'done'
+          ? (statusMessage ?? (state.plan ? 'File plan ready' : 'Answer ready'))
+          : '';
     const planBusy = state.planState === 'applying' || state.planState === 'undoing';
 
     return (
@@ -185,7 +197,15 @@ export function AgentPanel({
                 </div>
             )}
 
-            <div className="qc-agent-body" aria-live="polite" aria-busy={active}>
+            <p
+                className="qc-visually-hidden"
+                role="status"
+                data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_ANNOUNCER}
+            >
+                {announcement}
+            </p>
+
+            <div className="qc-agent-body">
                 {state.tools.length > 0 && (
                     <ul
                         className="qc-tools"
@@ -293,7 +313,6 @@ export function AgentPanel({
                 {statusMessage && (
                     <p
                         className={`qc-agent-error${state.status === 'CANCELED' ? ' qc-agent-error--quiet' : ''}`}
-                        role={state.status === 'CANCELED' ? undefined : 'alert'}
                         data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_ERROR}
                     >
                         {statusMessage}

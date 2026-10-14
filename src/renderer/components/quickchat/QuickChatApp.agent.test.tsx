@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
-import QuickChatApp, { QUICK_CHAT_COMPACT_HEIGHT } from './QuickChatApp';
+import QuickChatApp, { QUICK_CHAT_COMPACT_HEIGHT, STOP_TIMEOUT_MS } from './QuickChatApp';
 import { buildContinueInGeminiPrompt } from './agentRunState';
 import { createMockElectronAPI } from '../../../../tests/helpers/mocks/renderer/electronAPI';
 import type { AgentEngineStatus, AgentRunEvent, AgentSettings } from '../../../shared/types/agent';
@@ -689,6 +689,181 @@ describe('QuickChatApp hybrid routing and agent panel', () => {
             } finally {
                 vi.useRealTimers();
             }
+        });
+    });
+    describe('review fixes', () => {
+        const smallPlan = {
+            summary: 'Move a.pdf into Documents.',
+            actions: [
+                { id: 'a1', op: 'move' as const, from: '/home/me/Downloads/a.pdf', to: '/home/me/Documents/a.pdf' },
+            ],
+        };
+
+        it('routes an unprefixed follow-up to the agent with the conversation id', async () => {
+            vi.mocked(api.runAgent).mockResolvedValueOnce({ runId: 'run-1' }).mockResolvedValueOnce({ runId: 'run-2' });
+            await renderApp();
+            await startAgentRun('how much disk space do I have left');
+            await send({
+                type: 'done',
+                runId: 'run-1',
+                status: 'SUCCESS',
+                response: '42 GB',
+                conversationId: 'conv-1',
+            });
+
+            await type('and how much is used by videos?');
+            expect(chip()).toHaveTextContent('Agent');
+            expect(chip()).toHaveAttribute('title', expect.stringContaining('follow-up to the agent'));
+            await press('Enter');
+            await waitFor(() => expect(api.runAgent).toHaveBeenCalledTimes(2));
+            expect(api.runAgent).toHaveBeenLastCalledWith({
+                prompt: 'and how much is used by videos?',
+                category: 'general',
+                conversationId: 'conv-1',
+            });
+            expect(api.submitQuickChat).not.toHaveBeenCalled();
+        });
+
+        it('a follow-up with a web cue still goes to Gemini', async () => {
+            await renderApp();
+            await startAgentRun();
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: 'x', conversationId: 'conv-1' });
+            await type('draw that as a diagram');
+            expect(chip()).toHaveTextContent('Gemini');
+        });
+
+        it('a second Escape while stopping hides Quick Chat and resets the panel', async () => {
+            await renderApp();
+            await startAgentRun();
+            await press('Escape');
+            expect(api.cancelAgent).toHaveBeenCalledWith('run-1');
+            expect(api.cancelQuickChat).not.toHaveBeenCalled();
+            await press('Escape');
+            expect(api.cancelQuickChat).toHaveBeenCalledTimes(1);
+            expect(screen.queryByTestId('quick-chat-agent-panel')).not.toBeInTheDocument();
+            expect(api.resizeQuickChat).toHaveBeenLastCalledWith(QUICK_CHAT_COMPACT_HEIGHT);
+        });
+
+        it('treats the run as stopped when the CLI never confirms', async () => {
+            vi.useFakeTimers({ shouldAdvanceTime: true });
+            try {
+                await renderApp();
+                await startAgentRun();
+                await act(async () => {
+                    fireEvent.click(screen.getByTestId('quick-chat-agent-stop'));
+                });
+                expect(screen.getByTestId('quick-chat-agent-progress')).toHaveTextContent('Stopping');
+                await act(async () => {
+                    await vi.advanceTimersByTimeAsync(STOP_TIMEOUT_MS + 10);
+                });
+                expect(screen.queryByTestId('quick-chat-agent-progress')).not.toBeInTheDocument();
+                expect(screen.getByTestId('quick-chat-agent-error')).toHaveTextContent('Stopped.');
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('ignores text that arrives after done', async () => {
+            await renderApp();
+            await startAgentRun();
+            await send({ type: 'text', runId: 'run-1', delta: 'Answer.' });
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: 'Answer.' });
+            await send({ type: 'text', runId: 'run-1', delta: ' late' });
+            expect(screen.getByTestId('quick-chat-agent-output')).toHaveTextContent(/^Answer\.$/);
+        });
+
+        it('clears the chip choice when a routing prefix is typed', async () => {
+            await renderApp();
+            await type('organise my Downloads folder');
+            await act(async () => {
+                fireEvent.click(chip());
+            });
+            expect(chip()).toHaveTextContent('Gemini');
+            await type('@agent organise my Downloads folder');
+            expect(chip()).toHaveTextContent('Agent · Files');
+            expect(chip()).toHaveAttribute('title', expect.stringContaining('you typed @agent'));
+        });
+
+        it('announces once in a status line instead of a live streaming region', async () => {
+            await renderApp();
+            await startAgentRun();
+            const announcer = screen.getByTestId('quick-chat-agent-announcer');
+            expect(announcer).toHaveAttribute('role', 'status');
+            expect(announcer).toHaveTextContent('The agent is working');
+            await send({ type: 'text', runId: 'run-1', delta: 'Streaming text' });
+            expect(announcer).not.toHaveTextContent('Streaming');
+            expect(screen.getByTestId('quick-chat-agent-panel').querySelector('[aria-live]')).toBeNull();
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: 'Streaming text' });
+            expect(announcer).toHaveTextContent('Answer ready');
+        });
+
+        it('shows a refusal from applyFilePlan', async () => {
+            vi.mocked(api.applyFilePlan).mockResolvedValue({
+                applied: 0,
+                failed: [{ id: '', error: 'Refused: /etc/passwd is outside your home folder' }],
+                undoAvailable: false,
+            });
+            await renderApp();
+            await startAgentRun();
+            await send({ type: 'plan', runId: 'run-1', plan: smallPlan });
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: smallPlan.summary });
+            await act(async () => {
+                fireEvent.click(screen.getByTestId('quick-chat-agent-plan-apply'));
+            });
+            const result = await screen.findByTestId('quick-chat-agent-plan-result');
+            expect(result).toHaveTextContent('Nothing changed.');
+            expect(result).toHaveTextContent('outside your home folder');
+            expect(screen.queryByTestId('quick-chat-agent-plan-undo')).not.toBeInTheDocument();
+        });
+
+        it('does not repeat the plan summary as the answer text', async () => {
+            await renderApp();
+            await startAgentRun();
+            await send({ type: 'plan', runId: 'run-1', plan: smallPlan });
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: smallPlan.summary });
+            expect(screen.queryByTestId('quick-chat-agent-output')).not.toBeInTheDocument();
+            expect(screen.getByTestId('quick-chat-agent-announcer')).toHaveTextContent('File plan ready');
+        });
+
+        it('starts compact when shown again after a finished run', async () => {
+            await renderApp();
+            await startAgentRun();
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: 'x' });
+            await act(async () => {
+                window.dispatchEvent(new Event('blur'));
+            });
+            vi.mocked(api.resizeQuickChat).mockClear();
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            expect(screen.queryByTestId('quick-chat-agent-panel')).not.toBeInTheDocument();
+            expect(api.resizeQuickChat).toHaveBeenCalledWith(QUICK_CHAT_COMPACT_HEIGHT);
+        });
+
+        it('keeps a plan that waits for Apply when shown again', async () => {
+            await renderApp();
+            await startAgentRun();
+            await send({ type: 'plan', runId: 'run-1', plan: smallPlan });
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: smallPlan.summary });
+            await act(async () => {
+                window.dispatchEvent(new Event('blur'));
+            });
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            expect(screen.getByTestId('quick-chat-agent-plan')).toBeInTheDocument();
+        });
+
+        it('keeps a running answer when shown again', async () => {
+            await renderApp();
+            await startAgentRun();
+            await act(async () => {
+                window.dispatchEvent(new Event('blur'));
+            });
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            expect(screen.getByTestId('quick-chat-agent-progress')).toBeInTheDocument();
         });
     });
 });

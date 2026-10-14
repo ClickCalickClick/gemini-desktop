@@ -92,6 +92,7 @@ export const QUICK_CHAT_TEST_IDS = {
     QUICK_CHAT_ROUTE_CHIP: 'quick-chat-route-chip',
     QUICK_CHAT_AGENT_PANEL: 'quick-chat-agent-panel',
     QUICK_CHAT_AGENT_PROGRESS: 'quick-chat-agent-progress',
+    QUICK_CHAT_AGENT_ANNOUNCER: 'quick-chat-agent-announcer',
     QUICK_CHAT_AGENT_STOP: 'quick-chat-agent-stop',
     QUICK_CHAT_AGENT_OUTPUT: 'quick-chat-agent-output',
     QUICK_CHAT_AGENT_TOOLS: 'quick-chat-agent-tools',
