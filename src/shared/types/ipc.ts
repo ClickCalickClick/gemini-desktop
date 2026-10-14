@@ -16,6 +16,8 @@ import type {
 import type { UpdateInfo, DownloadProgress } from './updates';
 import type { ToastPayload } from './toast';
 import type { TextPredictionSettings } from './text-prediction';
+import type { AgentEngineStatus, AgentRunEvent, AgentRunRequest, AgentSettings, FileActionResult } from './agent';
+import type { DesktopLookPreference, LookData } from './look';
 import type { GeminiNavigatePayload, GeminiReadyPayload, TabsState, TabShortcutPayload } from './tabs';
 
 /**
@@ -461,4 +463,51 @@ export interface ElectronAPI {
      * Useful for test isolation between test cases.
      */
     clearDbusActivationSignalHistory: () => void;
+
+    // =========================================================================
+    // Desktop Look
+    // =========================================================================
+
+    /** Get the look preference, the applied look, the detected desktop and its accent color */
+    getLook: () => Promise<LookData>;
+
+    /** Set the look preference ('auto' follows the desktop) */
+    setLook: (look: DesktopLookPreference) => void;
+
+    /** Subscribe to look changes (from Options or a desktop accent change) */
+    onLookChanged: (callback: (data: LookData) => void) => () => void;
+
+    // =========================================================================
+    // Hybrid Quick Chat: agent engine
+    // =========================================================================
+
+    /** Ask Quick Chat's window to resize to fit its content (height in CSS pixels) */
+    resizeQuickChat: (height: number) => void;
+
+    /** Whether an agent CLI is installed and which one will be used */
+    getAgentStatus: () => Promise<AgentEngineStatus>;
+
+    /** Get the agent and routing settings */
+    getAgentSettings: () => Promise<AgentSettings>;
+
+    /** Change some agent or routing settings */
+    setAgentSettings: (settings: Partial<AgentSettings>) => Promise<AgentSettings>;
+
+    /** Subscribe to agent and routing settings changes */
+    onAgentSettingsChanged: (callback: (settings: AgentSettings) => void) => () => void;
+
+    /** Start an agent run; resolves with its runId. Progress arrives through onAgentEvent */
+    runAgent: (request: AgentRunRequest) => Promise<{ runId: string }>;
+
+    /** Stop a running agent run */
+    cancelAgent: (runId: string) => void;
+
+    /** Subscribe to agent run events */
+    onAgentEvent: (callback: (event: AgentRunEvent) => void) => () => void;
+
+    /** Apply the file plan a run proposed (after the user confirmed it) */
+    applyFilePlan: (runId: string) => Promise<FileActionResult>;
+
+    /** Undo the last applied file plan */
+    undoLastFilePlan: () => Promise<FileActionResult>;
 }

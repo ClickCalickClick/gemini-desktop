@@ -9,12 +9,8 @@
 
 import { memo } from 'react';
 import './about-section.css';
-import {
-    GITHUB_LICENSE_URL,
-    GITHUB_DISCLAIMER_URL,
-    GOOGLE_TOS_URL,
-    GOOGLE_GENAI_TERMS_URL,
-} from '../../utils/constants';
+import { GITHUB_LICENSE_URL, GITHUB_DISCLAIMER_URL } from '../../../shared/constants/urls';
+import { GOOGLE_TOS_URL, GOOGLE_GENAI_TERMS_URL } from '../../utils/constants';
 
 /**
  * Application version - injected from package.json at build time via Vite define.

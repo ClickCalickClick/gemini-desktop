@@ -132,6 +132,13 @@ export const DEFAULT_ACCELERATORS: HotkeyAccelerators = {
     printToPdf: 'CommandOrControl+Shift+P',
 };
 
+/**
+ * The chord most Copilot keys send: Left Shift + Left Meta (the Windows / Super key) + F23.
+ * Options offers it as a one-click Quick Chat shortcut on Linux and Windows. Electron calls the
+ * Windows key `Super` on both; the Wayland portal receives it as `SHIFT+LOGO+F23`.
+ */
+export const COPILOT_KEY_ACCELERATOR = 'Shift+Super+F23';
+
 // ==========================================================================
 // Wayland Platform Status Types
 // ==========================================================================
@@ -195,4 +202,10 @@ export interface PlatformHotkeyStatus {
     registrationResults: HotkeyRegistrationResult[];
     /** Whether global hotkeys are currently functional */
     globalHotkeysEnabled: boolean;
+    /**
+     * Whether a registration through the desktop portal is still waiting for its answer, for
+     * example while GNOME or KDE asks the user to approve the shortcuts. The main process sends
+     * the status on PLATFORM_HOTKEY_STATUS_CHANGED once it has the answer.
+     */
+    registrationPending?: boolean;
 }

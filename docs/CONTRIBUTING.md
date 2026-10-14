@@ -259,7 +259,7 @@ Common prefixes: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.
 
 ## Reporting Bugs
 
-Open a new issue here: https://github.com/bwendell/gemini-desktop/issues/new
+Open a new issue here: https://github.com/ClickCalickClick/gemini-desktop/issues/new
 
 Please include:
 
@@ -272,11 +272,11 @@ Please include:
 - Terminal output if the app crashes on launch
 - Workarounds you already tried
 
-Example of a great report: Issue [#158](https://github.com/bwendell/gemini-desktop/issues/158).
+Example of a great report: upstream's issue [#158](https://github.com/bwendell/gemini-desktop/issues/158).
 
 ## Requesting Features
 
-Open a new issue here: https://github.com/bwendell/gemini-desktop/issues/new
+Open a new issue here: https://github.com/ClickCalickClick/gemini-desktop/issues/new
 
 Please describe:
 

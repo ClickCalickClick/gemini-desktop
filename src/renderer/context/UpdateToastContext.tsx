@@ -4,6 +4,7 @@ import { useUpdateNotifications } from '../hooks/useUpdateNotifications';
 import type { UpdateNotificationState } from '../hooks/useUpdateNotifications';
 import type { ToastType, ToastAction } from '../components/toast/Toast';
 import { getReleaseNotesUrl } from '../../shared/utils/releaseNotes';
+import type { LinuxPackageType } from '../../shared/types/updates';
 
 interface UpdateToastContextType extends UpdateNotificationState {
     dismissNotification: () => void;
@@ -68,7 +69,8 @@ function getMessage(
     type: 'available' | 'downloaded' | 'error' | 'not-available' | 'progress' | 'manual-available',
     version: string | undefined,
     errorMessage: string | null,
-    downloadProgress: number | null
+    downloadProgress: number | null,
+    packageType?: LinuxPackageType
 ): string {
     switch (type) {
         case 'available':
@@ -84,7 +86,10 @@ function getMessage(
                 ? `Downloading... ${Math.round(downloadProgress)}%`
                 : 'Downloading...';
         case 'manual-available':
-            return `Version ${version} is available. Download it from the releases page.`;
+            // A deb, rpm or pacman install is updated by installing the new package, not from inside the app.
+            return packageType
+                ? `Version ${version} is available. Download the .${packageType} package and install it with your package manager.`
+                : `Version ${version} is available. Download it from the releases page.`;
     }
 }
 
@@ -195,7 +200,7 @@ export function UpdateToastProvider({ children }: UpdateToastProviderProps) {
             });
         }
 
-        const message = getMessage(type, version, errorMessage, downloadProgress);
+        const message = getMessage(type, version, errorMessage, downloadProgress, updateInfo?.packageType);
 
         if (type === 'available' || type === 'downloaded' || type === 'not-available') {
             const releaseNotesAction: ToastAction = {

@@ -1,0 +1,90 @@
+/**
+ * COSMIC look (System76's COSMIC desktop).
+ *
+ * Flat containers, round icon-only window controls on the right, generous radii, Open Sans /
+ * Fira Sans and COSMIC's default accent (cyan #63d0df on dark with dark text, teal #00525a on light).
+ */
+
+:root[data-look='cosmic'] {
+    --look-font: 'Open Sans', 'Fira Sans', 'Noto Sans', 'Segoe UI', sans-serif;
+    --look-accent: #63d0df;
+    --look-accent-fg: #00191c;
+    --look-radius-card: 12px;
+    --look-radius-button: 8px;
+    --look-title-size: 13px;
+    --look-title-weight: 600;
+    --look-heading-transform: none;
+    --look-heading-size: 13px;
+    --look-heading-weight: 600;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 24px;
+    --look-control-height: 24px;
+    --look-control-radius: 50%;
+    --look-control-gap: 8px;
+    --look-controls-padding: 8px;
+    --look-control-bg: transparent;
+    --look-control-hover-bg: rgba(255, 255, 255, 0.12);
+    --look-close-hover-bg: rgba(255, 255, 255, 0.12);
+    --look-close-hover-fg: #e6e6e6;
+
+    /* COSMIC dark */
+    --bg-primary: #1b1b1b;
+    --bg-secondary: #272727;
+    --bg-tertiary: #474747;
+    --text-primary: #e6e6e6;
+    --text-secondary: #a6a6a6;
+    --border-color: #3a3a3a;
+    --hover-bg: rgba(255, 255, 255, 0.08);
+    --titlebar-bg: #222222;
+    --titlebar-text: #e6e6e6;
+    --titlebar-height: 36px;
+    --look-titlebar-border: transparent;
+    --look-tabbar-bg: #222222;
+    --look-switch-off-bg: #474747;
+
+    --look-qc-bg: #272727;
+    --look-qc-border: rgba(255, 255, 255, 0.08);
+    --look-qc-radius: 16px;
+    --look-qc-backdrop: none;
+    --look-qc-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-look='cosmic'][data-theme='light'] {
+    /* COSMIC light */
+    --look-accent: #00525a;
+    --look-accent-fg: #ffffff;
+    --bg-primary: #ececec;
+    --bg-secondary: #f8f8f8;
+    --bg-tertiary: #c4c4c4;
+    --text-primary: #1e1e1e;
+    --text-secondary: #5c5c5c;
+    --border-color: #cfcfcf;
+    --hover-bg: rgba(0, 0, 0, 0.06);
+    --titlebar-bg: #e3e3e3;
+    --titlebar-text: #1e1e1e;
+    --look-tabbar-bg: #e3e3e3;
+    --look-switch-off-bg: #c4c4c4;
+    --look-control-hover-bg: rgba(0, 0, 0, 0.1);
+    --look-close-hover-bg: rgba(0, 0, 0, 0.1);
+    --look-close-hover-fg: #1e1e1e;
+
+    --look-qc-bg: #f8f8f8;
+    --look-qc-border: rgba(0, 0, 0, 0.08);
+    --look-qc-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-look='cosmic'] .tab {
+    height: auto;
+    margin: 4px 2px;
+    border: none;
+    border-radius: 8px;
+}
+
+:root[data-look='cosmic'] .tab--active {
+    background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+
+:root[data-look='cosmic'] .tab-bar__new {
+    border-left: none;
+}

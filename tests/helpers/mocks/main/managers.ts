@@ -58,6 +58,7 @@ export interface MockWindowManager {
     focusMainWindow: ReturnType<typeof vi.fn>;
     getMainWindow: ReturnType<typeof vi.fn>;
     getQuickChatWindow: ReturnType<typeof vi.fn>;
+    resizeQuickChat: ReturnType<typeof vi.fn>;
     restoreFromTray: ReturnType<typeof vi.fn>;
     hideToTray: ReturnType<typeof vi.fn>;
     minimizeMainWindow: ReturnType<typeof vi.fn>;
@@ -174,6 +175,9 @@ export function createMockWindowManager(overrides?: Partial<Omit<MockWindowManag
         on: vi.fn((event: string, handler: () => void) => {
             if (event === 'closed') handler();
         }),
+        once: vi.fn((event: string, handler: () => void) => {
+            if (event === 'closed') handler();
+        }),
     };
 
     const manager: MockWindowManager = {
@@ -193,6 +197,7 @@ export function createMockWindowManager(overrides?: Partial<Omit<MockWindowManag
         focusMainWindow: vi.fn(),
         getMainWindow: vi.fn().mockReturnValue(null),
         getQuickChatWindow: vi.fn().mockReturnValue(null),
+        resizeQuickChat: vi.fn(),
         restoreFromTray: vi.fn(),
         hideToTray: vi.fn(),
         minimizeMainWindow: vi.fn(),

@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { OptionsWindowTitlebar } from './OptionsWindowTitlebar';
 import { ThemeSelector } from './ThemeSelector';
+import { LookSelector } from './LookSelector';
 import { IndividualHotkeyToggles } from './IndividualHotkeyToggles';
 import { AutoUpdateToggle } from './AutoUpdateToggle';
 import { AboutSection } from './AboutSection';
@@ -20,6 +21,7 @@ import { TextPredictionSettings } from './TextPredictionSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { StartupSettings } from './StartupSettings';
 import { ChatBehaviorSettings } from './ChatBehaviorSettings';
+import { QuickChatSettings } from './QuickChatSettings';
 import './options-window.css';
 
 // ============================================================================
@@ -171,11 +173,17 @@ export function OptionsWindow() {
                             {/* Appearance Settings */}
                             <OptionsSection title="Appearance" testId="options-appearance">
                                 <ThemeSelector />
+                                <LookSelector />
                             </OptionsSection>
 
                             {/* Hotkey Settings */}
                             <OptionsSection title="Hotkey Shortcuts" testId="options-hotkeys">
                                 <IndividualHotkeyToggles />
+                            </OptionsSection>
+
+                            {/* Quick Chat: routing between the Gemini tab and the local agent */}
+                            <OptionsSection title="Quick Chat" testId="options-quick-chat">
+                                <QuickChatSettings />
                             </OptionsSection>
 
                             {/* Updates Settings */}

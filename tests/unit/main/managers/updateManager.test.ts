@@ -51,6 +51,13 @@ vi.mock('electron-updater', () => ({
     autoUpdater: mockAutoUpdater,
 }));
 
+// The install type comes from resources/package-type, which only the deb, rpm and pacman packages have.
+const { mockGetLinuxPackageType } = vi.hoisted(() => ({ mockGetLinuxPackageType: vi.fn() }));
+
+vi.mock('../../../../src/main/utils/packageType', () => ({
+    getLinuxPackageType: mockGetLinuxPackageType,
+}));
+
 // Mock SettingsStore
 const mockSettings = {
     get: vi.fn(),
@@ -254,6 +261,7 @@ describe('UpdateManager manual-update-only mode', () => {
         (app as any).getVersion = vi.fn().mockReturnValue('1.0.0');
 
         delete process.env.APPIMAGE;
+        mockGetLinuxPackageType.mockReturnValue(null);
 
         useMockPlatformAdapter(
             createMockPlatformAdapter({
@@ -310,6 +318,25 @@ describe('UpdateManager manual-update-only mode', () => {
         expect(mockWebContents.send).toHaveBeenCalledWith(
             IPC_CHANNELS.AUTO_UPDATE_MANUAL_UPDATE_AVAILABLE,
             expect.objectContaining({ version: '2.0.0' })
+        );
+        expect(mockWebContents.send).toHaveBeenCalledWith(
+            IPC_CHANNELS.AUTO_UPDATE_MANUAL_UPDATE_AVAILABLE,
+            expect.not.objectContaining({ packageType: expect.anything() })
+        );
+    });
+
+    it.each(['deb', 'rpm', 'pacman'])('tells %s installs which package to install', async (packageType) => {
+        mockGetLinuxPackageType.mockReturnValue(packageType);
+        (net.fetch as any).mockResolvedValue({
+            ok: true,
+            json: vi.fn().mockResolvedValue({ tag_name: 'v2.0.0' }),
+        });
+
+        await manualUpdateManager.checkForUpdates(true);
+
+        expect(mockWebContents.send).toHaveBeenCalledWith(
+            IPC_CHANNELS.AUTO_UPDATE_MANUAL_UPDATE_AVAILABLE,
+            expect.objectContaining({ version: '2.0.0', packageType })
         );
     });
 

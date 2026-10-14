@@ -220,11 +220,12 @@ describe('TrayManager', () => {
             expect(Menu.buildFromTemplate).toHaveBeenCalled();
             const template = (Menu.buildFromTemplate as any).mock.calls[0][0];
 
-            // Should have Show, Separator, Quit
-            expect(template.length).toBe(3);
+            // Should have Show, Quick Chat, Separator, Quit
+            expect(template.length).toBe(4);
             expect(template[0].label).toBe('Show Gemini Desktop');
-            expect(template[1].type).toBe('separator');
-            expect(template[2].label).toBe('Quit');
+            expect(template[1].label).toBe('Quick Chat');
+            expect(template[2].type).toBe('separator');
+            expect(template[3].label).toBe('Quit');
         });
 
         it('sets context menu on tray', () => {
@@ -298,6 +299,25 @@ describe('TrayManager', () => {
             showItem.click();
 
             expect(mockWindowManager.restoreFromTray).toHaveBeenCalled();
+        });
+
+        it('Quick Chat menu item shows Quick Chat', () => {
+            trayManager.createTray();
+
+            const template = (Menu.buildFromTemplate as any).mock.calls[0][0];
+            const quickChatItem = template.find((item: any) => item.label === 'Quick Chat');
+
+            expect(quickChatItem).toBeDefined();
+            quickChatItem.click();
+
+            expect(mockWindowManager.showQuickChat).toHaveBeenCalled();
+            expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled();
+        });
+
+        it('executeTrayAction("quickChat") shows Quick Chat', () => {
+            trayManager.executeTrayAction('quickChat');
+
+            expect(mockWindowManager.showQuickChat).toHaveBeenCalled();
         });
 
         it('Quit menu item calls app.quit', () => {

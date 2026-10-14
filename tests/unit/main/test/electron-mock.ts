@@ -193,6 +193,10 @@ export const screen = {
         workArea: { x: 0, y: 0 },
         workAreaSize: { width: 1920, height: 1080 },
     }),
+    getDisplayMatching: vi.fn().mockReturnValue({
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+        workAreaSize: { width: 1920, height: 1080 },
+    }),
     _reset: () => {
         screen.getCursorScreenPoint.mockClear();
         screen.getDisplayNearestPoint.mockClear();

@@ -155,6 +155,16 @@ const mockElectronAPI = {
     getResponseNotificationsEnabled: vi.fn().mockResolvedValue(true),
     setResponseNotificationsEnabled: vi.fn(),
 
+    // Desktop Look API
+    getLook: vi.fn().mockResolvedValue({
+        preference: 'default',
+        effectiveLook: 'default',
+        detectedDesktop: null,
+        accentColor: null,
+    }),
+    setLook: vi.fn(),
+    onLookChanged: vi.fn().mockReturnValue(() => {}),
+
     // Dev Testing API
     devShowBadge: vi.fn(),
     devClearBadge: vi.fn(),

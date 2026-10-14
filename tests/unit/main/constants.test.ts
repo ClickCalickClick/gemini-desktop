@@ -19,10 +19,6 @@ import {
     QUICK_CHAT_HEIGHT,
     BASE_WINDOW_CONFIG,
     getBaseWebPreferences,
-    GITHUB_REPO_URL,
-    GITHUB_ISSUES_URL,
-    GITHUB_LICENSE_URL,
-    GITHUB_DISCLAIMER_URL,
     GOOGLE_TOS_URL,
     GOOGLE_GENAI_TERMS_URL,
     GOOGLE_SIGNIN_URL,
@@ -92,25 +88,6 @@ describe('Constants', () => {
     });
 
     describe('URL constants', () => {
-        it('has correct GITHUB_REPO_URL', () => {
-            expect(GITHUB_REPO_URL).toBe('https://github.com/bwendell/gemini-desktop');
-        });
-
-        it('has correct GITHUB_ISSUES_URL', () => {
-            expect(GITHUB_ISSUES_URL).toContain(GITHUB_REPO_URL);
-            expect(GITHUB_ISSUES_URL).toContain('/issues');
-        });
-
-        it('has correct GITHUB_LICENSE_URL', () => {
-            expect(GITHUB_LICENSE_URL).toContain(GITHUB_REPO_URL);
-            expect(GITHUB_LICENSE_URL).toContain('/LICENSE');
-        });
-
-        it('has correct GITHUB_DISCLAIMER_URL', () => {
-            expect(GITHUB_DISCLAIMER_URL).toContain(GITHUB_REPO_URL);
-            expect(GITHUB_DISCLAIMER_URL).toContain('/DISCLAIMER');
-        });
-
         it('has correct GOOGLE_TOS_URL', () => {
             expect(GOOGLE_TOS_URL).toBe('https://policies.google.com/terms');
         });
@@ -121,6 +98,10 @@ describe('Constants', () => {
 
         it('has correct GOOGLE_SIGNIN_URL', () => {
             expect(GOOGLE_SIGNIN_URL).toContain(GOOGLE_ACCOUNTS_URL);
+        });
+
+        it('continues GOOGLE_SIGNIN_URL to Gemini, which closes the auth window', () => {
+            expect(new URL(GOOGLE_SIGNIN_URL).searchParams.get('continue')).toBe(GEMINI_APP_URL);
         });
 
         it('has correct GEMINI_APP_URL', () => {

@@ -11,7 +11,10 @@ import type UpdateManager from '../updateManager';
 import type LlmManager from '../llmManager';
 import type NotificationManager from '../notificationManager';
 import type ExportManager from '../exportManager';
+import type AgentManager from '../agentManager';
 import type { Logger } from '../../types';
+import type { AgentEnginePreference, QuickChatRoutingMode } from '../../../shared/types/agent';
+import type { DesktopLookPreference } from '../../../shared/types/look';
 
 /**
  * User preferences structure for settings store.
@@ -46,6 +49,12 @@ export interface UserPreferences extends Record<string, unknown> {
     // Launch at startup settings
     launchAtStartup: boolean;
     startMinimized: boolean;
+    // Desktop look (see src/shared/types/look.ts)
+    desktopLook: DesktopLookPreference;
+    // Hybrid Quick Chat (see src/shared/types/agent.ts)
+    quickChatRoutingMode: QuickChatRoutingMode;
+    agentEngine: AgentEnginePreference;
+    agentModel: string;
 }
 
 /**
@@ -70,4 +79,6 @@ export interface IpcHandlerDependencies {
     notificationManager?: NotificationManager | null;
     /** Optional export manager for high-quality PDF/MD export */
     exportManager?: ExportManager | null;
+    /** Optional agent manager for the hybrid Quick Chat's local agent CLI */
+    agentManager?: AgentManager | null;
 }

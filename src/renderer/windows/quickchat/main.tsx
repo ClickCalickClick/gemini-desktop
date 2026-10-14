@@ -10,12 +10,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import QuickChatApp from '@/components/quickchat/QuickChatApp';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { LookProvider } from '@/context/LookContext';
 import '@/theme.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <ThemeProvider>
-            <QuickChatApp />
+            <LookProvider>
+                <QuickChatApp />
+            </LookProvider>
         </ThemeProvider>
     </React.StrictMode>
 );

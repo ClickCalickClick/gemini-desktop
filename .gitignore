@@ -50,3 +50,6 @@ prompts/
 .worktrees/
 .sisyphus/
 .cache/
+
+# Output of scripts/live-check.mjs
+live-check-*/

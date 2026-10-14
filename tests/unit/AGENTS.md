@@ -52,6 +52,10 @@ Use that guide when the change is primarily about multi-window synchronization, 
 - Watch mode: `npm run test:watch`
 - Coordinated tests: see `tests/coordinated/AGENTS.md`
 
+## Agent Engine Tests
+
+`tests/unit/main/agent/fakeCli.ts` installs a fake `agy` / `gemini` (a Node script) in a temporary bin folder and creates a temporary home and userData; `MODE:<name>` in the prompt picks its behaviour (text, partial lines, plan, auth error, hang, ...). `AgentManager` takes its home folder, userData, environment, search folders, `readVersion` and `trashItem` as constructor options, so its tests spawn the fake CLI for real without touching the user's files.
+
 ## Common Mistakes
 
 - Forgetting `vi.clearAllMocks()` in `beforeEach`

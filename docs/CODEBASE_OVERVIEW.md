@@ -65,6 +65,8 @@ Every feature below must keep working through the cleanup. The status is for pac
 | Smart Enter and scroll-to-bottom button                                                         | OK                                                | OK                                                                         | OK               | inline script in `mainWindow.ts`                                |
 | Linux sandbox fallback (`--no-sandbox` when user namespaces and SUID sandbox are unavailable)   | n/a                                               | OK                                                                         | n/a              | `sandboxDetector.ts`, `sandboxInit.ts`                          |
 
+Since then, the CachyOS test found that Gemini's own Sign in button cannot sign in on any platform (B14), and neither can a tab that a server redirect sends to Google's sign-in page while it loads. L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) opens both in the sign-in window. P1 (same PR) turns the three global hotkeys back on for Wayland on kernel 7+ (B1).
+
 Persisted state lives in the user-data folder: `user-preferences.json`, `tabs-state.json`, `update-settings.json`, `notification-settings.json` and `models/*.gguf`.
 Google cookies live in Chromium's default session; there is no `persist:` partition.
 
@@ -126,6 +128,8 @@ Local packaging results (Linux x64 container, 2026-10-13):
 | pacman   | Built, about 120 MB, once a homepage was passed in and `bsdtar` was installed.                                     |
 | All      | The native `usocket` rebuild needs to download Electron headers; GitHub runners can, the test container could not. |
 
+Since then, P1 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) leaves `usocket` out of the package and turns off electron-builder's native module rebuild, so packaging no longer downloads Electron headers.
+
 ### 5.3 CI and release (GitHub Actions)
 
 | Workflow             | Lines | Trigger                       | What it does                                                                                           |
@@ -153,6 +157,8 @@ The proposed replacement is one tag-driven `release.yml` (verify, then a Linux j
 
 ### 5.4 Updates
 
+Since then, L10 and L11 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) point the notify-only check at the fork's releases, and the notice on deb, rpm and pacman installs says to install the new package with the package manager.
+
 | Install type                         | How updates work today                                          | What fork users get                                        |
 | ------------------------------------ | --------------------------------------------------------------- | ---------------------------------------------------------- |
 | Windows installer                    | electron-updater, using `latest-x64.yml` or `latest-arm64.yml`  | Fork releases (the feed comes from the CI checkout).       |
@@ -166,7 +172,7 @@ The proposed replacement is one tag-driven `release.yml` (verify, then a Linux j
 
 ### 5.5 Building installers by hand
 
-Linux (Ubuntu or Debian build host; on Arch install `libarchive` and `rpm-tools` instead):
+Linux (Ubuntu or Debian build host; on Arch install `libarchive`, `rpm-tools` and `libxcrypt-compat` instead, because electron-builder's bundled fpm needs `libcrypt.so.1`):
 
 ```bash
 sudo apt-get install -y libarchive-tools rpm
@@ -176,7 +182,7 @@ npm run dist:linux
 # To build only the pacman package: npm run dist:linux -- -c.linux.target=pacman
 ```
 
-macOS on Apple Silicon (needs the Xcode command line tools for the native `usocket` build):
+macOS on Apple Silicon (`npm ci` tries to build the optional `usocket` module with the Xcode command line tools and carries on without it; the app never uses it):
 
 ```bash
 npm ci
@@ -192,6 +198,9 @@ Upstream CI cross-built the Intel version on Apple Silicon. That will stop worki
 - **Prefer the pacman package over the AppImage.** It installs `gemini-desktop.desktop` (which the global-shortcuts portal uses to identify the app), keeps the Chromium sandbox, and needs no FUSE. The AppImage needs `fuse2` and launches with `--no-sandbox` from its desktop entry.
 - **Wayland works natively.** Electron 38.2 and later use native Wayland by default, and Plasma's tray supports Electron's StatusNotifierItem.
 - **Kernel 7.x turns off global hotkeys and text prediction** (B1). Arch's `core/linux` was 7.2.9 on 2026-10-13.
+
+Since then, L15 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) builds the AppImage with electron-builder's type2 runtime (toolset `1.0.2`), which needs `fusermount3` from `fuse3` instead of `fuse2`. GNOME and KDE Plasma already install `fuse3` through `xdg-desktop-portal`. P1 (same PR) brings the global hotkeys back on kernel 7; text prediction waits on P3.
+The owner's CachyOS machine runs GNOME on Wayland, not KDE Plasma. GNOME shows tray icons only through the AppIndicator extension, which is enabled there.
 
 ## 6. Tests and current health
 
@@ -219,9 +228,13 @@ Problems with the suites:
 - Every IPC handler is tested twice, once in unit tests and once in `tests/coordinated/ipc/`. Coverage gates of 97-98% have produced `*.coverage.test.tsx` files that exist only to hit lines.
 - Integration specs contain 44 `browser.pause()` calls even though the docs forbid fixed waits.
 
+Since then, [TEST_COVERAGE.md](TEST_COVERAGE.md) maps every feature to the tests that exercise it, and TODO items T1 to T4 plan a harness that tries every feature.
+
 ## 7. Known bugs and risks
 
 IDs are referenced from [TODO.md](../TODO.md).
+
+Since then, the CachyOS test found B14 to B16. L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) fixes B14 and the first part of B13: the native "Sign in" menu item reloads after the window closes. L20 (same PR) fixes B15. P1 (same PR) fixes B1 for the global hotkeys: dbus-next connects through Node's `net` module, `usocket` is left out of the package, and the kernel guard covers only node-llama-cpp. L21 (same PR) fixes B16.
 
 | ID  | Severity | Issue                                                                                                                                                                                                                                                                                                                                                        | Evidence                                                                               |
 | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
@@ -238,10 +251,15 @@ IDs are referenced from [TODO.md](../TODO.md).
 | B11 | Medium   | Local prediction prompts and completions are written to the main-process log.                                                                                                                                                                                                                                                                                | `llmManager.ts:651-668`                                                                |
 | B12 | Low      | Orphaned E2E specs and vacuous release checks (see section 6).                                                                                                                                                                                                                                                                                               | `scripts/run-e2e-sequential.cjs`, `config/wdio/`                                       |
 | B13 | Low      | Smaller defects: the native "Sign in" menu reloads before the window closes; menu labels show the wrong shortcuts; the README says Ctrl+P for PDF (the binding is Ctrl/Cmd+Shift+P); Quick Chat can show a stale prediction; tab titles are polled every 3 s even when hidden; settings writes are not atomic and a corrupt file silently resets everything. | `menuManager.ts:311-318`, `useMenuDefinitions.ts:198`, `README.md`, `store.ts:104-160` |
+| B14 | High     | Gemini's own Sign in button shows Google's 401 "malformed request" page. The button navigates the Gemini iframe to `accounts.google.com`, and Google refuses its sign-in pages inside an iframe (`Sec-Fetch-Dest: iframe`). Only File > Sign in to Google opens a separate window.                                                                           | `mainWindow.ts:214-255`, `security.ts:28`                                              |
+| B15 | Medium   | Quitting at logout crashes the app on Linux. A logout, a shutdown or `pkill` sends SIGTERM to all of the app's processes; the zygotes die too, so Chromium cannot start a new GPU process and ends the app with "GPU process isn't usable" (SIGTRAP; on CachyOS it then hung until SIGKILL). The app's own SIGTERM handler never runs: Electron replaces it. | `main.ts:481-496,536-545`, `mainWindow.ts:174-185`, electron/electron#54547            |
+| B16 | Medium   | Sending a Quick Chat on GNOME Wayland leaves the main window behind other apps: the question reaches Gemini, but GNOME refuses the app's request to raise a window that is already open.                                                                                                                                                                     | `windowManager.ts` (`focusMainWindow`), Chromium's `WaylandToplevelWindow::Activate`   |
 
 ## 8. Upstream references to change
 
 `grep -rniE "bwendell|benwendell|wendell"` matches 25 files outside `package-lock.json`.
+
+Since then, L1, L10 and L12 ([#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1), [#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) changed `package.json`, the app's repository constants, `dev-app-update.yml`, the tests that asserted upstream values, `README.md`, `docs/SECURITY.md`, and the issue links in `docs/CONTRIBUTING.md` and `docs/PRIVACY.md`. `docs/TRANSPARENCY.md` and upstream's GitHub Pages files are left for S6.
 
 | Where                                                                                            | What it does in the fork                                                                                                                                                                          |
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

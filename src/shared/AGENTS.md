@@ -8,10 +8,15 @@ It holds the contracts that keep those boundaries synchronized: IPC channel name
 Primary files and folders:
 
 - `src/shared/constants/ipc-channels.ts` — canonical IPC channel names
+- `src/shared/constants/urls.ts` — the fork's GitHub repository and every link derived from it (release notes, issues, License, Disclaimer, the notify-only update check)
+- `src/shared/constants/looks.ts` — the one list of desktop looks (`DESKTOP_LOOKS`), their display names (`DESKTOP_LOOK_NAMES`) and the `isDesktopLook`/`isDesktopLookPreference` guards; the main process detection, `LookContext` and the Options look selector all derive from it. The `DesktopLook` union itself stays in `src/shared/types/look.ts`; keep both in step
 - `src/shared/types/ipc.ts` — typed preload/renderer contract (`ElectronAPI`)
 - `src/shared/types/tabs.ts` — shared tab state and payload shapes
+- `src/shared/types/hotkeys.ts` — hotkey ids, accelerators and `PlatformHotkeyStatus`; while its `registrationPending` is true the desktop is still asking the user to approve the shortcuts, and the main process sends the final status on `PLATFORM_HOTKEY_STATUS_CHANGED`; `COPILOT_KEY_ACCELERATOR` (`Shift+Super+F23`) is the Options preset for Copilot keys
 - `src/shared/types/` — cross-boundary payloads and state types
+- `src/shared/types/agent.ts` — hybrid Quick Chat contract: routes, `RouteDecision`, agent settings and status, run requests and `AgentRunEvent`s, file plans
 - `src/shared/utils/` — shared pure helpers safe to reuse across boundaries
+- `src/shared/utils/quickChatRouter.ts` — `routePrompt(text, { mode, agentAvailable })` decides whether a Quick Chat prompt goes to the Gemini tab or the local agent, with a short reason. Order: prefix (`@web`, `@gemini`, `@agent`, `@cli`, `@local`, `/web`, `/agent`, stripped from `prompt`), then the routing mode, then the auto rules (paths and quoted file names, web cues such as images, video, Deep Research, Canvas, Gems, web search, news and weather, bare file names (stem of two or more characters, never URLs, hosts, abbreviations such as "D.C." or libraries such as "Alpine.js"), well-known folders, local code that needs an anchor such as "my project" or "this repo", system topics only with a local anchor such as "my laptop", "this machine" or "do I have", else "general question"). With `followUp: true` (an agent conversation is open) auto mode sends prompts without a prefix or web cue to the agent with the reason "follow-up to the agent". An agent route without an installed agent falls back to web unless a prefix forced it. `forceRoute` serves the chip toggle and Ctrl+Enter, `describeRoute` the chip label. The heuristics are exported; `tests/unit/shared/quickChatRouter.test.ts` holds the table of prompts, so add a row there when you change a rule
 
 ## Contract Rules
 
@@ -38,6 +43,7 @@ For architecture context, read [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md
 
 - Changing a shared contract without updating preload and main in the same change
 - Hardcoding channel strings outside `src/shared/constants/ipc-channels.ts`
+- Writing a GitHub repository URL anywhere but `src/shared/constants/urls.ts` (`tests/unit/shared/urls.test.ts` fails)
 - Adding boundary-specific behavior to shared utilities instead of keeping them pure and reusable
 - Renaming payload fields without updating the renderer and tests that consume them
 

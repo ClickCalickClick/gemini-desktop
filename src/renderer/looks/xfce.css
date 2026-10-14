@@ -1,0 +1,84 @@
+/**
+ * Xfce look (Greybird, the theme most Xfce distributions ship).
+ *
+ * Grey gradient titlebar, compact 28px height, small square-ish window controls on the right
+ * with a red close on hover, 4px radii, Noto Sans / DejaVu Sans and Greybird's blue (#398ee7).
+ */
+
+:root[data-look='xfce'] {
+    --look-font: 'Noto Sans', 'DejaVu Sans', 'Liberation Sans', 'Segoe UI', sans-serif;
+    --look-accent: #398ee7;
+    --look-accent-fg: #ffffff;
+    --look-radius-card: 4px;
+    --look-radius-button: 3px;
+    --look-title-size: 13px;
+    --look-title-weight: 700;
+    --look-heading-transform: none;
+    --look-heading-size: 13px;
+    --look-heading-weight: 700;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 22px;
+    --look-control-height: 20px;
+    --look-control-radius: 3px;
+    --look-control-gap: 2px;
+    --look-controls-padding: 4px;
+    --look-control-bg: transparent;
+    --look-control-hover-bg: rgba(255, 255, 255, 0.12);
+    --look-close-hover-bg: #cc3b3b;
+    --look-close-hover-fg: #ffffff;
+
+    /* Greybird-dark */
+    --bg-primary: #333638;
+    --bg-secondary: #2a2d2f;
+    --bg-tertiary: #4a4e51;
+    --text-primary: #eeeeec;
+    --text-secondary: #a9adb0;
+    --border-color: #4a4e51;
+    --hover-bg: rgba(255, 255, 255, 0.08);
+    --titlebar-bg: #2b2e30;
+    --titlebar-text: #eeeeec;
+    --titlebar-height: 28px;
+    --look-titlebar-border: #1e2022;
+    --look-tabbar-bg: #2f3234;
+    --look-switch-off-bg: #4a4e51;
+    --look-titlebar-gradient: linear-gradient(to bottom, #383c3e, #2b2e30);
+
+    --look-qc-bg: #333638;
+    --look-qc-border: #1e2022;
+    --look-qc-radius: 4px;
+    --look-qc-backdrop: none;
+    --look-qc-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-look='xfce'][data-theme='light'] {
+    /* Greybird */
+    --bg-primary: #ebebeb;
+    --bg-secondary: #fcfcfc;
+    --bg-tertiary: #c4c4c4;
+    --text-primary: #3c3c3c;
+    --text-secondary: #636363;
+    --border-color: #c4c4c4;
+    --hover-bg: rgba(0, 0, 0, 0.06);
+    --titlebar-bg: #d6d6d6;
+    --titlebar-text: #3c3c3c;
+    --look-titlebar-border: #b4b4b4;
+    --look-tabbar-bg: #e0e0e0;
+    --look-switch-off-bg: #c4c4c4;
+    --look-titlebar-gradient: linear-gradient(to bottom, #e9e9e9, #d4d4d4);
+    --look-control-hover-bg: rgba(0, 0, 0, 0.1);
+
+    --look-qc-bg: #f2f2f2;
+    --look-qc-border: #b4b4b4;
+    --look-qc-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+:root[data-look='xfce'] .titlebar,
+:root[data-look='xfce'] .options-titlebar {
+    background: var(--look-titlebar-gradient);
+}
+
+:root[data-look='xfce'] .tab--active {
+    background: var(--bg-primary);
+    border-bottom-color: var(--accent-color);
+}

@@ -1,11 +1,13 @@
 import { contextBridge } from 'electron';
 
 import type { ElectronAPI } from '../shared/types';
+import { agentAPI } from './api/agent';
 import { alwaysOnTopAPI } from './api/alwaysOnTop';
 import { devTestingAPI } from './api/devTesting';
 import { exportAPI } from './api/export';
 import { geminiAPI } from './api/gemini';
 import { hotkeysAPI } from './api/hotkeys';
+import { lookAPI } from './api/look';
 import { notificationsAPI } from './api/notifications';
 import { platformAPI } from './api/platform';
 import { quickChatAPI } from './api/quickChat';
@@ -37,6 +39,8 @@ const electronAPI: ElectronAPI = {
     ...startupAPI,
     ...exportAPI,
     ...smartEnterAPI,
+    ...lookAPI,
+    ...agentAPI,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

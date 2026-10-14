@@ -59,38 +59,15 @@ export function getBaseWebPreferences(): BrowserWindowConstructorOptions['webPre
 }
 
 /**
- * Default URL for Google sign-in.
+ * Google accounts origin. Sign-in opens GOOGLE_SIGNIN_URL, below.
  */
 export const GOOGLE_ACCOUNTS_URL = 'https://accounts.google.com' as const;
-
-/**
- * Full URL for Google sign-in page.
- */
-export const GOOGLE_SIGNIN_URL = `${GOOGLE_ACCOUNTS_URL}/signin` as const;
 
 // =========================================================================
 // External URLs
 // =========================================================================
 
-/**
- * GitHub repository base URL.
- */
-export const GITHUB_REPO_URL = 'https://github.com/bwendell/gemini-desktop' as const;
-
-/**
- * GitHub issues URL for bug reports.
- */
-export const GITHUB_ISSUES_URL = `${GITHUB_REPO_URL}/issues` as const;
-
-/**
- * GitHub license file URL.
- */
-export const GITHUB_LICENSE_URL = `${GITHUB_REPO_URL}/blob/main/LICENSE` as const;
-
-/**
- * GitHub disclaimer file URL.
- */
-export const GITHUB_DISCLAIMER_URL = `${GITHUB_REPO_URL}/blob/main/DISCLAIMER.md` as const;
+// The GitHub repository URLs live in src/shared/constants/urls.ts.
 
 /**
  * Google Terms of Service URL.
@@ -106,6 +83,12 @@ export const GOOGLE_GENAI_TERMS_URL = 'https://policies.google.com/terms/generat
  * Main Gemini application URL.
  */
 export const GEMINI_APP_URL = 'https://gemini.google.com/app' as const;
+
+/**
+ * Google sign-in page that continues to Gemini, so the auth window closes itself once the user
+ * has signed in.
+ */
+export const GOOGLE_SIGNIN_URL = `${GOOGLE_ACCOUNTS_URL}/ServiceLogin?continue=${encodeURIComponent(GEMINI_APP_URL)}`;
 
 /**
  * AI Studio domain (for checking URL).
@@ -257,6 +240,9 @@ export const OPTIONS_WINDOW_CONFIG: BrowserWindowConstructorOptions = {
  */
 export const QUICK_CHAT_WIDTH = 600;
 export const QUICK_CHAT_HEIGHT = 80;
+/** Smallest and largest height Quick Chat resizes to for its content (CSS pixels). */
+export const QUICK_CHAT_MIN_HEIGHT = 64;
+export const QUICK_CHAT_MAX_HEIGHT = 640;
 
 export const QUICK_CHAT_WINDOW_CONFIG: BrowserWindowConstructorOptions = {
     width: QUICK_CHAT_WIDTH,
@@ -370,6 +356,7 @@ export interface TrayMenuItem {
  */
 export const TRAY_MENU_ITEMS: Record<string, TrayMenuItem> = {
     SHOW: { label: 'Show Gemini Desktop', id: 'show' },
+    QUICK_CHAT: { label: 'Quick Chat', id: 'quickChat' },
     SEPARATOR: { label: '', id: 'separator', isSeparator: true },
     QUIT: { label: 'Quit', id: 'quit' },
 };

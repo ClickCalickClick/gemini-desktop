@@ -1,16 +1,15 @@
 # Gemini Desktop — Native, Private AI Experience
 
-> [!IMPORTANT]
-> **Project status: on hiatus — not actively maintained** (July 2026). The app continues to work and all [releases](https://github.com/bwendell/gemini-desktop/releases) remain available, but issues and PRs may go unanswered and no new development is planned for now. Details in the [status announcement](https://github.com/bwendell/gemini-desktop/issues/389) — maintainer volunteers welcome.
+> [!NOTE]
+> This is a maintained fork of [bwendell/gemini-desktop](https://github.com/bwendell/gemini-desktop), which its author, Ben Wendell, put [on hiatus](https://github.com/bwendell/gemini-desktop/issues/389) in July 2026. The fork keeps every feature and builds its installers with GitHub Actions. It puts CachyOS and other Arch-based Linux first, then macOS, and Windows keeps building. The plan is in [TODO.md](TODO.md).
 
 <div align="center">
 
-[![Project Status: Inactive](https://www.repostatus.org/badges/latest/inactive.svg)](https://www.repostatus.org/#inactive)
-[![GitHub release](https://img.shields.io/github/v/release/bwendell/gemini-desktop?style=flat-square)](https://github.com/bwendell/gemini-desktop/releases)
-[![GitHub last commit](https://img.shields.io/github/last-commit/bwendell/gemini-desktop?style=flat-square)](https://github.com/bwendell/gemini-desktop/commits/main)
-[![Platform](<https://img.shields.io/badge/platform-Windows%20(x64%2C%20ARM64)%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square>)](https://github.com/bwendell/gemini-desktop/releases)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/bwendell/gemini-desktop/badge)](https://securityscorecards.dev/viewer/?uri=github.com/bwendell/gemini-desktop)
-[![CodeQL](https://img.shields.io/badge/CodeQL-enabled-brightgreen?logo=github)](https://github.com/bwendell/gemini-desktop/security/code-scanning)
+[![GitHub release](https://img.shields.io/github/v/release/ClickCalickClick/gemini-desktop?style=flat-square)](https://github.com/ClickCalickClick/gemini-desktop/releases)
+[![CI](https://github.com/ClickCalickClick/gemini-desktop/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ClickCalickClick/gemini-desktop/actions/workflows/ci.yml)
+[![GitHub last commit](https://img.shields.io/github/last-commit/ClickCalickClick/gemini-desktop?style=flat-square)](https://github.com/ClickCalickClick/gemini-desktop/commits/main)
+[![Platform](<https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20(x64%2C%20ARM64)-lightgrey?style=flat-square>)](#-installation)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/ClickCalickClick/gemini-desktop/badge)](https://securityscorecards.dev/viewer/?uri=github.com/ClickCalickClick/gemini-desktop)
 
 </div>
 
@@ -49,41 +48,71 @@
 
 ## 📥 Installation
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/bwendell/gemini-desktop/releases).
+Download the latest release from [GitHub Releases](https://github.com/ClickCalickClick/gemini-desktop/releases). In the file names below, `<version>` is the release number, for example `0.13.0`. Each release also lists SHA-256 checksums in `checksums-*.txt`.
 
-### Windows
+**Updates.** The AppImage and the Windows installers update themselves. The pacman, deb, rpm and tar.gz builds tell you when a new version is out; download the new package and install it the same way. A build of upstream's Gemini Desktop only looks for upstream's updates, so install this fork's build by hand once.
 
-- **Windows (x64):** `Gemini-Desktop-x.x.x-x64-installer.exe`
-- **Windows (ARM64):** `Gemini-Desktop-x.x.x-arm64-installer.exe`
+### Linux (x64)
+
+| Package  | File                                       | For                                        |
+| -------- | ------------------------------------------ | ------------------------------------------ |
+| pacman   | `Gemini-Desktop-<version>-x64.pacman`      | CachyOS, Arch Linux and Arch-based systems |
+| AppImage | `Gemini-Desktop-<version>-x86_64.AppImage` | Any distribution, without installing       |
+| deb      | `Gemini-Desktop-<version>-amd64.deb`       | Debian, Ubuntu and their derivatives       |
+| rpm      | `Gemini-Desktop-<version>-x86_64.rpm`      | Fedora, openSUSE                           |
+| tar.gz   | `Gemini-Desktop-<version>-x64.tar.gz`      | Unpack and run `gemini-desktop`            |
+
+**CachyOS and Arch Linux.** The pacman package is the best fit: it adds the app to the launcher, keeps Chromium's sandbox and needs no FUSE. pacman installs its dependencies from the Arch repositories.
+
+```bash
+sudo pacman -U ./Gemini-Desktop-<version>-x64.pacman
+# To remove it:
+sudo pacman -R gemini-desktop
+```
+
+**AppImage.** It needs FUSE 3, which most desktops already have. If it does not start, install it with `sudo pacman -S fuse3` on Arch-based systems or `sudo apt install fuse3` on Debian and Ubuntu.
+
+```bash
+chmod +x Gemini-Desktop-<version>-x86_64.AppImage
+./Gemini-Desktop-<version>-x86_64.AppImage
+```
+
+**Debian, Ubuntu and Fedora.**
+
+```bash
+# Debian and Ubuntu
+sudo apt install ./Gemini-Desktop-<version>-amd64.deb
+# Fedora
+sudo dnf install ./Gemini-Desktop-<version>-x86_64.rpm
+```
 
 ### macOS
 
-- **Apple Silicon (M1/M2/M3)**: `Gemini-Desktop-x.x.x-arm64.dmg`
-- **Intel**: `Gemini-Desktop-x.x.x-x64.dmg`
-
-> ⚠️ The app is not code-signed yet. On first launch, remove quarantine:
->
-> ```bash
-> xattr -rd com.apple.quarantine "/Applications/Gemini Desktop.app"
-> ```
-
-### Linux
-
-- **AppImage**: `Gemini-Desktop-x.x.x-x64.AppImage`
-- **Debian/Ubuntu**: `Gemini-Desktop-x.x.x-x64.deb`
+GitHub Actions does not build macOS yet ([TODO item M2](TODO.md#phase-3-macos-installers-from-github-actions-later)), so build it on your Mac with Node.js 24 and the Xcode command line tools:
 
 ```bash
-# AppImage
-chmod +x "Gemini-Desktop-x.x.x-x64.AppImage"
-./"Gemini-Desktop-x.x.x-x64.AppImage"
-
-# Debian/Ubuntu
-sudo dpkg -i "Gemini-Desktop-x.x.x-x64.deb"
+git clone https://github.com/ClickCalickClick/gemini-desktop.git
+cd gemini-desktop
+npm ci
+npm run dist:mac-arm64 # Apple Silicon; on an Intel Mac, npm run dist:mac-x64
 ```
+
+Then open `release/Gemini-Desktop-<version>-arm64.dmg` (or `-x64.dmg`) and drag the app to Applications. The app is not code-signed; if macOS refuses to open it, remove the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Gemini Desktop.app"
+```
+
+### Windows
+
+- **x64:** `Gemini-Desktop-<version>-x64-installer.exe`
+- **ARM64:** `Gemini-Desktop-<version>-arm64-installer.exe`
+
+The installers are not code-signed, so SmartScreen may warn the first time: choose **More info**, then **Run anyway**.
 
 ## 🔒 Privacy & Security
 
-Gemini Desktop has **no telemetry** and only connects to Google domains for Gemini access.
+Gemini Desktop has **no telemetry**. It connects to Google for Gemini and sign-in, to GitHub to check for and download updates, and to Hugging Face only to download the model if you turn on text prediction.
 Authentication is handled by Google, and sessions are stored using Chromium's standard local mechanisms.
 For full details, read the [Transparency Report](docs/TRANSPARENCY.md), [Privacy Policy](docs/PRIVACY.md), and [Security Policy](docs/SECURITY.md).
 
@@ -91,17 +120,22 @@ For full details, read the [Transparency Report](docs/TRANSPARENCY.md), [Privacy
 
 - `Ctrl+Shift+Alt+Space` (`Cmd+Shift+Alt+Space` on macOS) — Toggle Quick Chat
 - `Ctrl+Shift+Space` (`Cmd+Shift+Space` on macOS) — Peek and Hide (toggle app visibility)
-- `Ctrl+P` (`Cmd+P` on macOS) — Print current page to PDF
+- `Ctrl+Shift+P` (`Cmd+Shift+P` on macOS) — Print current page to PDF
 
 > 💡 You can customize hotkeys in Settings.
 
+On Linux with Wayland, GNOME and KDE Plasma ask once whether to allow the global shortcuts. From then on the desktop's own settings decide their keys.
+
 ## 🗺️ What's Next
 
-- Continue improving desktop-native quality and reliability across Windows, macOS, and Linux.
-- Expand productivity workflows around Quick Chat, startup behavior, and window controls.
-- Keep strengthening test quality and release confidence for faster, safer updates.
+The fork's plan, in order, is in [TODO.md](TODO.md):
 
-See detailed shipped history and planning in [docs/ROADMAP.md](docs/ROADMAP.md).
+1. Linux installers built and tested by GitHub Actions.
+2. Bring back the features that are off on CachyOS and macOS, such as text prediction in installed builds.
+3. macOS installers built by GitHub Actions.
+4. Simplify the code and tests while keeping every feature.
+
+Upstream's shipped history is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## 🤝 Contributing
 
@@ -115,4 +149,4 @@ Use this software at your own risk; it is provided "as is" without any warranty.
 
 ## 📄 License
 
-[MIT](LICENSE) © [Ben Wendell](https://github.com/bwendell)
+[MIT](LICENSE) © [Ben Wendell](https://github.com/bwendell). This fork is maintained by [ClickCalickClick](https://github.com/ClickCalickClick) under the same license.

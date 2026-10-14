@@ -351,6 +351,61 @@ describe('LinuxWaylandAdapter', () => {
         });
     });
 
+    describe('bringToFront()', () => {
+        const createWindow = (state: { visible: boolean; focused: boolean; minimized?: boolean }) =>
+            ({
+                isVisible: vi.fn().mockReturnValue(state.visible),
+                isFocused: vi.fn().mockReturnValue(state.focused),
+                isMinimized: vi.fn().mockReturnValue(state.minimized ?? false),
+                restore: vi.fn(),
+                hide: vi.fn(),
+                show: vi.fn(),
+                focus: vi.fn(),
+            }) as unknown as Electron.BrowserWindow;
+
+        it('shows a window that is open behind other apps again, so GNOME puts it in front', () => {
+            const mockWindow = createWindow({ visible: true, focused: false });
+
+            adapter.bringToFront(mockWindow);
+
+            expect(mockWindow.hide).toHaveBeenCalled();
+            expect(vi.mocked(mockWindow.hide).mock.invocationCallOrder[0]).toBeLessThan(
+                vi.mocked(mockWindow.show).mock.invocationCallOrder[0]!
+            );
+            expect(mockWindow.focus).toHaveBeenCalled();
+            expect(mockWindow.restore).not.toHaveBeenCalled();
+        });
+
+        it('restores a minimized window before showing it again', () => {
+            const mockWindow = createWindow({ visible: true, focused: false, minimized: true });
+
+            adapter.bringToFront(mockWindow);
+
+            expect(mockWindow.restore).toHaveBeenCalled();
+            expect(mockWindow.hide).toHaveBeenCalled();
+            expect(mockWindow.show).toHaveBeenCalled();
+        });
+
+        it('only shows and focuses a hidden window', () => {
+            const mockWindow = createWindow({ visible: false, focused: false });
+
+            adapter.bringToFront(mockWindow);
+
+            expect(mockWindow.hide).not.toHaveBeenCalled();
+            expect(mockWindow.show).toHaveBeenCalled();
+            expect(mockWindow.focus).toHaveBeenCalled();
+        });
+
+        it('leaves a focused window open', () => {
+            const mockWindow = createWindow({ visible: true, focused: true });
+
+            adapter.bringToFront(mockWindow);
+
+            expect(mockWindow.hide).not.toHaveBeenCalled();
+            expect(mockWindow.focus).toHaveBeenCalled();
+        });
+    });
+
     describe('shouldIncludeAppMenu()', () => {
         it('should return false', () => {
             expect(adapter.shouldIncludeAppMenu()).toBe(false);
@@ -651,6 +706,24 @@ describe('LinuxX11Adapter', () => {
             expect(mockWindow.show).toHaveBeenCalled();
             expect(mockWindow.focus).toHaveBeenCalled();
             expect(mockWindow.setSkipTaskbar).toHaveBeenCalledWith(false);
+        });
+    });
+
+    describe('bringToFront()', () => {
+        it('shows and focuses the window without hiding it', () => {
+            const mockWindow = {
+                isVisible: vi.fn().mockReturnValue(true),
+                isFocused: vi.fn().mockReturnValue(false),
+                hide: vi.fn(),
+                show: vi.fn(),
+                focus: vi.fn(),
+            } as unknown as Electron.BrowserWindow;
+
+            adapter.bringToFront(mockWindow);
+
+            expect(mockWindow.hide).not.toHaveBeenCalled();
+            expect(mockWindow.show).toHaveBeenCalled();
+            expect(mockWindow.focus).toHaveBeenCalled();
         });
     });
 

@@ -7,7 +7,11 @@
  * Titlebar colors follow industry best practices:
  * - Dark mode: Slightly lighter than main background for subtle contrast
  * - Light mode: Slightly darker than main background for subtle contrast
+ *
+ * Desktop looks (GNOME, KDE Plasma, macOS, ...) override these variables per
+ * data-look attribute; see looks/index.css.
  */
+@import './looks/index.css';
 
 /* Default (Dark Mode) */
 :root {

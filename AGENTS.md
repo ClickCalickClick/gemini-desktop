@@ -8,7 +8,7 @@ This repository is [ClickCalickClick/gemini-desktop](https://github.com/ClickCal
 
 - **Read [TODO.md](TODO.md) before starting work.** It holds the plan, the current focus and the owner's decisions. Update it in the same PR as the work: tick the item, link the PR and add a Done log line.
 - **[docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md)** maps every feature, the known bugs (B1, B2, ...), the build and release setup, and the maintenance hotspots.
-- Primary platforms are CachyOS (Arch-based, KDE Plasma on Wayland) and macOS. Windows must keep building, and no feature may be dropped without the owner's OK.
+- Primary platforms are CachyOS (Arch-based, Wayland; the owner's machine runs GNOME) and macOS. Windows must keep building, and no feature may be dropped without the owner's OK.
 - Some statements in this file and in `docs/ARCHITECTURE.md` are out of date, for example the `persist:gemini` partition and "Google-only connections". Trust the code and [section 9 of the overview](docs/CODEBASE_OVERVIEW.md#9-docs-that-are-wrong-today) until TODO item S6 fixes them.
 
 ## 🛠 Build, Lint, and Test Commands
@@ -19,11 +19,12 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 
 - `npm install` - Install dependencies
 - If you create a new git worktree, run `npm install` inside that worktree before any `npm run` command. Each worktree has its own `node_modules`, and Electron binaries will be missing until install completes.
+- `allowScripts` in `package.json` lists the dependencies whose install scripts npm may run, such as Electron's binary download. npm 11.19 and later warn about any other dependency with an install script; add one with `npm install-scripts approve <name> --no-allow-scripts-pin`.
 - `npm run electron:dev` - Start the app in development mode
 - `npm run build` - Full build (TypeScript + Vite)
 - `npm run clean` - Clean build artifacts
 - `npm run dist:win` auto-builds `dist/` and `dist-electron/` if missing before packaging the default Windows x64 installer.
-- `npm run dist:linux`, `npm run dist:mac-x64` and `npm run dist:mac-arm64` always rebuild `dist/` and `dist-electron/` before packaging. `dist:linux` builds AppImage, deb, rpm, pacman and tar.gz (x64); on a Debian or Ubuntu build host the pacman target needs `bsdtar` (`libarchive-tools`) and the rpm target needs `rpmbuild` (`rpm`).
+- `npm run dist:linux`, `npm run dist:mac-x64` and `npm run dist:mac-arm64` always rebuild `dist/` and `dist-electron/` before packaging. `dist:linux` builds AppImage, deb, rpm, pacman and tar.gz (x64); on a Debian or Ubuntu build host the pacman target needs `bsdtar` (`libarchive-tools`) and the rpm target needs `rpmbuild` (`rpm`). On an Arch-based host such as CachyOS, install `libarchive`, `rpm-tools` and `libxcrypt-compat`: electron-builder's bundled fpm, which builds the deb, rpm and pacman packages, needs `libcrypt.so.1`.
 
 ### Linting & Formatting
 
@@ -44,6 +45,7 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 - **Vitest:** `npx vitest tests/unit/shared/hotkeys.test.ts` (or any path)
 - **WDIO (E2E):** `npm run test:e2e:spec -- --spec=tests/e2e/auth.spec.ts`
 - **WDIO (Integration):** `npm run test:integration -- --spec=tests/integration/your-test.integration.test.ts`
+- **Live check (the real app, no install):** `node scripts/live-check.mjs --launch release/linux-unpacked/gemini-desktop --copy-profile ~/.config/gemini-desktop --reload --sign-in` drives the built app over the DevTools protocol, records every page load and saves screenshots. It ends by stopping the app with SIGTERM and fails if the app does not quit cleanly; `--stop-all` sends the signal to every app process, as a logout does. `--help` lists the options.
 
 **Headless ARM Linux Notes:**
 
@@ -54,7 +56,7 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 ### CI and Releases (GitHub Actions)
 
 - Node.js comes from `.nvmrc` (24) in every workflow; `engines` in `package.json` allows 22.12 or later.
-- `ci.yml` runs on pushes and pull requests to `main`: lint, both builds, the three Vitest suites, and the Linux packages through `.github/actions/linux-packages` (`npm run dist:linux`, `npm run test:e2e:release`, then `scripts/release/check-arch-install.sh` installs the pacman package in an Arch Linux container). It keeps the AppImage and pacman package as 7-day artifacts.
+- `ci.yml` runs on pushes and pull requests to `main`: lint, both builds, the three Vitest suites, and the Linux packages through `.github/actions/linux-packages` (`npm run dist:linux`, `npm run test:e2e:release`, then `scripts/release/check-arch-install.sh` installs the pacman package in an Arch Linux container and checks the desktop entries, including the Quick Chat action and launcher). It keeps the AppImage and pacman package as 7-day artifacts.
 - `release.yml` runs on `v*` tags: it checks the tag against the `package.json` version, builds Linux and Windows (x64 and arm64) installers, and creates or updates a **draft** GitHub release. Run it by hand without a tag to build a branch without releasing. macOS is built by hand until TODO item M2.
 - `test.yml` (with `_build.yml` and `_test.yml`) is the full cross-platform E2E matrix and only runs by hand.
 - `tests/unit/main/releaseWorkflow.test.ts` reads the workflow files and pins the release contract: draft-only publishing, the uploaded file names and update feeds, SHA-pinned actions and `.nvmrc`.
@@ -230,6 +232,7 @@ If you are an AI assistant (like GitHub Copilot, Cursor, Windsurf, or a custom a
 
 - **Gemini Web App:** The app embeds `https://gemini.google.com/app` in an iframe after stripping `X-Frame-Options` headers.
 - **Quick Chat:** Spotlight-style floating window activated by global hotkey (`Ctrl+Shift+Alt+Space`) for quick prompts.
+- **Quick Chat launchers (H7):** `gemini-desktop --quick-chat` opens Quick Chat (in the running app through `second-instance`, otherwise the app starts hidden and shows it). On Linux the main desktop entry has a "Quick Chat" action, the deb, rpm and pacman packages also install `/usr/share/applications/gemini-desktop-quick-chat.desktop` (from `build/linux/`, through each target's `fpm` option, which electron-builder does not accept under `linux`), and an AppImage writes that launcher to `~/.local/share/applications` at runtime (tar.gz and `release/linux-unpacked` runs do not; `GEMINI_DESKTOP_NO_LAUNCHER=1` turns it off, and the WDIO configs and the live check set it). Quick Chat is brought forward through `PlatformAdapter.bringToFront()`, so GNOME Wayland focuses it like the main window (L21). The tray menu has a Quick Chat item, and Options offers "Use Copilot key" (`Shift+Super+F23`) for the Quick Chat shortcut.
 - **Peek and Hide:** Instantly hide app to system tray via hotkey (`Ctrl+Shift+Space`).
 - **Session Persistence:** Google auth sessions stored in Chromium's encrypted cookie storage via `persist:gemini` partition.
 

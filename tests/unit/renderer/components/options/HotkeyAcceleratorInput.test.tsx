@@ -309,6 +309,59 @@ describe('HotkeyAcceleratorInput', () => {
         });
     });
 
+    describe('Copilot key and other special keys', () => {
+        async function startRecording() {
+            const input = screen.getByRole('button', { name: /keyboard shortcut/i });
+            fireEvent.click(input);
+            await waitFor(() => {
+                expect(screen.getByText('Press keys...')).toBeInTheDocument();
+            });
+            return input;
+        }
+
+        it.each(['linux', 'win32'] as const)('records the Copilot key (Shift+Meta+F23) on %s', async (platform) => {
+            setupMockElectronAPI({ platform });
+            render(<HotkeyAcceleratorInput {...defaultProps} hotkeyId="quickChat" />);
+            const input = await startRecording();
+
+            // The keys arrive one by one: Shift, then Meta, then F23 with both held
+            fireEvent.keyDown(input, { key: 'Shift', code: 'ShiftLeft', shiftKey: true });
+            fireEvent.keyDown(input, { key: 'Meta', code: 'MetaLeft', shiftKey: true, metaKey: true });
+            expect(mockOnChange).not.toHaveBeenCalled();
+            fireEvent.keyDown(input, { key: 'F23', code: 'F23', shiftKey: true, metaKey: true });
+
+            expect(mockOnChange).toHaveBeenCalledWith('quickChat', 'Shift+Super+F23');
+            expect(screen.queryByText('Press keys...')).not.toBeInTheDocument();
+        });
+
+        it('displays a Super chord with a Super keycap on Linux', () => {
+            setupMockElectronAPI({ platform: 'linux' });
+            render(<HotkeyAcceleratorInput {...defaultProps} currentAccelerator="Shift+Super+F23" />);
+
+            expect(screen.getByText('Super')).toBeInTheDocument();
+            expect(screen.getByText('F23')).toBeInTheDocument();
+        });
+
+        it('shows a message instead of saving a key the app cannot use', async () => {
+            setupMockElectronAPI({ platform: 'linux' });
+            render(<HotkeyAcceleratorInput {...defaultProps} hotkeyId="quickChat" />);
+            const input = await startRecording();
+
+            fireEvent.keyDown(input, { key: 'Unidentified', code: '', shiftKey: true, metaKey: true });
+
+            expect(mockOnChange).not.toHaveBeenCalled();
+            expect(screen.getByText('Press keys...')).toBeInTheDocument();
+            const message = screen.getByTestId('hotkey-recorder-message-quickChat');
+            expect(message).toHaveTextContent('Unidentified');
+            expect(message).toHaveTextContent('Use Copilot key');
+
+            // A key that works afterwards clears the message
+            fireEvent.keyDown(input, { key: 'F23', code: 'F23' });
+            expect(mockOnChange).toHaveBeenCalledWith('quickChat', 'F23');
+            expect(screen.queryByTestId('hotkey-recorder-message-quickChat')).not.toBeInTheDocument();
+        });
+    });
+
     describe('visual feedback', () => {
         it('should apply recording class to container during recording', async () => {
             render(<HotkeyAcceleratorInput {...defaultProps} />);

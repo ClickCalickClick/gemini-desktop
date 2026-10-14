@@ -228,6 +228,37 @@ export function createMockElectronAPI(overrides: MockElectronAPIOverrides = {}):
         getResponseNotificationsEnabled: vi.fn().mockResolvedValue(true),
         setResponseNotificationsEnabled: vi.fn(),
 
+        // Desktop look
+        getLook: vi.fn().mockResolvedValue({
+            preference: 'default',
+            effectiveLook: 'default',
+            detectedDesktop: null,
+            accentColor: null,
+        }),
+        setLook: vi.fn(),
+        onLookChanged: vi.fn().mockReturnValue(defaultUnsubscribe),
+
+        // Hybrid Quick Chat: agent engine
+        resizeQuickChat: vi.fn(),
+        getAgentStatus: vi.fn().mockResolvedValue({ engine: null, available: false, error: 'No agent CLI found' }),
+        getAgentSettings: vi.fn().mockResolvedValue({
+            quickChatRoutingMode: 'auto',
+            agentEngine: 'auto',
+            agentModel: '',
+        }),
+        setAgentSettings: vi.fn().mockImplementation(async (settings) => ({
+            quickChatRoutingMode: 'auto',
+            agentEngine: 'auto',
+            agentModel: '',
+            ...settings,
+        })),
+        onAgentSettingsChanged: vi.fn().mockReturnValue(defaultUnsubscribe),
+        runAgent: vi.fn().mockResolvedValue({ runId: 'run-1' }),
+        cancelAgent: vi.fn(),
+        onAgentEvent: vi.fn().mockReturnValue(defaultUnsubscribe),
+        applyFilePlan: vi.fn().mockResolvedValue({ applied: 0, failed: [], undoAvailable: false }),
+        undoLastFilePlan: vi.fn().mockResolvedValue({ applied: 0, failed: [], undoAvailable: false }),
+
         // Apply overrides last to allow customization
         ...overrides,
     };

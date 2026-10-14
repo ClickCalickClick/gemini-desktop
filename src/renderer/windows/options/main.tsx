@@ -10,15 +10,18 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { OptionsWindow } from '@/components/options';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { LookProvider } from '@/context/LookContext';
 import { IndividualHotkeysProvider } from '@/context/IndividualHotkeysContext';
 import '@/App.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <ThemeProvider>
-            <IndividualHotkeysProvider>
-                <OptionsWindow />
-            </IndividualHotkeysProvider>
+            <LookProvider>
+                <IndividualHotkeysProvider>
+                    <OptionsWindow />
+                </IndividualHotkeysProvider>
+            </LookProvider>
         </ThemeProvider>
     </React.StrictMode>
 );

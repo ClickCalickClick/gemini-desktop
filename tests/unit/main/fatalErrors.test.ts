@@ -43,15 +43,14 @@ describe('Fatal Error Handling - Window Crash Handlers', () => {
             mainWindow = new MainWindow(false);
         });
 
-        it('should setup render-process-gone handler on webContents', () => {
+        it('should leave crashed renderers to the app-wide handler in main.ts', () => {
             const win = mainWindow.create();
 
-            // Find the render-process-gone handler in mock calls
             const renderProcessGoneCall = getMockCalls(win.webContents.on).find(
                 (call: [string, MockEventHandler]) => call[0] === 'render-process-gone'
             );
 
-            expect(renderProcessGoneCall).toBeDefined();
+            expect(renderProcessGoneCall).toBeUndefined();
         });
 
         it('should setup did-fail-load handler on webContents', () => {
@@ -82,48 +81,6 @@ describe('Fatal Error Handling - Window Crash Handlers', () => {
             );
 
             expect(responsiveCall).toBeDefined();
-        });
-
-        it('should log error when render-process-gone fires', () => {
-            const win = mainWindow.create();
-
-            const renderProcessGoneCall = getMockCalls(win.webContents.on).find(
-                (call: [string, MockEventHandler]) => call[0] === 'render-process-gone'
-            );
-
-            const handler = renderProcessGoneCall?.[1];
-            expect(handler).toBeDefined();
-
-            // Handler should not throw when called
-            expect(() => {
-                handler!({}, { reason: 'crashed', exitCode: 1 });
-            }).not.toThrow();
-        });
-
-        it('should reload window on crash (non-killed)', () => {
-            const win = mainWindow.create();
-
-            const renderProcessGoneCall = getMockCalls(win.webContents.on).find(
-                (call: [string, MockEventHandler]) => call[0] === 'render-process-gone'
-            );
-
-            const handler = renderProcessGoneCall?.[1];
-            handler!({}, { reason: 'crashed', exitCode: 1 });
-
-            expect(win.reload).toHaveBeenCalled();
-        });
-
-        it('should not reload window when intentionally killed', () => {
-            const win = mainWindow.create();
-
-            const renderProcessGoneCall = getMockCalls(win.webContents.on).find(
-                (call: [string, MockEventHandler]) => call[0] === 'render-process-gone'
-            );
-
-            const handler = renderProcessGoneCall?.[1];
-            handler!({}, { reason: 'killed', exitCode: 0 });
-
-            expect(win.reload).not.toHaveBeenCalled();
         });
     });
 
