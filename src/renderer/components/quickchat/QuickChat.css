@@ -1,9 +1,72 @@
 /**
  * Quick Chat Glassmorphism Styles
- * 
- * Spotlight-inspired floating input with frosted glass effect.
+ *
+ * Spotlight-inspired floating input with frosted glass effect, plus the agent
+ * results panel that grows under it.
  * Supports both dark and light themes.
+ *
+ * Colors, radii and fonts come from the --qc-* custom properties below so that
+ * desktop looks ([data-look] on <html>) can override them without touching
+ * these rules.
  */
+
+/* === Custom properties (defaults: dark) === */
+:root {
+    --qc-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --qc-mono-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    --qc-bg: rgba(30, 30, 30, 0.85);
+    --qc-blur: 20px;
+    --qc-border: rgba(255, 255, 255, 0.12);
+    --qc-radius: 12px;
+    --qc-control-radius: 8px;
+    --qc-chip-radius: 999px;
+    --qc-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    --qc-text: rgba(255, 255, 255, 0.95);
+    --qc-text-secondary: rgba(255, 255, 255, 0.65);
+    --qc-placeholder: rgba(255, 255, 255, 0.4);
+    --qc-icon: rgba(255, 255, 255, 0.5);
+    --qc-accent: #8ab4f8;
+    --qc-accent-text: #202124;
+    --qc-surface: rgba(255, 255, 255, 0.1);
+    --qc-surface-hover: rgba(255, 255, 255, 0.2);
+    --qc-surface-subtle: rgba(255, 255, 255, 0.05);
+    --qc-button-text: rgba(255, 255, 255, 0.7);
+    --qc-button-text-hover: rgba(255, 255, 255, 0.95);
+    --qc-divider: rgba(255, 255, 255, 0.08);
+    --qc-chip-web-bg: rgba(138, 180, 248, 0.16);
+    --qc-chip-web-text: #aecbfa;
+    --qc-chip-agent-bg: rgba(129, 201, 149, 0.16);
+    --qc-chip-agent-text: #a8dab5;
+    --qc-success: #81c995;
+    --qc-danger: #f28b82;
+    --qc-code-bg: rgba(255, 255, 255, 0.07);
+    --qc-panel-max-height: 420px;
+}
+
+[data-theme='light'] {
+    --qc-bg: rgba(255, 255, 255, 0.9);
+    --qc-border: rgba(0, 0, 0, 0.12);
+    --qc-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    --qc-text: rgba(0, 0, 0, 0.9);
+    --qc-text-secondary: rgba(0, 0, 0, 0.6);
+    --qc-placeholder: rgba(0, 0, 0, 0.4);
+    --qc-icon: rgba(0, 0, 0, 0.4);
+    --qc-accent: #1a73e8;
+    --qc-accent-text: #ffffff;
+    --qc-surface: rgba(0, 0, 0, 0.06);
+    --qc-surface-hover: rgba(0, 0, 0, 0.12);
+    --qc-surface-subtle: rgba(0, 0, 0, 0.03);
+    --qc-button-text: rgba(0, 0, 0, 0.5);
+    --qc-button-text-hover: rgba(0, 0, 0, 0.8);
+    --qc-divider: rgba(0, 0, 0, 0.08);
+    --qc-chip-web-bg: rgba(26, 115, 232, 0.1);
+    --qc-chip-web-text: #1967d2;
+    --qc-chip-agent-bg: rgba(24, 128, 56, 0.1);
+    --qc-chip-agent-text: #137333;
+    --qc-success: #188038;
+    --qc-danger: #c5221f;
+    --qc-code-bg: rgba(0, 0, 0, 0.05);
+}
 
 /* Reset body styles for transparent window */
 html,
@@ -13,13 +76,14 @@ body {
     background: transparent;
     height: 100%;
     overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--qc-font-family);
 }
 
+/* The window grows downwards to fit the agent panel, so content sits at the top */
 #root {
     height: 100%;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     padding: 8px;
     box-sizing: border-box;
@@ -29,26 +93,15 @@ body {
 .quick-chat-container {
     width: 100%;
     max-width: 580px;
-    background: rgba(30, 30, 30, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.4),
-        0 2px 8px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    background: var(--qc-bg);
+    backdrop-filter: blur(var(--qc-blur));
+    -webkit-backdrop-filter: blur(var(--qc-blur));
+    border-radius: var(--qc-radius);
+    border: 1px solid var(--qc-border);
+    box-shadow: var(--qc-shadow);
     overflow: hidden;
-}
-
-/* Light theme adjustments */
-[data-theme='light'] .quick-chat-container {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.15),
-        0 2px 8px rgba(0, 0, 0, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    color: var(--qc-text);
+    animation: quickchat-appear 0.15s ease-out;
 }
 
 /* Input wrapper for layout */
@@ -84,49 +137,72 @@ body {
 
 /* Prediction portion - semi-transparent */
 .quick-chat-ghost-text-prediction {
-    color: rgba(255, 255, 255, 0.4);
-}
-
-[data-theme='light'] .quick-chat-ghost-text-prediction {
-    color: rgba(0, 0, 0, 0.35);
+    color: var(--qc-placeholder);
 }
 
 /* Search/Gemini icon */
 .quick-chat-icon {
     flex-shrink: 0;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--qc-icon);
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-[data-theme='light'] .quick-chat-icon {
-    color: rgba(0, 0, 0, 0.4);
-}
-
 /* Main input field */
 .quick-chat-input {
     flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
     outline: none;
+    font-family: inherit;
     font-size: 18px;
     font-weight: 400;
-    color: rgba(255, 255, 255, 0.95);
-    caret-color: #8ab4f8;
+    color: var(--qc-text);
+    caret-color: var(--qc-accent);
 }
 
 .quick-chat-input::placeholder {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--qc-placeholder);
 }
 
-[data-theme='light'] .quick-chat-input {
-    color: rgba(0, 0, 0, 0.9);
-    caret-color: #1a73e8;
+/* Route chip: where the prompt goes */
+.quick-chat-route-chip {
+    flex-shrink: 0;
+    max-width: 160px;
+    padding: 4px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--qc-chip-radius);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
 }
 
-[data-theme='light'] .quick-chat-input::placeholder {
-    color: rgba(0, 0, 0, 0.4);
+.quick-chat-route-chip--web {
+    background: var(--qc-chip-web-bg);
+    color: var(--qc-chip-web-text);
+}
+
+.quick-chat-route-chip--agent {
+    background: var(--qc-chip-agent-bg);
+    color: var(--qc-chip-agent-text);
+}
+
+.quick-chat-route-chip--forced {
+    border-color: currentColor;
+}
+
+.quick-chat-route-chip:hover {
+    border-color: currentColor;
 }
 
 /* Submit button */
@@ -137,17 +213,17 @@ body {
     justify-content: center;
     width: 36px;
     height: 36px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--qc-surface);
     border: none;
-    border-radius: 8px;
-    color: rgba(255, 255, 255, 0.7);
+    border-radius: var(--qc-control-radius);
+    color: var(--qc-button-text);
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .quick-chat-submit:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.95);
+    background: var(--qc-surface-hover);
+    color: var(--qc-button-text-hover);
 }
 
 .quick-chat-submit:active:not(:disabled) {
@@ -159,25 +235,13 @@ body {
     cursor: not-allowed;
 }
 
-[data-theme='light'] .quick-chat-submit {
-    background: rgba(0, 0, 0, 0.06);
-    color: rgba(0, 0, 0, 0.5);
-}
-
-[data-theme='light'] .quick-chat-submit:hover:not(:disabled) {
-    background: rgba(0, 0, 0, 0.12);
-    color: rgba(0, 0, 0, 0.8);
-}
-
 /* Focus styles for accessibility */
 /* Input focus is handled by the container, so no visible ring needed */
-.quick-chat-submit:focus-visible {
-    outline: 2px solid #8ab4f8;
+.quick-chat-submit:focus-visible,
+.quick-chat-route-chip:focus-visible,
+.qc-button:focus-visible {
+    outline: 2px solid var(--qc-accent);
     outline-offset: 2px;
-}
-
-[data-theme='light'] .quick-chat-submit:focus-visible {
-    outline-color: #1a73e8;
 }
 
 /* Smooth animation on window show */
@@ -193,6 +257,361 @@ body {
     }
 }
 
-.quick-chat-container {
-    animation: quickchat-appear 0.15s ease-out;
+/* === Agent panel === */
+
+.qc-agent-panel {
+    border-top: 1px solid var(--qc-divider);
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.qc-agent-body {
+    max-height: var(--qc-panel-max-height);
+    overflow-y: auto;
+    padding: 10px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.qc-agent-body:empty {
+    display: none;
+}
+
+/* Progress line with Stop */
+.qc-agent-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px 0;
+    color: var(--qc-text-secondary);
+    font-size: 13px;
+}
+
+.qc-agent-progress__bar {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--qc-accent);
+    animation: qc-pulse 1.2s ease-in-out infinite;
+}
+
+.qc-agent-progress__label {
+    flex: 1;
+}
+
+@keyframes qc-pulse {
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(0.8);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Buttons in the panel */
+.qc-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: 1px solid var(--qc-border);
+    border-radius: var(--qc-control-radius);
+    background: var(--qc-surface);
+    color: var(--qc-text);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.qc-button:hover:not(:disabled) {
+    background: var(--qc-surface-hover);
+}
+
+.qc-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.qc-button--primary {
+    background: var(--qc-accent);
+    border-color: var(--qc-accent);
+    color: var(--qc-accent-text);
+}
+
+.qc-button--primary:hover:not(:disabled) {
+    background: var(--qc-accent);
+    filter: brightness(1.08);
+}
+
+.qc-button--quiet {
+    background: transparent;
+    border-color: transparent;
+    color: var(--qc-text-secondary);
+}
+
+.qc-button--quiet:hover:not(:disabled) {
+    color: var(--qc-text);
+}
+
+/* Tool steps */
+.qc-tools {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    color: var(--qc-text-secondary);
+}
+
+.qc-tools__step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.qc-tools__icon {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.qc-tools__step--active .qc-tools__icon {
+    color: var(--qc-accent);
+}
+
+.qc-tools__step--done .qc-tools__icon {
+    color: var(--qc-success);
+}
+
+.qc-tools__step--error .qc-tools__icon,
+.qc-tools__error {
+    color: var(--qc-danger);
+}
+
+.qc-tools__name {
+    flex-shrink: 0;
+    font-weight: 500;
+    color: var(--qc-text);
+}
+
+.qc-tools__summary {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--qc-mono-font-family);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.qc-tools__error {
+    flex-shrink: 0;
+}
+
+/* Agent answer (Markdown) */
+.qc-markdown {
+    color: var(--qc-text);
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
+.qc-markdown > :first-child {
+    margin-top: 0;
+}
+
+.qc-markdown > :last-child {
+    margin-bottom: 0;
+}
+
+.qc-markdown p,
+.qc-markdown ul,
+.qc-markdown ol,
+.qc-markdown pre,
+.qc-markdown blockquote,
+.qc-markdown table {
+    margin: 0 0 8px;
+}
+
+.qc-markdown h1,
+.qc-markdown h2,
+.qc-markdown h3,
+.qc-markdown h4 {
+    margin: 12px 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.qc-markdown ul,
+.qc-markdown ol {
+    padding-left: 20px;
+}
+
+.qc-markdown code {
+    font-family: var(--qc-mono-font-family);
+    font-size: 12.5px;
+    background: var(--qc-code-bg);
+    border-radius: 4px;
+    padding: 1px 4px;
+}
+
+.qc-markdown pre {
+    background: var(--qc-code-bg);
+    border-radius: var(--qc-control-radius);
+    padding: 8px 10px;
+    overflow-x: auto;
+}
+
+.qc-markdown pre code {
+    background: none;
+    padding: 0;
+}
+
+.qc-markdown blockquote {
+    border-left: 3px solid var(--qc-divider);
+    padding-left: 10px;
+    color: var(--qc-text-secondary);
+}
+
+.qc-markdown table {
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.qc-markdown th,
+.qc-markdown td {
+    border: 1px solid var(--qc-divider);
+    padding: 3px 8px;
+    text-align: left;
+}
+
+.qc-md-link {
+    color: var(--qc-accent);
+}
+
+.qc-md-url,
+.qc-md-image {
+    color: var(--qc-text-secondary);
+    font-size: 12px;
+}
+
+/* File plan */
+.qc-plan {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--qc-border);
+    border-radius: var(--qc-control-radius);
+    background: var(--qc-surface-subtle);
+}
+
+.qc-plan__summary {
+    margin: 0;
+    font-weight: 500;
+}
+
+.qc-plan__actions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+}
+
+.qc-plan__action {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.qc-plan__op {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--qc-text-secondary);
+}
+
+.qc-plan__action[data-op='trash'] .qc-plan__op {
+    color: var(--qc-danger);
+}
+
+.qc-plan__paths {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+    font-family: var(--qc-mono-font-family);
+}
+
+.qc-plan__path {
+    overflow-wrap: anywhere;
+}
+
+.qc-plan__arrow {
+    color: var(--qc-text-secondary);
+}
+
+.qc-plan__buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.qc-plan__result {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--qc-success);
+}
+
+.qc-plan__result p {
+    margin: 0;
+}
+
+.qc-plan__failures {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--qc-danger);
+    font-size: 12px;
+}
+
+/* Errors and hints */
+.qc-agent-error {
+    margin: 0;
+    color: var(--qc-danger);
+}
+
+.qc-agent-error--quiet {
+    color: var(--qc-text-secondary);
+}
+
+.qc-agent-hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--qc-text-secondary);
+}
+
+/* Footer: follow-up hint, Continue in Gemini, New */
+.qc-agent-footer {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 8px 16px;
+    border-top: 1px solid var(--qc-divider);
+}
+
+.qc-agent-footer__hint {
+    flex: 1;
+    font-size: 12px;
+    color: var(--qc-text-secondary);
 }
