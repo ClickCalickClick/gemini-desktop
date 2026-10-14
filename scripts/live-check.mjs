@@ -6,7 +6,8 @@
  * reload the main window, click Gemini's Sign in button with a real mouse click and close the
  * sign-in window as a person would. It records every page load in every window and tab, with
  * redirects and HTTP status codes, saves screenshots of the app's windows, and fails when Google's
- * sign-in page loads inside a tab, which Google answers with a 401.
+ * sign-in page loads inside a tab, which Google answers with a 401. At the end it stops the app it
+ * started with SIGTERM and fails when the app does not quit within 10 seconds or crashes on the way.
  *
  * Usage:
  *   node scripts/live-check.mjs --launch release/linux-unpacked/gemini-desktop \
@@ -25,6 +26,8 @@
  *   --navigate-tab <url>     Send the visible tab to this URL as a link in it would, to test the
  *                            app's handling of a URL without Gemini (for example a sign-in page).
  *   --out <dir>              Where to write trace.jsonl, summary.txt, app.log and screenshots.
+ *   --stop-all               Stop the started app as a logout does, with SIGTERM to all of its
+ *                            processes at once rather than to its main process only.
  *   --keep-open              Leave the started app running.
  *
  * Exit code: 0 when every check passed, 1 when one failed, 2 when the script itself failed.
@@ -67,6 +70,7 @@ const { values: opts, positionals: appArgs } = parseArgs({
         'close-auth-after': { type: 'string' },
         'navigate-tab': { type: 'string' },
         out: { type: 'string' },
+        'stop-all': { type: 'boolean', default: false },
         'keep-open': { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
     },
@@ -200,6 +204,7 @@ function launchApp() {
     app.exitedAt = null;
     app.on('exit', (code, signal) => {
         app.exitedAt = Date.now();
+        app.exitStatus = { code, signal };
         record('app-exited', { code, signal });
     });
     app.on('error', (error) => record('app-error', { message: error.message }));
@@ -221,22 +226,46 @@ async function waitForDevTools(timeoutMs) {
     throw new Error(`Nothing answered on DevTools port ${port} within ${timeoutMs / 1000}s`);
 }
 
+/** Signals that end a process when it crashes */
+const CRASH_SIGNALS = new Set(['SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGILL', 'SIGSEGV', 'SIGTRAP']);
+
+/**
+ * Stops the started app with SIGTERM, then with SIGKILL if it is still running after 10 seconds.
+ * Returns how it went, or null when there is no app to stop.
+ */
 async function stopApp() {
-    if (!app || app.exitedAt || opts['keep-open']) return;
-    // SIGTERM to the main process only, like a session logout's first signal; then force it.
+    if (!app || app.exitedAt || opts['keep-open']) return null;
+    // The app is the leader of its own process group, as it was started detached
+    const target = opts['stop-all'] ? 'all of its processes' : 'its main process';
     const sentAt = Date.now();
-    app.kill('SIGTERM');
-    while (!app.exitedAt && Date.now() - sentAt < 10000) await sleep(100);
-    if (app.exitedAt) {
-        record('app-quit', { afterSigterm: `${((app.exitedAt - sentAt) / 1000).toFixed(1)}s` });
-        return;
-    }
-    record('app-quit', { afterSigterm: 'still running after 10s; sending SIGKILL to its process group' });
     try {
-        process.kill(-app.pid, 'SIGKILL');
-    } catch {
-        app.kill('SIGKILL');
+        if (opts['stop-all']) process.kill(-app.pid, 'SIGTERM');
+        else app.kill('SIGTERM');
+    } catch (error) {
+        // The app exited a moment ago
+        record('app-quit', { target, result: `SIGTERM not sent: ${error.message}` });
     }
+    while (!app.exitedAt && Date.now() - sentAt < 10000) await sleep(100);
+    if (!app.exitedAt) {
+        record('app-quit', { target, result: 'still running after 10s; sending SIGKILL to its process group' });
+        try {
+            process.kill(-app.pid, 'SIGKILL');
+        } catch {
+            app.kill('SIGKILL');
+        }
+        return { target, quit: false };
+    }
+    const seconds = ((app.exitedAt - sentAt) / 1000).toFixed(1);
+    const appLog = fs.readFileSync(path.join(outDir, 'app.log'), 'utf8');
+    const crashed = CRASH_SIGNALS.has(app.exitStatus.signal) || /GPU process isn't usable/.test(appLog);
+    record('app-quit', { target, seconds, code: app.exitStatus.code, signal: app.exitStatus.signal, crashed });
+    return {
+        target,
+        quit: true,
+        seconds,
+        crashed,
+        how: app.exitStatus.signal ? `ended by ${app.exitStatus.signal}` : `exit code ${app.exitStatus.code}`,
+    };
 }
 
 // --- Recording state ---------------------------------------------------------------------------
@@ -351,7 +380,8 @@ try {
     await waitForQuiet(3000, 15000);
     await screenshot(mainSession, 'main-window-end');
     await reportTabState(mainSession);
-    exitCode = summarize() ? 0 : 1;
+    const stop = await stopApp();
+    exitCode = summarize(stop) ? 0 : 1;
 } catch (error) {
     record('script-failed', { message: error.message });
     exitCode = 2;
@@ -639,7 +669,7 @@ async function reportTabState(mainSession) {
     reportTabState.frames = frames;
 }
 
-function summarize() {
+function summarize(stop) {
     const lines = [];
     const checks = [];
     const check = (passed, text) => checks.push(`${passed ? 'PASS' : 'FAIL'}  ${text}`);
@@ -685,6 +715,17 @@ function summarize() {
                 );
             }
         }
+    }
+
+    if (stop) {
+        check(
+            stop.quit && !stop.crashed,
+            !stop.quit
+                ? `The app was still running 10s after SIGTERM to ${stop.target}`
+                : stop.crashed
+                  ? `The app crashed while quitting after SIGTERM to ${stop.target} (${stop.how}; see app.log)`
+                  : `The app quit ${stop.seconds}s after SIGTERM to ${stop.target} (${stop.how})`
+        );
     }
 
     const summary = [...checks, ...lines].join('\n');
