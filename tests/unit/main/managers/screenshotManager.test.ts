@@ -6,10 +6,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nativeImage } from 'electron';
 
 import ScreenshotManager, {
+    PERMISSION_DENIED_MESSAGE,
     SCREENSHOT_MAX_AGE_MS,
     type ScreenshotManagerOptions,
 } from '../../../../src/main/managers/screenshotManager';
-import { ScreenshotError, type CaptureOutcome } from '../../../../src/main/utils/screenshotCapture';
+import { PortalDeniedError, ScreenshotError, type CaptureOutcome } from '../../../../src/main/utils/screenshotCapture';
 import { SCREENSHOT_ID_PATTERN, type ScreenshotMode } from '../../../../src/shared/types/screenshot';
 import { createMockLogger } from '../../../helpers/mocks';
 
@@ -54,10 +55,62 @@ describe('ScreenshotManager', () => {
             capture,
             describeImage,
             hideDelayMs: 0,
+            focusDelayMs: 0,
             now: () => now,
             logger: createMockLogger(),
             ...overrides,
         });
+
+    describe('permission retry (GNOME asks only the focused app)', () => {
+        it('asks again with Quick Chat shown, throws that picture away and captures hidden', async () => {
+            const visibleAtCall: boolean[] = [];
+            const second = Buffer.from('with-quick-chat');
+            const third = Buffer.from('clean');
+            capture
+                .mockImplementationOnce(async () => {
+                    visibleAtCall.push(visible);
+                    throw new PortalDeniedError();
+                })
+                .mockImplementationOnce(async () => {
+                    visibleAtCall.push(visible);
+                    return { status: 'captured', png: second };
+                })
+                .mockImplementationOnce(async () => {
+                    visibleAtCall.push(visible);
+                    return { status: 'captured', png: third };
+                });
+            const manager = createManager();
+            const result = await manager.capture('screen');
+
+            expect(visibleAtCall).toEqual([false, true, false]);
+            expect(result.status).toBe('captured');
+            const id = result.status === 'captured' ? result.preview.id : '';
+            expect(manager.take(id)).toBe(third);
+            expect(visible).toBe(true);
+        });
+
+        it('explains how to allow screenshots when the desktop refuses again', async () => {
+            capture.mockRejectedValue(new PortalDeniedError());
+            const result = await createManager().capture('screen');
+            expect(result).toEqual({ status: 'error', error: PERMISSION_DENIED_MESSAGE });
+            expect(capture).toHaveBeenCalledTimes(2);
+            expect(visible).toBe(true);
+        });
+
+        it('stops when the user cancels the permission request', async () => {
+            capture.mockRejectedValueOnce(new PortalDeniedError()).mockResolvedValueOnce({ status: 'cancelled' });
+            await expect(createManager().capture('screen')).resolves.toEqual({ status: 'cancelled' });
+            expect(capture).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not retry when Quick Chat was not showing', async () => {
+            visible = false;
+            capture.mockRejectedValue(new PortalDeniedError());
+            const result = await createManager().capture('screen');
+            expect(result).toEqual({ status: 'error', error: 'The desktop did not allow the screenshot.' });
+            expect(capture).toHaveBeenCalledTimes(1);
+        });
+    });
 
     describe('capture', () => {
         it('rejects an invalid mode without hiding Quick Chat', async () => {

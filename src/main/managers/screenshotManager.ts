@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 
 import { nativeImage } from 'electron';
 
-import { captureScreenshot, ScreenshotError, type CaptureOutcome } from '../utils/screenshotCapture';
+import { captureScreenshot, PortalDeniedError, ScreenshotError, type CaptureOutcome } from '../utils/screenshotCapture';
 import { createLogger } from '../utils/logger';
 import {
     SCREENSHOT_ID_PATTERN,
@@ -26,6 +26,11 @@ import type WindowManager from './windowManager';
 
 /** How long the window manager gets to hide Quick Chat before the screen is captured. */
 export const HIDE_DELAY_MS = 300;
+/** How long Quick Chat gets to take focus before the desktop is asked for the screenshot permission. */
+export const FOCUS_DELAY_MS = 500;
+/** Shown when the desktop still refuses after asking with Quick Chat focused. */
+export const PERMISSION_DENIED_MESSAGE =
+    'The desktop did not allow screenshots. On GNOME, allow them for Gemini Desktop in Settings > Apps > Gemini Desktop, or Shift+click the camera to pick an area.';
 /** A screenshot not sent within this time is dropped. */
 export const SCREENSHOT_MAX_AGE_MS = 15 * 60 * 1000;
 const THUMBNAIL_HEIGHT = 96;
@@ -41,6 +46,7 @@ export interface ScreenshotManagerOptions {
     capture?: (mode: ScreenshotMode) => Promise<CaptureOutcome>;
     describeImage?: (png: Buffer) => ScreenshotImageInfo;
     hideDelayMs?: number;
+    focusDelayMs?: number;
     now?: () => number;
     logger?: Logger;
 }
@@ -65,6 +71,7 @@ export default class ScreenshotManager {
     private readonly captureFn: (mode: ScreenshotMode) => Promise<CaptureOutcome>;
     private readonly describeImage: (png: Buffer) => ScreenshotImageInfo;
     private readonly hideDelayMs: number;
+    private readonly focusDelayMs: number;
     private readonly now: () => number;
     private readonly logger: Logger;
 
@@ -76,6 +83,7 @@ export default class ScreenshotManager {
         this.captureFn = options.capture ?? ((mode) => captureScreenshot(mode));
         this.describeImage = options.describeImage ?? describePng;
         this.hideDelayMs = options.hideDelayMs ?? HIDE_DELAY_MS;
+        this.focusDelayMs = options.focusDelayMs ?? FOCUS_DELAY_MS;
         this.now = options.now ?? (() => Date.now());
         this.logger = options.logger ?? createLogger('[ScreenshotManager]');
     }
@@ -96,7 +104,15 @@ export default class ScreenshotManager {
                 this.windowManager.hideQuickChat();
                 await new Promise((resolve) => setTimeout(resolve, this.hideDelayMs));
             }
-            const outcome = await this.captureFn(mode);
+            let outcome: CaptureOutcome;
+            try {
+                outcome = await this.captureFn(mode);
+            } catch (error) {
+                if (!(error instanceof PortalDeniedError) || !quickChatWasVisible) {
+                    throw error;
+                }
+                outcome = await this.askPermissionAndRetry(mode);
+            }
             if (outcome.status === 'cancelled') {
                 return { status: 'cancelled' };
             }
@@ -118,6 +134,33 @@ export default class ScreenshotManager {
                 this.windowManager.showQuickChat();
             }
         }
+    }
+
+    /**
+     * GNOME shows its "allow screenshots?" dialog only for the focused app, and refuses a first
+     * screenshot taken while Quick Chat is hidden. Ask again with Quick Chat focused: the dialog
+     * appears and remembers the answer. That picture shows Quick Chat, so it is thrown away and
+     * the screenshot is taken once more with Quick Chat hidden.
+     */
+    private async askPermissionAndRetry(mode: ScreenshotMode): Promise<CaptureOutcome> {
+        this.logger.log('Screenshot refused; asking again with Quick Chat focused');
+        this.windowManager.showQuickChat();
+        await new Promise((resolve) => setTimeout(resolve, this.focusDelayMs));
+        let permission: CaptureOutcome;
+        try {
+            permission = await this.captureFn(mode);
+        } catch (error) {
+            if (error instanceof PortalDeniedError) {
+                throw new ScreenshotError(PERMISSION_DENIED_MESSAGE);
+            }
+            throw error;
+        }
+        if (permission.status === 'cancelled') {
+            return permission;
+        }
+        this.windowManager.hideQuickChat();
+        await new Promise((resolve) => setTimeout(resolve, this.hideDelayMs));
+        return this.captureFn(mode);
     }
 
     /** Hand over the screenshot with this id (once) and forget it. Null when it is unknown or too old. */

@@ -722,9 +722,10 @@ function QuickChatApp(): React.ReactElement {
         : run.conversationId
           ? 'Ask a follow-up…'
           : 'Ask Gemini...';
+    const areaHint = window.electronAPI?.platform === 'win32' ? '' : '; Shift+click to pick an area';
     const screenshotTitle = screenshot
-        ? 'Take a new screenshot (Shift+click to pick an area)'
-        : `Attach a screenshot (${isMac ? 'Cmd' : 'Ctrl'}+Shift+S; Shift+click to pick an area)`;
+        ? `Take a new screenshot${areaHint ? ` (${areaHint.slice(2)})` : ''}`
+        : `Attach a screenshot (${isMac ? 'Cmd' : 'Ctrl'}+Shift+S${areaHint})`;
 
     return (
         <div

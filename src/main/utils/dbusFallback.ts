@@ -532,6 +532,7 @@ export function waitForPortalResponse(
             bus.removeListener?.('message', handler);
             reject(new Error(`Portal Response timeout (${timeoutMs}ms) on ${requestPath}`));
         }, timeoutMs);
+        timeout.unref?.();
 
         function handler(msg: DBusMessage) {
             if (

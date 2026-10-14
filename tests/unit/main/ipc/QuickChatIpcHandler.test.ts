@@ -547,7 +547,7 @@ describe('QuickChatIpcHandler', () => {
                 { screenshotId: SCREENSHOT_ID },
                 {
                     'synthetic-attach-script': { attached: false, error: 'no_preview_seen' },
-                    'prepare-paste-script': true,
+                    'prepare-paste-script': { ready: true },
                     'await-paste-script': { attached: true, method: 'clipboard' },
                 }
             );
@@ -569,7 +569,7 @@ describe('QuickChatIpcHandler', () => {
                 { screenshotId: SCREENSHOT_ID },
                 {
                     'synthetic-attach-script': { attached: false },
-                    'prepare-paste-script': true,
+                    'prepare-paste-script': { ready: true },
                     'await-paste-script': { attached: false },
                 }
             );
@@ -583,13 +583,45 @@ describe('QuickChatIpcHandler', () => {
             );
         });
 
-        it('sends the text alone when the screenshot id is unknown', async () => {
+        it('leaves the text unsent when the screenshot is gone or too old', async () => {
             const executeJavaScript = await submitAndInject({ screenshotId: 'something-else' }, {});
 
             expect(executeJavaScript.mock.calls.map((call) => call[0])).toEqual(['mocked-injection-script']);
-            expect(autoSubmitArg).toBe(true);
+            expect(autoSubmitArg).toBe(false);
             expect(submitWaitArg).toBe(0);
-            expect(mockLogger.warn).toHaveBeenCalledWith('Quick Chat screenshot not found; sending the text only');
+            expect(mockLogger.warn).toHaveBeenCalledWith('Quick Chat screenshot not found; the text waits unsent');
+            expect(mockClipboard.writeImage).not.toHaveBeenCalled();
+            expect(mockMainWindow.webContents.send).toHaveBeenCalledWith(
+                IPC_CHANNELS.TOAST_SHOW,
+                expect.objectContaining({ message: expect.stringContaining('Take it again') })
+            );
+        });
+
+        it('does not paste a second copy when the script paste showed up late', async () => {
+            const executeJavaScript = await submitAndInject(
+                { screenshotId: SCREENSHOT_ID },
+                {
+                    'synthetic-attach-script': { attached: false, error: 'no_preview_seen' },
+                    'prepare-paste-script': { ready: false, alreadyAttached: true },
+                }
+            );
+
+            expect(executeJavaScript.mock.calls.map((call) => call[0])).toEqual([
+                'synthetic-attach-script',
+                'prepare-paste-script',
+                'mocked-injection-script',
+            ]);
+            expect(mockMainWindow.webContents.paste).not.toHaveBeenCalled();
+            expect(autoSubmitArg).toBe(true);
+        });
+
+        it('sends no plain text submit for a prompt without a screenshot', async () => {
+            await submitAndInject(undefined, {});
+            expect(autoSubmitArg).toBe(true);
+            expect(mockMainWindow.webContents.send).not.toHaveBeenCalledWith(
+                IPC_CHANNELS.TOAST_SHOW,
+                expect.anything()
+            );
         });
 
         it('ignores a submit without text', () => {

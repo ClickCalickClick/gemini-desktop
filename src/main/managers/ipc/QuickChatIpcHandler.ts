@@ -22,6 +22,8 @@ interface PendingQuickChatRequest {
     text: string;
     /** A screenshot to attach before the text (H10). */
     screenshot?: Buffer;
+    /** The prompt came with a screenshot id, but the screenshot was gone or too old. */
+    screenshotMissing?: boolean;
     createdAt: number;
 }
 
@@ -122,19 +124,20 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
     }
 
     /** The screenshot sent with a prompt, taken out of the screenshot manager. */
-    private _takeScreenshot(options: unknown): Buffer | undefined {
+    private _takeScreenshot(options: unknown): { screenshot?: Buffer; screenshotMissing?: boolean } {
         if (typeof options !== 'object' || options === null) {
-            return undefined;
+            return {};
         }
         const { screenshotId } = options as QuickChatSubmitOptions;
         if (screenshotId === undefined) {
-            return undefined;
+            return {};
         }
         const png = this.deps.screenshotManager?.take(screenshotId) ?? null;
         if (!png) {
-            this.logger.warn('Quick Chat screenshot not found; sending the text only');
+            this.logger.warn('Quick Chat screenshot not found; the text waits unsent');
+            return { screenshotMissing: true };
         }
-        return png ?? undefined;
+        return { screenshot: png };
     }
 
     private _handleSubmit(text: unknown, options?: unknown): void {
@@ -145,7 +148,8 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
             }
             this._cleanupExpiredRequests();
             this.logger.log('Quick Chat submit received:', text.substring(0, 50));
-            const screenshot = this._takeScreenshot(options);
+            const attachment = this._takeScreenshot(options);
+            const screenshot = attachment.screenshot;
 
             this.deps.windowManager.hideQuickChat();
             this.deps.windowManager.focusMainWindow();
@@ -163,11 +167,13 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
                 requestId,
                 targetTabId,
                 text,
-                ...(screenshot ? { screenshot } : {}),
+                ...attachment,
                 createdAt: Date.now(),
             };
 
             this.pendingRequests.set(requestId, request);
+            // Drop the request (and any screenshot it holds) even if its tab never gets ready.
+            setTimeout(() => this._cleanupExpiredRequests(), REQUEST_TTL_MS + 1000).unref?.();
             this.latestRequestByTab.set(targetTabId, requestId);
 
             this.logger.log('Quick Chat navigation requested:', {
@@ -320,7 +326,18 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
             attached = await this._attachScreenshot(mainWindow, targetFrame, request.screenshot);
         }
         // Without the screenshot the answer would miss the point: leave the text for the user to send.
-        const missingScreenshot = Boolean(request.screenshot) && !attached;
+        const failedScreenshot = Boolean(request.screenshot) && !attached;
+        const missingScreenshot = failedScreenshot || Boolean(request.screenshotMissing);
+        if (missingScreenshot) {
+            showToast(mainWindow, {
+                type: 'warning',
+                title: 'Screenshot not attached',
+                message: failedScreenshot
+                    ? 'Gemini did not take the screenshot. It is on the clipboard: paste it into the message box, then send.'
+                    : 'The screenshot was no longer available. Take it again from Quick Chat, or send the prompt without it.',
+                duration: 10_000,
+            });
+        }
         const injectionScript = new InjectionScriptBuilder()
             .withText(request.text)
             .withAutoSubmit(!isE2EMode && !missingScreenshot)
@@ -332,15 +349,6 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
 
             if (result?.success) {
                 this.logger.log('Text injected into Gemini successfully');
-                if (missingScreenshot) {
-                    showToast(mainWindow, {
-                        type: 'warning',
-                        title: 'Screenshot not attached',
-                        message:
-                            'Gemini did not take the screenshot. It is on the clipboard: paste it into the message box, then send.',
-                        duration: 10_000,
-                    });
-                }
             } else {
                 this.logger.error('Injection script returned failure:', {
                     error: result?.error,
@@ -373,8 +381,17 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
         const saved = this._saveClipboard();
         try {
             clipboard.writeImage(nativeImage.createFromBuffer(png));
-            const ready = (await frame.executeJavaScript(buildPrepareClipboardPasteScript())) as boolean;
-            if (ready) {
+            const prepared = (await frame.executeJavaScript(buildPrepareClipboardPasteScript())) as {
+                ready: boolean;
+                alreadyAttached?: boolean;
+            } | null;
+            if (prepared?.alreadyAttached) {
+                // The script's paste or drop showed up late: pasting again would attach it twice.
+                this.logger.log('Screenshot attached in Gemini:', { method: 'late' });
+                this._restoreClipboard(saved);
+                return true;
+            }
+            if (prepared?.ready) {
                 mainWindow.webContents.paste();
                 const result = (await frame.executeJavaScript(buildAwaitClipboardPasteScript())) as ImageAttachResult;
                 if (result?.attached) {

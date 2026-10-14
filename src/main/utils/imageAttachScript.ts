@@ -105,12 +105,16 @@ export function buildSyntheticAttachScript(
         const transfer = () => { const dt = new DataTransfer(); dt.items.add(file); return dt; };
 
         editor.focus();
-        let before = countHints(area);
+        const baseline = countHints(area);
+        // For the prepare script: a paste that shows up late must not be pasted again.
+        window.__geminiDesktopHintsBaseline = baseline;
+        let before = baseline;
         try {
             editor.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer(), bubbles: true, cancelable: true }));
         } catch (e) {}
         if (await waitForMore(area, before)) return { attached: true, method: 'paste' };
 
+        if (countHints(area) > baseline) return { attached: true, method: 'paste' };
         before = countHints(area);
         try {
             const dt = transfer();
@@ -128,17 +132,25 @@ export function buildSyntheticAttachScript(
 `.trim();
 }
 
-/** Focus the message box and remember how many previews it shows, before a real paste. */
+/**
+ * Focus the message box and remember how many previews it shows, before a real paste. Resolves
+ * `{ ready, alreadyAttached }`: `alreadyAttached` when a preview appeared since the synthetic
+ * script started (its paste or drop was only slow), so no second copy is pasted.
+ */
 export function buildPrepareClipboardPasteScript(): string {
     return `
 (function() {
     'use strict';
     ${SHARED_HELPERS(JSON.stringify(GEMINI_EDITOR_SELECTORS), 0)}
     const editor = findEditor();
-    if (!editor) return false;
+    if (!editor) return { ready: false };
+    const count = countHints(findArea(editor));
+    const baseline = window.__geminiDesktopHintsBaseline;
+    delete window.__geminiDesktopHintsBaseline;
+    if (typeof baseline === 'number' && count > baseline) return { ready: false, alreadyAttached: true };
     editor.focus();
-    window.__geminiDesktopHintsBefore = countHints(findArea(editor));
-    return true;
+    window.__geminiDesktopHintsBefore = count;
+    return { ready: true };
 })();
 `.trim();
 }

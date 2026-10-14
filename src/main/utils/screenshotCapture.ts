@@ -43,11 +43,25 @@ const PORTAL_TIMEOUT_MS = 3 * 60 * 1000;
 /** A file the portal returned is only deleted when it was written this recently. */
 const FRESH_FILE_MS = 5 * 60 * 1000;
 const SCREENCAPTURE_PATH = '/usr/sbin/screencapture';
+export const MAC_PERMISSION_MESSAGE =
+    'Gemini Desktop may not record the screen yet. Allow it in System Settings > Privacy & Security > Screen & System Audio Recording (macOS may ask you to reopen the app), then try again.';
 
 export type CaptureOutcome = { status: 'captured'; png: Buffer } | { status: 'cancelled' };
 
 /** Thrown with a message fit for Quick Chat. */
 export class ScreenshotError extends Error {}
+
+/**
+ * The portal refused (Response code 2). On GNOME this is also what a first screenshot gets while
+ * none of the app's windows has focus: the portal may only ask "allow screenshots?" for the focused
+ * app, so it refuses without asking. ScreenshotManager then asks again with Quick Chat focused.
+ */
+export class PortalDeniedError extends ScreenshotError {
+    constructor() {
+        super('The desktop did not allow the screenshot.');
+        this.name = 'PortalDeniedError';
+    }
+}
 
 export interface CaptureDeps {
     platform: NodeJS.Platform;
@@ -108,7 +122,7 @@ export function portalOutcome(
         return { status: 'cancelled' };
     }
     if (code !== 0) {
-        throw new ScreenshotError('The desktop did not allow the screenshot.');
+        throw new PortalDeniedError();
     }
     const uri = results.uri?.value;
     if (typeof uri !== 'string' || !uri.startsWith('file://')) {
@@ -203,10 +217,17 @@ export async function captureViaDesktopCapturer(): Promise<CaptureOutcome> {
 
 export async function captureViaScreencapture(interactive: boolean): Promise<CaptureOutcome> {
     const access = systemPreferences.getMediaAccessStatus('screen');
-    if (access === 'denied' || access === 'restricted') {
-        throw new ScreenshotError(
-            'Gemini Desktop may not record the screen. Allow it in System Settings > Privacy & Security > Screen & System Audio Recording, then try again.'
-        );
+    if (access !== 'granted') {
+        if (access === 'not-determined') {
+            // Without the permission screencapture returns only the wallpaper. Asking for screen
+            // sources makes macOS show its permission prompt.
+            try {
+                await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
+            } catch {
+                // the prompt is what matters
+            }
+        }
+        throw new ScreenshotError(MAC_PERMISSION_MESSAGE);
     }
     const file = path.join(os.tmpdir(), `gemini-desktop-screenshot-${randomUUID()}.png`);
     const args = ['-x', '-t', 'png', ...(interactive ? ['-i'] : []), file];

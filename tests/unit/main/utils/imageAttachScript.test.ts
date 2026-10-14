@@ -152,7 +152,7 @@ describe('imageAttachScript', () => {
         it('focus the editor, remember the previews and see a new one after the paste', async () => {
             const { area, editor } = createInputArea();
             addPreview(area);
-            await expect(runInPage<boolean>(buildPrepareClipboardPasteScript())).resolves.toBe(true);
+            await expect(runInPage(buildPrepareClipboardPasteScript())).resolves.toEqual({ ready: true });
             expect(document.activeElement).toBe(editor);
             expect((window as unknown as Record<string, unknown>).__geminiDesktopHintsBefore).toBe(1);
 
@@ -170,8 +170,19 @@ describe('imageAttachScript', () => {
             expect(result).toEqual({ attached: false, error: 'no_preview_seen' });
         });
 
+        it('report a late preview from the synthetic paste, so it is not pasted twice', async () => {
+            const { area } = createInputArea();
+            (window as unknown as Record<string, unknown>).__geminiDesktopHintsBaseline = 0;
+            addPreview(area);
+            await expect(runInPage(buildPrepareClipboardPasteScript())).resolves.toEqual({
+                ready: false,
+                alreadyAttached: true,
+            });
+            expect((window as unknown as Record<string, unknown>).__geminiDesktopHintsBaseline).toBeUndefined();
+        });
+
         it('report a missing editor', async () => {
-            await expect(runInPage<boolean>(buildPrepareClipboardPasteScript())).resolves.toBe(false);
+            await expect(runInPage(buildPrepareClipboardPasteScript())).resolves.toEqual({ ready: false });
             await expect(runInPage<ImageAttachResult>(buildAwaitClipboardPasteScript(50))).resolves.toEqual({
                 attached: false,
                 error: 'editor_not_found',

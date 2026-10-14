@@ -7,7 +7,10 @@
  * @module shared/types/screenshot
  */
 
-/** `screen`: the whole screen Quick Chat is on. `area`: let the user pick an area or window first. */
+/**
+ * `screen`: the whole screen (the one under the pointer; the main display on macOS; GNOME's portal
+ * decides on Wayland). `area`: let the user pick an area or window first (whole screen on Windows).
+ */
 export type ScreenshotMode = 'screen' | 'area';
 
 /** What Quick Chat shows for an attached screenshot. */

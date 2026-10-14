@@ -191,5 +191,15 @@ describe('screenshotCapture', () => {
             mocks.getMediaAccessStatus.mockReturnValueOnce('restricted');
             await expect(captureViaScreencapture(true)).rejects.toThrow('Screen & System Audio Recording');
         });
+
+        it('asks macOS for the permission on first use instead of capturing only the wallpaper', async () => {
+            mocks.getSources.mockResolvedValue([]);
+            mocks.getMediaAccessStatus.mockReturnValueOnce('not-determined');
+            await expect(captureViaScreencapture(false)).rejects.toThrow('Screen & System Audio Recording');
+            expect(mocks.getSources).toHaveBeenCalledWith({
+                types: ['screen'],
+                thumbnailSize: { width: 1, height: 1 },
+            });
+        });
     });
 });
