@@ -25,6 +25,7 @@ Legend: `[ ]` open, `[~]` in progress, `[x]` done, `[!]` blocked (say on what).
 - **2026-10-13:** After Phase 1, build the test harness (T1 to T4) before Phase 2, so every feature Phase 2 brings back gets a test and Phase 4 can simplify without losing one.
 - **2026-10-14:** P1 (global hotkeys on kernel 7) moves ahead of the rest of Phase 2 and ships in PR #2: the owner wants the shortcuts, and after signing in the app greets him with a "Global Hotkeys Disabled" notice.
 - **2026-10-14:** Testing on the owner's machine must not wait on him. Fixes are tested from `release/linux-unpacked` with a copy of his profile and driven by the live check (T5); a sudo install is only for everyday use and release sign-off.
+- **2026-10-14:** Hybrid app: keep the Gemini web tabs and add a local agent engine behind Quick Chat (Phase H), instead of rebuilding on a CLI. The Gemini CLI no longer accepts personal Google logins (since 2026-06-18), so the engine is Antigravity CLI (`agy`) on the owner's Google account, with the open-source Gemini CLI on an API key as the alternative. The comparison is in the project's `overview/fork-vs-cli-harness-2026-10-14.md`. The owner also asked for desktop looks that can match GNOME and other desktops, and a GNOME launcher for Quick Chat. Work is split into tasks built by Opus subagents and reviewed by Fable.
 
 ## Needs the owner
 
@@ -84,6 +85,31 @@ Goal: pushing a `v*` tag builds the AppImage, pacman, deb, rpm and tar.gz packag
 
 - [~] **L15** AppImage without `fuse2`: try `toolsets.appimage: "1.0.2"`, or `1.0.3` with electron-builder 26.17 or later. Needs a CachyOS test. The config now sets `1.0.2`, which builds the AppImage with the static type2 runtime; it needs `fusermount3` from `fuse3`, which `xdg-desktop-portal` already pulls in. In a container without libfuse2 the old AppImage fails with `dlopen(): error loading libfuse.so.2` and the new one starts the app. On CachyOS on 2026-10-14 the new AppImage started and passed the live check, but `fuse2` is installed there, so it still has to be tried without it, [#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2).
 - [ ] **L16 (owner)** An AUR package, `gemini-desktop-bin`, that repackages the release's pacman file, so `paru` or `yay` handle updates. Needs an AUR account.
+
+## Phase H: Hybrid Quick Chat, agent features and desktop looks
+
+Quick Chat decides per prompt whether a Gemini web tab or the local agent CLI answers it. The web tab keeps everything only gemini.google.com has (Gems, Canvas, Deep Research, images, Live, history on the phone); the agent adds what a web page cannot do: local files, commands, structured answers. Never use `--dangerously-skip-permissions`; anything that changes files goes through a plan the user confirms in Quick Chat.
+
+- [~] **H1** Shared contract: `src/shared/types/agent.ts` and `look.ts`, the `agent:*`, `look:*` and `quick-chat:resize` channels, preload modules and the new preferences (`desktopLook`, `quickChatRoutingMode`, `agentEngine`, `agentModel`).
+- [~] **H2** Agent engine in the main process: find `agy` (or `gemini`) on PATH and in the usual install folders, run it headless with streaming JSON, turn its events into `AgentRunEvent`s, cancel, time out, and continue a conversation for follow-ups. Works with no CLI installed (Quick Chat falls back to the web tab and Options says how to install one).
+- [~] **H3** File plans: for file tasks the agent proposes moves, copies, renames, new folders and trashing as a `FileActionPlan`; nothing changes until the user presses Apply. The app applies the plan itself, moves files to the trash instead of deleting, refuses paths outside the home folder, and can undo the last plan.
+- [~] **H4** Router and Quick Chat: a rule-based router (`@web` and `@agent` prefixes, folders and file names, file verbs, system questions, image and research words) with a chip that shows where a prompt will go and why; Ctrl+Enter sends to the other side. Agent answers stream into an expanding Quick Chat panel with tool steps, Stop, follow-up questions, Apply and Undo for file plans, and "Continue in Gemini".
+- [~] **H5** Options, "Quick Chat" section: routing mode (Auto, always Gemini tab, always agent), engine (Auto, Antigravity CLI, Gemini CLI), model, and the engine's status with install and sign-in hints.
+- [~] **H6** Desktop looks: a "Look" setting with Auto (match the desktop) and Default (today's look), GNOME, KDE Plasma, Xfce, Cinnamon, MATE, Budgie, elementary OS, COSMIC, macOS and Windows. Each look changes the titlebar, window controls, fonts, corner radii and colors of the main window, Options and Quick Chat, in light and dark; GNOME and KDE use the desktop's accent color when the desktop exposes one.
+- [~] **H7** GNOME launcher for Quick Chat: a `--quick-chat` command-line flag (also for a running app), a second desktop entry "Gemini Quick Chat" that can be pinned to the dash, and a "Quick Chat" action on the main entry's right-click menu.
+- [ ] **H8 (owner)** On CachyOS: install Antigravity CLI and run `agy` once to sign in; then the live check drives Quick Chat through a web prompt, an agent answer and a file plan in a scratch folder.
+
+Ideas for later, each its own item when picked up:
+
+- [ ] **H9** Selection actions: a hotkey that takes the selected text (or clipboard) and explains, translates or rewrites it with the agent, then copies the answer.
+- [ ] **H10** Ask about the screen: take a screenshot through the desktop portal and ask about it.
+- [ ] **H11** Drop files onto Quick Chat to ask about them (summarise a PDF, rename photos by date, compare two documents).
+- [ ] **H12** Agent history: keep every agent answer and applied file plan as Markdown in a folder the user picks, searchable from Quick Chat.
+- [ ] **H13** Watched folders and scheduled tasks: "sort my Downloads every evening" as a saved agent prompt with a plan to confirm.
+- [ ] **H14** System questions with read-only commands (disk use, biggest folders, failed services, recent package updates) through a small allow list in the agent's permission settings.
+- [ ] **H15** File manager integration: an "Ask Gemini" script for Nautilus and a service menu for Dolphin that open Quick Chat with the selected files.
+- [ ] **H16** Agent plugins and MCP servers: show the ones the CLI has and let the router use them (calendar, notes, Git).
+- [ ] **H17** Hand an agent answer to a Gemini tab with its context, for the parts only the web app can do (Canvas, images, Deep Research).
 
 ## Test harness: try every feature (next, before Phase 2)
 

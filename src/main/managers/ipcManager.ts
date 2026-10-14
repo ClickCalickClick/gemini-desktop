@@ -41,6 +41,8 @@ import type ExportManager from './exportManager';
 import type { ModelStatus } from './llmManager';
 import type { ThemePreference, Logger } from '../types';
 import { DEFAULT_ACCELERATORS } from '../../shared/types/hotkeys';
+import type { AgentEnginePreference, QuickChatRoutingMode } from '../../shared/types/agent';
+import type { DesktopLookPreference } from '../../shared/types/look';
 
 /**
  * User preferences structure for settings store.
@@ -77,6 +79,11 @@ interface UserPreferences extends Record<string, unknown> {
     // Smart Enter & Chat Scroll settings
     smartEnterEnabled: boolean;
     scrollToBottomButtonEnabled: boolean;
+    // Desktop look and hybrid Quick Chat (keep in step with ipc/types.ts)
+    desktopLook: DesktopLookPreference;
+    quickChatRoutingMode: QuickChatRoutingMode;
+    agentEngine: AgentEnginePreference;
+    agentModel: string;
 }
 
 /**
@@ -144,6 +151,10 @@ export default class IpcManager {
                     startMinimized: false,
                     smartEnterEnabled: true,
                     scrollToBottomButtonEnabled: true,
+                    desktopLook: 'default',
+                    quickChatRoutingMode: 'auto',
+                    agentEngine: 'auto',
+                    agentModel: '',
                 },
             });
         /* v8 ignore next -- production fallback, tests always inject logger */
