@@ -11,5 +11,6 @@ export { AboutSection } from './AboutSection';
 export { TextPredictionSettings } from './TextPredictionSettings';
 export { NotificationSettings } from './NotificationSettings';
 export { StartupSettings } from './StartupSettings';
+export { TrayIconSettings } from './TrayIconSettings';
 export { ChatBehaviorSettings } from './ChatBehaviorSettings';
 export { QuickChatSettings } from './QuickChatSettings';

@@ -20,6 +20,7 @@ import { AboutSection } from './AboutSection';
 import { TextPredictionSettings } from './TextPredictionSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { StartupSettings } from './StartupSettings';
+import { TrayIconSettings } from './TrayIconSettings';
 import { ChatBehaviorSettings } from './ChatBehaviorSettings';
 import { QuickChatSettings } from './QuickChatSettings';
 import './options-window.css';
@@ -203,6 +204,11 @@ export function OptionsWindow() {
 
                             <OptionsSection title="Startup" testId="options-startup">
                                 <StartupSettings />
+                            </OptionsSection>
+
+                            {/* Tray icon: what a click on it opens */}
+                            <OptionsSection title="Tray Icon" testId="options-tray-icon">
+                                <TrayIconSettings />
                             </OptionsSection>
 
                             {/* Chat Settings */}

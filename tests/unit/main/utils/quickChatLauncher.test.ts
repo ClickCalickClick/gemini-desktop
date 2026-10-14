@@ -15,6 +15,7 @@ import {
     NO_LAUNCHER_ENV,
     QUICK_CHAT_DESKTOP_FILE,
     QUICK_CHAT_ICON_FILE,
+    QUICK_CHAT_SOURCE_ICON,
     quoteDesktopExecArg,
 } from '../../../../src/main/utils/quickChatLauncher';
 
@@ -68,7 +69,8 @@ describe('ensureQuickChatLauncher', () => {
         resourcesPath = path.join(root, 'app', 'resources');
         fs.mkdirSync(homeDir, { recursive: true });
         fs.mkdirSync(resourcesPath, { recursive: true });
-        fs.writeFileSync(path.join(resourcesPath, 'icon.png'), 'png');
+        fs.writeFileSync(path.join(resourcesPath, 'icon.png'), 'app png');
+        fs.writeFileSync(path.join(resourcesPath, QUICK_CHAT_SOURCE_ICON), 'png');
         desktopFile = path.join(homeDir, '.local', 'share', 'applications', QUICK_CHAT_DESKTOP_FILE);
         iconFile = path.join(homeDir, '.local', 'share', 'icons', QUICK_CHAT_ICON_FILE);
     });
@@ -94,7 +96,7 @@ describe('ensureQuickChatLauncher', () => {
         expect(fs.existsSync(desktopFile)).toBe(false);
     });
 
-    it('writes a launcher for the AppImage file, with a copied icon', async () => {
+    it('writes a launcher for the AppImage file, with a copy of its own icon', async () => {
         const appImage = path.join(root, 'Apps', 'Gemini Desktop.AppImage');
 
         expect(await run({ env: { APPIMAGE: appImage } })).toBe('written');

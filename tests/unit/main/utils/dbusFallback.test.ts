@@ -684,6 +684,137 @@ describe('DBusFallback', () => {
     // Session bus connection (B1): never through dbus-next's native usocket
     // ========================================================================
 
+    // ========================================================================
+    // Keys the desktop owns (GNOME keeps what the user approved)
+    // ========================================================================
+
+    describe('desktop-owned keys', () => {
+        const shortcuts = [
+            { id: 'quickChat' as const, accelerator: 'Shift+Super+F23', description: 'Quick Chat' },
+            { id: 'peekAndHide' as const, accelerator: 'CommandOrControl+Shift+Space', description: 'Hide' },
+        ];
+        const SESSION_PREFIX = '/org/freedesktop/portal/desktop/session/1_42/';
+        const mockConfigureShortcuts = vi.fn();
+
+        beforeEach(() => {
+            mockConfigureShortcuts.mockResolvedValue(undefined);
+            mockGetInterface.mockImplementation((iface: string) => {
+                if (iface === 'org.freedesktop.DBus.Properties') {
+                    return { Get: mockGet };
+                }
+                return {
+                    CreateSession: mockCreateSession,
+                    BindShortcuts: mockBindShortcuts,
+                    ConfigureShortcuts: mockConfigureShortcuts,
+                };
+            });
+            mockGet.mockImplementation(async (iface: string, prop: string) =>
+                iface === 'org.freedesktop.portal.GlobalShortcuts' && prop === 'version'
+                    ? { signature: 'u', value: 2 }
+                    : ['org.freedesktop.portal.GlobalShortcuts']
+            );
+            mockBindShortcuts.mockImplementation(
+                async (_s: string, _sh: unknown[], _p: string, options: Record<string, { value?: string }>) => {
+                    const requestPath = `/org/freedesktop/portal/desktop/request/1_42/${options.handle_token.value}`;
+                    simulatePortalResponse(requestPath, 0, {
+                        shortcuts: {
+                            value: [
+                                ['quickChat', { trigger_description: { value: 'Press <Control><Alt><Shift>space' } }],
+                                ['peekAndHide', { trigger_description: { value: '' } }],
+                            ],
+                        },
+                    });
+                    return requestPath;
+                }
+            );
+        });
+
+        it('reports the keys the desktop bound, not the ones the app asked for', async () => {
+            const results = await dbusFallback.registerViaDBus(shortcuts);
+
+            expect(results).toEqual([
+                { hotkeyId: 'quickChat', success: true, desktopTrigger: 'Press <Control><Alt><Shift>space' },
+                { hotkeyId: 'peekAndHide', success: true },
+            ]);
+        });
+
+        it('opens the desktop dialog through ConfigureShortcuts on portal version 2', async () => {
+            await dbusFallback.registerViaDBus(shortcuts);
+
+            expect(dbusFallback.canConfigureShortcuts()).toBe(true);
+            await expect(dbusFallback.configureShortcutsViaDBus()).resolves.toBe(true);
+            expect(mockConfigureShortcuts).toHaveBeenCalledWith(expect.stringContaining(SESSION_PREFIX), '', {});
+        });
+
+        it('has no dialog on portal version 1 or without a session', async () => {
+            expect(dbusFallback.canConfigureShortcuts()).toBe(false);
+            await expect(dbusFallback.configureShortcutsViaDBus()).resolves.toBe(false);
+
+            mockGet.mockResolvedValue({ signature: 'u', value: 1 });
+            await dbusFallback.registerViaDBus(shortcuts);
+
+            expect(dbusFallback.canConfigureShortcuts()).toBe(false);
+            await expect(dbusFallback.configureShortcutsViaDBus()).resolves.toBe(false);
+            expect(mockConfigureShortcuts).not.toHaveBeenCalled();
+        });
+
+        it('reports a failed ConfigureShortcuts call as false', async () => {
+            mockConfigureShortcuts.mockRejectedValue(new Error('No settings provider'));
+            await dbusFallback.registerViaDBus(shortcuts);
+
+            await expect(dbusFallback.configureShortcutsViaDBus()).resolves.toBe(false);
+        });
+
+        it('passes keys changed in the desktop to onShortcutsChanged', async () => {
+            const onShortcutsChanged = vi.fn();
+            await dbusFallback.registerViaDBus(shortcuts, undefined, { onShortcutsChanged });
+            const boundSession = mockBindShortcuts.mock.calls[0][0] as string;
+
+            const changed = [['quickChat', { trigger_description: { value: 'Press <Shift><Super>XF86Assistant' } }]];
+            for (const handler of [...busMessageHandlers]) {
+                // Another session's change is not ours
+                handler({
+                    type: 4,
+                    interface: 'org.freedesktop.portal.GlobalShortcuts',
+                    member: 'ShortcutsChanged',
+                    body: ['/org/freedesktop/portal/desktop/session/1_42/other', changed],
+                });
+                handler({
+                    type: 4,
+                    interface: 'org.freedesktop.portal.GlobalShortcuts',
+                    member: 'ShortcutsChanged',
+                    body: [boundSession, changed],
+                });
+            }
+
+            expect(onShortcutsChanged).toHaveBeenCalledTimes(1);
+            expect(onShortcutsChanged.mock.calls[0][0]).toEqual(
+                new Map([['quickChat', 'Press <Shift><Super>XF86Assistant']])
+            );
+        });
+
+        it('forgets the portal version when the session ends', async () => {
+            await dbusFallback.registerViaDBus(shortcuts);
+            await dbusFallback.destroySession();
+
+            expect(dbusFallback.canConfigureShortcuts()).toBe(false);
+        });
+    });
+
+    describe('readTriggerDescriptions', () => {
+        it('skips malformed entries and empty descriptions', () => {
+            expect(
+                dbusFallback.readTriggerDescriptions([
+                    ['quickChat', { trigger_description: { value: 'Press F13' } }],
+                    ['voiceChat', {}],
+                    'nonsense',
+                    [42, {}],
+                ])
+            ).toEqual(new Map([['quickChat', 'Press F13']]));
+            expect(dbusFallback.readTriggerDescriptions(undefined)).toEqual(new Map());
+        });
+    });
+
     describe('getSessionBusAddress', () => {
         it.each([
             ['unix:path=/run/user/1000/bus', 'unix:socket=/run/user/1000/bus'],

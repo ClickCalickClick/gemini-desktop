@@ -77,11 +77,15 @@ vi.mock('../../../src/main/platform/platformAdapterFactory', () => ({
 const mockDbusFallback = vi.hoisted(() => ({
     registerViaDBus: vi.fn().mockResolvedValue([]),
     destroySession: vi.fn().mockResolvedValue(undefined),
+    canConfigureShortcuts: vi.fn().mockReturnValue(false),
+    configureShortcutsViaDBus: vi.fn().mockResolvedValue(false),
 }));
 
 vi.mock('../../../src/main/utils/dbusFallback', () => ({
     registerViaDBus: mockDbusFallback.registerViaDBus,
     destroySession: mockDbusFallback.destroySession,
+    canConfigureShortcuts: mockDbusFallback.canConfigureShortcuts,
+    configureShortcutsViaDBus: mockDbusFallback.configureShortcutsViaDBus,
 }));
 
 // Import after mocks are set up
@@ -103,6 +107,8 @@ describe('HotkeyManager', () => {
      */
     beforeEach(() => {
         vi.clearAllMocks();
+        mockDbusFallback.canConfigureShortcuts.mockReturnValue(false);
+        mockDbusFallback.configureShortcutsViaDBus.mockResolvedValue(false);
 
         // Create mock WindowManager using shared factory
         mockWindowManager = createMockWindowManager();
@@ -1099,7 +1105,11 @@ describe('HotkeyManager', () => {
                 hotkeyManager.registerShortcuts();
 
                 await vi.waitFor(() => {
-                    expect(mockDbusFallback.registerViaDBus).toHaveBeenCalledWith(expect.any(Array), expect.any(Map));
+                    expect(mockDbusFallback.registerViaDBus).toHaveBeenCalledWith(
+                        expect.any(Array),
+                        expect.any(Map),
+                        expect.objectContaining({ onShortcutsChanged: expect.any(Function) })
+                    );
                 });
 
                 const actionCallbacks = mockDbusFallback.registerViaDBus.mock.calls[0][1] as Map<string, () => void>;
@@ -1154,6 +1164,59 @@ describe('HotkeyManager', () => {
                     );
                 });
                 expect(hotkeyManager.getPlatformHotkeyStatus().registrationPending).toBe(false);
+            });
+
+            it('shows the keys the desktop bound and the ones the user later picks there', async () => {
+                createWaylandKdeStatus();
+                mockDbusFallback.canConfigureShortcuts.mockReturnValue(true);
+                mockDbusFallback.registerViaDBus.mockResolvedValue([
+                    { hotkeyId: 'quickChat', success: true, desktopTrigger: 'Press <Control><Alt><Shift>space' },
+                    { hotkeyId: 'peekAndHide', success: true },
+                    { hotkeyId: 'voiceChat', success: true },
+                ]);
+
+                hotkeyManager.registerShortcuts();
+
+                await vi.waitFor(() => {
+                    expect(hotkeyManager.getPlatformHotkeyStatus().registrationPending).toBe(false);
+                });
+                const status = hotkeyManager.getPlatformHotkeyStatus();
+                expect(status.canChangeInDesktop).toBe(true);
+                expect(status.registrationResults).toContainEqual({
+                    hotkeyId: 'quickChat',
+                    success: true,
+                    desktopTrigger: 'Press <Control><Alt><Shift>space',
+                });
+
+                mockWindowManager.emit.mockClear();
+                const { onShortcutsChanged } = mockDbusFallback.registerViaDBus.mock.calls[0][2];
+                onShortcutsChanged(new Map([['quickChat', 'Press <Shift><Super>XF86Assistant']]));
+
+                expect(mockWindowManager.emit).toHaveBeenCalledWith(
+                    'platform-hotkey-status-changed',
+                    expect.objectContaining({
+                        registrationResults: expect.arrayContaining([
+                            {
+                                hotkeyId: 'quickChat',
+                                success: true,
+                                desktopTrigger: 'Press <Shift><Super>XF86Assistant',
+                            },
+                        ]),
+                    })
+                );
+            });
+
+            it('opens the desktop shortcut dialog through the portal', async () => {
+                mockDbusFallback.configureShortcutsViaDBus.mockResolvedValue(true);
+
+                await expect(hotkeyManager.changeShortcutsInDesktop()).resolves.toBe(true);
+                expect(mockDbusFallback.configureShortcutsViaDBus).toHaveBeenCalledTimes(1);
+            });
+
+            it('does not offer the desktop dialog while the hotkeys are not bound', () => {
+                mockDbusFallback.canConfigureShortcuts.mockReturnValue(true);
+
+                expect(hotkeyManager.getPlatformHotkeyStatus().canChangeInDesktop).toBe(false);
             });
 
             it('should only register enabled hotkeys via D-Bus direct path', async () => {
@@ -1234,7 +1297,11 @@ describe('HotkeyManager', () => {
                 hotkeyManager.registerShortcuts();
 
                 await vi.waitFor(() => {
-                    expect(mockDbusFallback.registerViaDBus).toHaveBeenCalledWith(expect.any(Array), expect.any(Map));
+                    expect(mockDbusFallback.registerViaDBus).toHaveBeenCalledWith(
+                        expect.any(Array),
+                        expect.any(Map),
+                        expect.objectContaining({ onShortcutsChanged: expect.any(Function) })
+                    );
                 });
 
                 const actionCallbacks = mockDbusFallback.registerViaDBus.mock.calls[0][1] as Map<string, () => void>;
@@ -1252,7 +1319,11 @@ describe('HotkeyManager', () => {
                 hotkeyManager.registerShortcuts();
 
                 await vi.waitFor(() => {
-                    expect(mockDbusFallback.registerViaDBus).toHaveBeenCalledWith(expect.any(Array), expect.any(Map));
+                    expect(mockDbusFallback.registerViaDBus).toHaveBeenCalledWith(
+                        expect.any(Array),
+                        expect.any(Map),
+                        expect.objectContaining({ onShortcutsChanged: expect.any(Function) })
+                    );
                 });
 
                 const actionCallbacks = mockDbusFallback.registerViaDBus.mock.calls[0][1] as Map<string, () => void>;

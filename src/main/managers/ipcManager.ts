@@ -30,6 +30,7 @@ import {
     SmartEnterIpcHandler,
     AgentIpcHandler,
     LookIpcHandler,
+    TrayIpcHandler,
     IpcHandlerDependencies,
 } from './ipc/index';
 import SettingsStore from '../store';
@@ -46,6 +47,8 @@ import type { ThemePreference, Logger } from '../types';
 import { DEFAULT_ACCELERATORS } from '../../shared/types/hotkeys';
 import type { AgentEnginePreference, QuickChatRoutingMode } from '../../shared/types/agent';
 import type { DesktopLookPreference } from '../../shared/types/look';
+import { DEFAULT_TRAY_CLICK_ACTION } from '../../shared/types/tray';
+import type { TrayClickAction } from '../../shared/types/tray';
 
 /**
  * User preferences structure for settings store.
@@ -87,6 +90,8 @@ interface UserPreferences extends Record<string, unknown> {
     quickChatRoutingMode: QuickChatRoutingMode;
     agentEngine: AgentEnginePreference;
     agentModel: string;
+    // What clicking the tray icon opens
+    trayClickAction: TrayClickAction;
 }
 
 /**
@@ -160,6 +165,7 @@ export default class IpcManager {
                     quickChatRoutingMode: 'auto',
                     agentEngine: 'auto',
                     agentModel: '',
+                    trayClickAction: DEFAULT_TRAY_CLICK_ACTION,
                 },
             });
         /* v8 ignore next -- production fallback, tests always inject logger */
@@ -220,6 +226,8 @@ export default class IpcManager {
             new AgentIpcHandler(handlerDeps),
             // Desktop look (titlebar, controls, fonts and accent per desktop)
             new LookIpcHandler(handlerDeps),
+            // Tray icon setting
+            new TrayIpcHandler(handlerDeps),
         ];
 
         this.logger.log('Initialized');

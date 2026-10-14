@@ -132,6 +132,19 @@ describe('Preload Script', () => {
         });
     });
 
+    describe('Tray API', () => {
+        it('getTrayClickAction should invoke IPC handler', async () => {
+            (ipcRendererMock.invoke as any).mockResolvedValue('mainWindow');
+            await expect(exposedAPI.getTrayClickAction()).resolves.toBe('mainWindow');
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('tray-click-action:get');
+        });
+
+        it('setTrayClickAction should send IPC message', () => {
+            exposedAPI.setTrayClickAction('quickChat');
+            expect(ipcRendererMock.send).toHaveBeenCalledWith('tray-click-action:set', 'quickChat');
+        });
+    });
+
     describe('Tabs API', () => {
         it('onTabTitleUpdated should register listener and return unsubscribe', () => {
             const callback = vi.fn();
@@ -302,6 +315,15 @@ describe('Preload Script', () => {
 
             expect(ipcRendererMock.invoke).toHaveBeenCalledWith('platform:hotkey-status:get');
             expect(result).toEqual(mockStatus);
+        });
+
+        it('changeHotkeysInDesktop should invoke IPC handler', async () => {
+            ipcRendererMock.invoke.mockResolvedValue(true);
+
+            const result = await exposedAPI.changeHotkeysInDesktop();
+
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('hotkeys:change-in-desktop');
+            expect(result).toBe(true);
         });
 
         it('onPlatformHotkeyStatusChanged should register listener and return unsubscribe', () => {

@@ -15,6 +15,8 @@ import { BasePage } from './BasePage';
 import {
     getTrayState,
     simulateTrayClick,
+    getTrayClickAction,
+    setTrayClickAction,
     simulateTrayRightClick,
     clickTrayMenuItem,
     getTrayTooltip,
@@ -22,7 +24,7 @@ import {
     TrayState,
 } from '../helpers/trayActions';
 import { isWindowVisible, isWindowMinimized, closeWindow } from '../helpers/windowStateActions';
-import { isLinuxCI, isWindowsSync } from '../helpers/platform';
+import { isLinuxCI, isLinuxSync, isMacOSSync, isWindowsSync } from '../helpers/platform';
 import { Selectors } from '../helpers/selectors';
 import { E2E_TIMING } from '../helpers/e2eConstants';
 
@@ -41,6 +43,14 @@ type TRBrowser = {
     $(selector: string): Promise<TRElement>;
 };
 const trBrowser = browser as unknown as TRBrowser;
+/** The tray icon file the platform adapter picks, in the packaged resources folder. */
+function getTrayIconFilename(): string {
+    if (isWindowsSync()) return 'icon.ico';
+    if (isMacOSSync()) return 'icon-mac-trayTemplate.png';
+    if (isLinuxSync()) return 'icon-tray.png';
+    return 'icon.png';
+}
+
 /**
  * Page Object for the System Tray.
  * Provides methods for tray icon interaction, state queries, and context menu actions.
@@ -111,11 +121,34 @@ export class TrayPage extends BasePage {
     // ===========================================================================
 
     /**
-     * Click the tray icon to restore/show the main window.
+     * Click the tray icon. It opens what the `trayClickAction` setting says:
+     * Quick Chat by default, or the main window.
      */
     async click(): Promise<void> {
         this.log('Clicking tray icon');
         await simulateTrayClick();
+    }
+
+    /**
+     * Click the tray icon with the setting on 'mainWindow', so the click restores the main
+     * window, then put the saved setting back.
+     */
+    private async clickToRestoreMainWindow(): Promise<void> {
+        const previous = await getTrayClickAction();
+        if (previous === null) {
+            // The settings store is not reachable, so the setting cannot be changed either
+            this.log('Tray click action not readable; clicking with the current setting');
+            await this.click();
+            return;
+        }
+        await setTrayClickAction('mainWindow');
+        try {
+            await this.click();
+        } finally {
+            if (previous !== 'mainWindow') {
+                await setTrayClickAction(previous);
+            }
+        }
     }
 
     /**
@@ -127,11 +160,11 @@ export class TrayPage extends BasePage {
     }
 
     /**
-     * Click the tray icon and wait for the window to become visible.
+     * Click the tray icon (with the click set to open the main window) and wait for the window to become visible.
      * @param timeout - Timeout in milliseconds (default: 5000)
      */
     async clickAndWaitForWindow(timeout = 5000): Promise<void> {
-        await this.click();
+        await this.clickToRestoreMainWindow();
         await trBrowser.waitUntil(
             async () => {
                 return await isWindowVisible();
@@ -282,11 +315,11 @@ export class TrayPage extends BasePage {
 
     /**
     /**
-     * Restore the main window from tray via tray click.
+     * Restore the main window from tray via tray click (with the click set to open the main window).
      * Waits for window to be visible and adds stabilization pause for macOS.
      */
     async restoreWindowViaTrayClick(): Promise<void> {
-        await this.click();
+        await this.clickToRestoreMainWindow();
 
         // Wait for window to actually become visible
         await trBrowser.waitUntil(async () => await isWindowVisible(), {
@@ -425,8 +458,7 @@ export class TrayPage extends BasePage {
         platform: string;
         resourcesPath: string;
     }> {
-        const isWin = isWindowsSync();
-        const iconFilename = isWin ? 'icon.ico' : 'icon.png';
+        const iconFilename = getTrayIconFilename();
         return trBrowser.electron.execute((_electron: typeof import('electron'), file: string) => {
             const iconPath = require('path').join(process.resourcesPath, file);
             const exists = require('fs').existsSync(iconPath);
@@ -450,8 +482,7 @@ export class TrayPage extends BasePage {
         isFile: boolean;
         error?: string;
     }> {
-        const isWin = isWindowsSync();
-        const iconFilename = isWin ? 'icon.ico' : 'icon.png';
+        const iconFilename = getTrayIconFilename();
         return trBrowser.electron.execute((_electron: typeof import('electron'), file: string) => {
             const iconPath = require('path').join(process.resourcesPath, file);
 

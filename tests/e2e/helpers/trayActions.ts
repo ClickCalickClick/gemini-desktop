@@ -5,7 +5,9 @@
  *
  * ## E2E Testing Approach
  * - **Tray Click/Show**: Uses trayManager.executeTrayAction() to trigger the same
- *   code path as when a user clicks the tray icon
+ *   code path as when a user clicks the tray icon. A click opens what the
+ *   `trayClickAction` setting says (Quick Chat by default); use
+ *   setTrayClickAction('mainWindow') or the 'show' menu action to restore the main window
  * - **State Queries**: Uses trayManager APIs (acceptable for reading state)
  *
  * @module trayActions
@@ -104,13 +106,42 @@ export async function getTrayState(): Promise<TrayState> {
 }
 
 /**
+ * Read the saved tray click action ('quickChat' or 'mainWindow') in the main process.
+ *
+ * @returns Promise resolving to the saved action, or null when the store is not reachable
+ */
+export async function getTrayClickAction(): Promise<'quickChat' | 'mainWindow' | null> {
+    return browser.electron.execute(() => {
+        const ctx = (global as { appContext?: any }).appContext;
+        const store = ctx?.ipcManager?.store as { get?: (key: string) => unknown } | undefined;
+        const value = store?.get?.('trayClickAction');
+        return value === 'quickChat' || value === 'mainWindow' ? value : null;
+    });
+}
+
+/**
+ * Save what a tray click opens, as Options does, in the main process.
+ *
+ * @param action - 'quickChat' (the default) or 'mainWindow'
+ */
+export async function setTrayClickAction(action: 'quickChat' | 'mainWindow'): Promise<void> {
+    E2ELogger.info('tray', `Setting tray click action: ${action}`);
+
+    await browser.electron.execute((_electron: typeof import('electron'), value: string) => {
+        const ctx = (global as { appContext?: any }).appContext;
+        const store = ctx?.ipcManager?.store as { set?: (key: string, value: unknown) => void } | undefined;
+        store?.set?.('trayClickAction', value);
+    }, action);
+}
+
+/**
  * Trigger a tray click action.
  *
  * Uses trayManager.executeTrayAction() to trigger the same code path
  * as when a user clicks the tray icon. This tests:
  * - TrayManager action dispatch
- * - WindowManager.restoreFromTray()
- * - Window show and focus
+ * - The `trayClickAction` setting: WindowManager.showQuickChat() (default)
+ *   or WindowManager.restoreFromTray() with show and focus
  *
  * @returns Promise<void>
  */

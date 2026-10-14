@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Tray / top bar icon: the Twin Sparks drawn edge to edge in one colour. -->
+  <path fill="#ffffff" d="M6.750 2.500 Q7.830 8.170 13.500 9.250 Q7.830 10.330 6.750 16.000 Q5.670 10.330 0.000 9.250 Q5.670 8.170 6.750 2.500 Z"/>
+  <path fill="#ffffff" d="M12.900 0.000 Q13.396 2.604 16.000 3.100 Q13.396 3.596 12.900 6.200 Q12.404 3.596 9.800 3.100 Q12.404 2.604 12.900 0.000 Z"/>
+</svg>

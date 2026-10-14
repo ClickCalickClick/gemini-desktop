@@ -115,7 +115,7 @@ export class LinuxWaylandAdapter implements PlatformAdapter {
     }
 
     getTrayIconFilename(): TrayIconFilename {
-        return 'icon.png';
+        return 'icon-tray.png';
     }
 
     shouldDisableUpdates(env: NodeJS.ProcessEnv): boolean {
@@ -166,8 +166,7 @@ export class LinuxWaylandAdapter implements PlatformAdapter {
     }
 
     restoreFromTray(window: Electron.BrowserWindow): void {
-        window.show();
-        window.focus();
+        this.bringToFront(window);
         window.setSkipTaskbar(false);
     }
 
@@ -176,12 +175,14 @@ export class LinuxWaylandAdapter implements PlatformAdapter {
      * and GNOME answers a token it does not accept with an "is ready" notification, leaving the
      * window behind other apps. GNOME does put a newly shown window in front with the focus, as
      * Peek and Hide shows, so a window that is open but not focused is hidden and shown again.
+     * A minimized window is restored first: Chromium still counts it as minimized after it is
+     * hidden, and ends the app when it shows such a window again (B17).
      */
     bringToFront(window: Electron.BrowserWindow): void {
-        if (window.isVisible() && !window.isFocused()) {
-            if (window.isMinimized()) {
-                window.restore();
-            }
+        if (window.isMinimized()) {
+            window.restore();
+            window.hide();
+        } else if (window.isVisible() && !window.isFocused()) {
             window.hide();
         }
         window.show();

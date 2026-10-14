@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Menu, app, nativeImage } from 'electron';
+import * as fs from 'fs';
 import TrayManager from '../../../src/main/managers/trayManager';
 import type WindowManager from '../../../src/main/managers/windowManager';
 import {
@@ -205,7 +206,7 @@ describe('TrayManager', () => {
             const tray = manager.createTray();
 
             expect(tray).toBeDefined();
-            expect(vi.mocked(nativeImage.createFromPath).mock.calls[0]?.[0]).toContain('icon.png');
+            expect(vi.mocked(nativeImage.createFromPath).mock.calls[0]?.[0]).toMatch(/[\\/]icon-tray\.png$/);
         });
 
         it('sets tooltip correctly', () => {
@@ -220,10 +221,10 @@ describe('TrayManager', () => {
             expect(Menu.buildFromTemplate).toHaveBeenCalled();
             const template = (Menu.buildFromTemplate as any).mock.calls[0][0];
 
-            // Should have Show, Quick Chat, Separator, Quit
+            // Should have Quick Chat, Show, Separator, Quit
             expect(template.length).toBe(4);
-            expect(template[0].label).toBe('Show Gemini Desktop');
-            expect(template[1].label).toBe('Quick Chat');
+            expect(template[0].label).toBe('Quick Chat');
+            expect(template[1].label).toBe('Show Gemini Desktop');
             expect(template[2].type).toBe('separator');
             expect(template[3].label).toBe('Quit');
         });
@@ -264,6 +265,18 @@ describe('TrayManager', () => {
             expect(lastCall).toContain('icon.png');
         });
 
+        it('falls back to the app icon on Linux when icon-tray.png is missing', () => {
+            useMockPlatformAdapter(platformAdapterPresets.linuxWaylandGnome());
+            vi.mocked(fs.existsSync).mockImplementation((p) => !String(p).endsWith('icon-tray.png'));
+            try {
+                trayManager.createTray();
+            } finally {
+                vi.mocked(fs.existsSync).mockImplementation((p) => !String(p).includes('nonexistent'));
+            }
+
+            expect(vi.mocked(nativeImage.createFromPath).mock.calls[0]?.[0]).toMatch(/[\\/]icon\.png$/);
+        });
+
         it('throws error when icon file is not found', async () => {
             useMockPlatformAdapter(
                 createMockPlatformAdapter({
@@ -277,14 +290,80 @@ describe('TrayManager', () => {
     });
 
     describe('tray click handler', () => {
-        it('calls restoreFromTray on WindowManager when tray is clicked', () => {
-            trayManager.createTray();
-
-            // Simulate click
+        const clickTray = () => {
             const clickHandler = vi.mocked(mockTrayInstance.on).mock.calls.find((call) => call[0] === 'click')?.[1];
             clickHandler?.();
+        };
 
-            expect(mockWindowManager.restoreFromTray).toHaveBeenCalled();
+        it('opens Quick Chat by default', () => {
+            trayManager.createTray();
+
+            clickTray();
+
+            expect(mockWindowManager.showQuickChat).toHaveBeenCalledTimes(1);
+            expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled();
+        });
+
+        it('restores the main window when the setting says mainWindow', () => {
+            const manager = new TrayManager(mockWindowManager, { getClickAction: () => 'mainWindow' });
+            manager.createTray();
+
+            clickTray();
+
+            expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1);
+            expect(mockWindowManager.showQuickChat).not.toHaveBeenCalled();
+        });
+
+        it('reads the setting at click time', () => {
+            let action: 'quickChat' | 'mainWindow' = 'mainWindow';
+            const manager = new TrayManager(mockWindowManager, { getClickAction: () => action });
+            manager.createTray();
+
+            clickTray();
+            action = 'quickChat';
+            clickTray();
+
+            expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1);
+            expect(mockWindowManager.showQuickChat).toHaveBeenCalledTimes(1);
+        });
+
+        it('falls back to Quick Chat when reading the setting throws', () => {
+            const manager = new TrayManager(mockWindowManager, {
+                getClickAction: () => {
+                    throw new Error('store unavailable');
+                },
+            });
+            manager.createTray();
+
+            clickTray();
+
+            expect(mockWindowManager.showQuickChat).toHaveBeenCalledTimes(1);
+            expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('executeTrayAction', () => {
+        it("'click' follows the setting like a real tray click", () => {
+            trayManager.executeTrayAction('click');
+            expect(mockWindowManager.showQuickChat).toHaveBeenCalledTimes(1);
+            expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled();
+
+            const manager = new TrayManager(mockWindowManager, { getClickAction: () => 'mainWindow' });
+            manager.executeTrayAction('click');
+            expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1);
+        });
+
+        it("'show' always restores the main window", () => {
+            trayManager.executeTrayAction('show');
+
+            expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1);
+            expect(mockWindowManager.showQuickChat).not.toHaveBeenCalled();
+        });
+
+        it("'quit' quits the app", () => {
+            trayManager.executeTrayAction('quit');
+
+            expect(app.quit).toHaveBeenCalled();
         });
     });
 

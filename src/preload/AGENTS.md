@@ -25,6 +25,8 @@ Subscription cleanup return functions are mandatory because renderer hooks call 
 
 Treat this get/set/onChange shape as the template for new bridge APIs.
 
+Smaller settings follow the get/set half of it, for example `src/preload/api/tray.ts` (`getTrayClickAction()` with `invoke`, `setTrayClickAction()` with `send`).
+
 ## Security Rules
 
 - Never expose raw `ipcRenderer` to renderer code

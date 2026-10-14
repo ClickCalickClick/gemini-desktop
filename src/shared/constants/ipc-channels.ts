@@ -93,6 +93,8 @@ export const IPC_CHANNELS = {
     HOTKEYS_ACCELERATOR_SET: 'hotkeys:accelerator:set',
     HOTKEYS_ACCELERATOR_CHANGED: 'hotkeys:accelerator:changed',
     HOTKEYS_FULL_SETTINGS_GET: 'hotkeys:full-settings:get',
+    /** Open the desktop's own dialog for the global shortcut keys (Wayland portal) */
+    HOTKEYS_CHANGE_IN_DESKTOP: 'hotkeys:change-in-desktop',
 
     // Auto-Update
     AUTO_UPDATE_GET_ENABLED: 'auto-update:get-enabled',
@@ -135,6 +137,10 @@ export const IPC_CHANNELS = {
     LAUNCH_AT_STARTUP_SET: 'launch-at-startup:set',
     START_MINIMIZED_GET: 'start-minimized:get',
     START_MINIMIZED_SET: 'start-minimized:set',
+
+    // Tray icon
+    TRAY_CLICK_ACTION_GET: 'tray-click-action:get',
+    TRAY_CLICK_ACTION_SET: 'tray-click-action:set',
 
     // Text Prediction (local LLM inference)
     TEXT_PREDICTION_GET_ENABLED: 'text-prediction:get-enabled',

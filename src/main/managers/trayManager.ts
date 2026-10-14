@@ -13,16 +13,30 @@ import { TRAY_MENU_ITEMS, TRAY_TOOLTIP } from '../utils/constants';
 import { createLogger } from '../utils/logger';
 import { getPlatformAdapter } from '../platform/platformAdapterFactory';
 import type WindowManager from './windowManager';
+import { DEFAULT_TRAY_CLICK_ACTION } from '../../shared/types/tray';
+import type { TrayClickAction } from '../../shared/types/tray';
 
 const logger = createLogger('[TrayManager]');
+
+/** Optional dependencies for {@link TrayManager}. */
+export interface TrayManagerOptions {
+    /**
+     * Returns what a tray icon click opens. Called at click time, so a changed setting
+     * applies to the next click. main.ts reads the `trayClickAction` user preference;
+     * without it the click opens Quick Chat (the setting's default).
+     */
+    getClickAction?: () => TrayClickAction;
+}
 
 /**
  * Manages the system tray icon and context menu.
  *
  * ## Features
  * - Creates system tray icon with app icon
- * - Provides context menu for show, Quick Chat and quit actions
- * - Handles tray click to restore window
+ * - Provides context menu for Quick Chat, show and quit actions
+ * - Handles tray click: opens Quick Chat or the main window, per the `trayClickAction` setting
+ *   (on GNOME's AppIndicator extension a single click opens the menu and a double click
+ *   sends Activate, which Electron reports as the Tray `click` event)
  * - Cross-platform support (Windows, macOS, Linux)
  *
  * @class TrayManager
@@ -30,6 +44,9 @@ const logger = createLogger('[TrayManager]');
 export default class TrayManager {
     /** Reference to the window manager */
     private windowManager: WindowManager;
+
+    /** Reads what a tray icon click opens */
+    private readonly getClickAction: () => TrayClickAction;
 
     /** The system tray instance */
     private tray: Tray | null = null;
@@ -40,9 +57,11 @@ export default class TrayManager {
     /**
      * Creates a new TrayManager instance.
      * @param windowManager - The WindowManager instance for window control
+     * @param options - Optional dependencies, see {@link TrayManagerOptions}
      */
-    constructor(windowManager: WindowManager) {
+    constructor(windowManager: WindowManager, options: TrayManagerOptions = {}) {
         this.windowManager = windowManager;
+        this.getClickAction = options.getClickAction ?? (() => DEFAULT_TRAY_CLICK_ACTION);
         logger.log('TrayManager initialized');
     }
 
@@ -88,10 +107,10 @@ export default class TrayManager {
             const contextMenu = this._buildContextMenu();
             this.tray.setContextMenu(contextMenu);
 
-            // Handle tray click to restore window
+            // Tray click (a double click on GNOME's AppIndicator extension) opens what the setting says
             this.tray.on('click', () => {
                 logger.log('Tray icon clicked');
-                this.windowManager.restoreFromTray();
+                this._handleTrayClick();
             });
 
             logger.log('Tray created successfully');
@@ -100,6 +119,25 @@ export default class TrayManager {
             /* v8 ignore next 2 -- defensive error handling, hard to trigger in tests */
             logger.error('Failed to create tray:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Open what the `trayClickAction` setting names: Quick Chat or the main window.
+     * @private
+     */
+    private _handleTrayClick(): void {
+        let action: TrayClickAction = DEFAULT_TRAY_CLICK_ACTION;
+        try {
+            action = this.getClickAction();
+        } catch (error) {
+            logger.error('Failed to read the tray click action, using the default:', error);
+        }
+
+        if (action === 'mainWindow') {
+            this.windowManager.restoreFromTray();
+        } else {
+            this.windowManager.showQuickChat();
         }
     }
 
@@ -155,15 +193,18 @@ export default class TrayManager {
      * the same code path that would be executed when a user clicks the tray icon
      * or a tray menu item.
      *
-     * @param action - The action to execute: 'click', 'show', 'quickChat' or 'quit'
+     * @param action - The action to execute: 'click' (the tray icon click, which follows the
+     *   `trayClickAction` setting), 'show' (restore the main window), 'quickChat' or 'quit'
      */
     executeTrayAction(action: 'click' | 'show' | 'quickChat' | 'quit'): void {
         logger.log(`Executing tray action programmatically: ${action}`);
 
         switch (action) {
             case 'click':
+                // Same as the tray click handler
+                this._handleTrayClick();
+                break;
             case 'show':
-                // Same as tray click handler
                 this.windowManager.restoreFromTray();
                 break;
             case 'quickChat':

@@ -16,6 +16,7 @@ export * from './notifications';
 export * from './tabs';
 export * from './agent';
 export * from './look';
+export * from './tray';
 
 // Re-export ElectronAPI explicitly for easier imports
 export type { ElectronAPI } from './ipc';

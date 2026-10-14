@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Gemini Quick Chat launcher icon: the Twin Sparks colours turned inside out on a speech bubble, so
+       the launcher is easy to tell apart from the main app icon (build/icon.svg) in the app grid. -->
+  <defs>
+    <linearGradient id="bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cc4ff"/>
+      <stop offset=".55" stop-color="#8b7bff"/>
+      <stop offset="1" stop-color="#e58cff"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 12 H96 A24 24 0 0 1 120 36 V76 A24 24 0 0 1 96 100 H54 L26 122 L30 100 A24 24 0 0 1 8 76 V36 A24 24 0 0 1 32 12 Z" fill="#3b2f8f"/>
+  <path d="M32 8 H96 A24 24 0 0 1 120 32 V72 A24 24 0 0 1 96 96 H54 L26 118 L30 96 A24 24 0 0 1 8 72 V32 A24 24 0 0 1 32 8 Z" fill="url(#bubble)"/>
+  <path d="M64.000 20.000 Q69.200 46.800 96.000 52.000 Q69.200 57.200 64.000 84.000 Q58.800 57.200 32.000 52.000 Q58.800 46.800 64.000 20.000 Z" fill="#ffffff"/>
+</svg>

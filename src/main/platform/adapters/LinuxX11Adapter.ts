@@ -100,7 +100,7 @@ export class LinuxX11Adapter implements PlatformAdapter {
     }
 
     getTrayIconFilename(): TrayIconFilename {
-        return 'icon.png';
+        return 'icon-tray.png';
     }
 
     shouldDisableUpdates(env: NodeJS.ProcessEnv): boolean {

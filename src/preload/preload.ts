@@ -20,6 +20,7 @@ import { updatesAPI } from './api/updates';
 import { windowAPI } from './api/window';
 import { zoomAPI } from './api/zoom';
 import { smartEnterAPI } from './api/smartEnter';
+import { trayAPI } from './api/tray';
 
 const electronAPI: ElectronAPI = {
     ...windowAPI,
@@ -37,6 +38,7 @@ const electronAPI: ElectronAPI = {
     ...textPredictionAPI,
     ...notificationsAPI,
     ...startupAPI,
+    ...trayAPI,
     ...exportAPI,
     ...smartEnterAPI,
     ...lookAPI,

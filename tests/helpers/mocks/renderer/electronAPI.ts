@@ -212,6 +212,7 @@ export function createMockElectronAPI(overrides: MockElectronAPIOverrides = {}):
             globalHotkeysEnabled: false,
         }),
         onPlatformHotkeyStatusChanged: vi.fn().mockReturnValue(defaultUnsubscribe),
+        changeHotkeysInDesktop: vi.fn().mockResolvedValue(false),
 
         getDbusActivationSignalStats: vi.fn().mockResolvedValue({
             trackingEnabled: false,
@@ -237,6 +238,10 @@ export function createMockElectronAPI(overrides: MockElectronAPIOverrides = {}):
         }),
         setLook: vi.fn(),
         onLookChanged: vi.fn().mockReturnValue(defaultUnsubscribe),
+
+        // Tray API
+        getTrayClickAction: vi.fn().mockResolvedValue('quickChat'),
+        setTrayClickAction: vi.fn(),
 
         // Hybrid Quick Chat: agent engine
         resizeQuickChat: vi.fn(),

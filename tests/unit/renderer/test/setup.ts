@@ -165,6 +165,10 @@ const mockElectronAPI = {
     setLook: vi.fn(),
     onLookChanged: vi.fn().mockReturnValue(() => {}),
 
+    // Tray API
+    getTrayClickAction: vi.fn().mockResolvedValue('quickChat'),
+    setTrayClickAction: vi.fn(),
+
     // Dev Testing API
     devShowBadge: vi.fn(),
     devClearBadge: vi.fn(),

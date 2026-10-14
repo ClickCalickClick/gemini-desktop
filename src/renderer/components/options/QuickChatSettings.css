@@ -50,7 +50,8 @@
 
 .quick-chat-settings__select,
 .quick-chat-settings__input {
-    min-width: 170px;
+    box-sizing: border-box;
+    width: 200px;
     padding: 6px 10px;
     border: 1px solid var(--border-color);
     border-radius: var(--qc-settings-control-radius, 6px);
