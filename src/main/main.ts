@@ -81,6 +81,8 @@ import UpdateManager, { AutoUpdateSettings } from './managers/updateManager';
 import ExportManager from './managers/exportManager';
 import LlmManager from './managers/llmManager';
 import SettingsStore from './store';
+import RendererReloads from './utils/rendererReloads';
+import TerminationSignals from './utils/terminationSignals';
 import type { ApplicationContext, E2EGlobals, ReadyManagers } from './ApplicationContext';
 
 // Path to the production build
@@ -104,6 +106,15 @@ let appContext: ApplicationContext | null = null;
 
 /** Handler for response-complete events (stored for cleanup) */
 let responseCompleteHandler: (() => void) | null = null;
+
+/** Set once the app starts quitting */
+let isQuitting = false;
+
+/** Decides when a window whose renderer process is gone gets reloaded */
+const rendererReloads = new RendererReloads();
+
+/** Quitting on SIGTERM, SIGINT and SIGHUP on Linux, from when the app is ready (see terminationSignals.ts) */
+const terminationSignals = process.platform === 'linux' ? new TerminationSignals(app, logger) : null;
 
 /**
  * Initialize all application managers.
@@ -332,6 +343,9 @@ if (!gotTheLock) {
         logger.debug('app.whenReady() resolved!');
         logger.log('App ready - starting initialization');
 
+        // Electron installed its own signal handlers while starting; take the signals over now
+        terminationSignals?.install();
+
         // Apply security settings to default session (used by all windows)
         setupHeaderStripping(session.defaultSession);
         setupMediaPermissions(session.defaultSession);
@@ -461,6 +475,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+    isQuitting = true;
     if (appContext) {
         appContext.windowManager.setQuitting(true);
     }
@@ -484,14 +499,13 @@ app.on('render-process-gone', (_event, webContents, details) => {
         exitCode: details.exitCode,
         title: webContents.getTitle(),
     });
+    terminationSignals?.handleProcessGone(details.reason);
 
-    // If not killed intentionally, try to recover by reloading the window
-    if (details.reason !== 'killed') {
-        const win = BrowserWindow.fromWebContents(webContents);
-        if (win && !win.isDestroyed()) {
-            logger.log('Attempting to reload crashed renderer...');
-            win.reload();
-        }
+    // Recover a crashed window by reloading it (see rendererReloads.ts for when)
+    const win = BrowserWindow.fromWebContents(webContents);
+    if (win && !win.isDestroyed() && rendererReloads.shouldReload(webContents.id, details.reason, isQuitting)) {
+        logger.log('Attempting to reload crashed renderer...');
+        win.reload();
     }
 });
 
@@ -508,6 +522,7 @@ app.on('child-process-gone', (_event, details) => {
         serviceName: details.serviceName || 'N/A',
         name: details.name || 'N/A',
     });
+    terminationSignals?.handleProcessGone(details.reason);
 });
 
 // Global error handlers for unhandled promises and exceptions
@@ -532,14 +547,18 @@ process.on('uncaughtException', (error) => {
     gracefulShutdown(1);
 });
 
-// Handle SIGTERM for containerized/CI environments
-process.on('SIGTERM', () => {
-    logger.log('Received SIGTERM signal');
-    gracefulShutdown(0);
-});
+// On Linux, terminationSignals handles these once the app is ready. A listener added here would stop
+// it from replacing Electron's handlers, because Node.js installs a signal's handler only for its first listener.
+if (process.platform !== 'linux') {
+    // Handle SIGTERM for containerized/CI environments
+    process.on('SIGTERM', () => {
+        logger.log('Received SIGTERM signal');
+        gracefulShutdown(0);
+    });
 
-// Handle SIGINT (Ctrl+C) for development
-process.on('SIGINT', () => {
-    logger.log('Received SIGINT signal');
-    gracefulShutdown(0);
-});
+    // Handle SIGINT (Ctrl+C) for development
+    process.on('SIGINT', () => {
+        logger.log('Received SIGINT signal');
+        gracefulShutdown(0);
+    });
+}

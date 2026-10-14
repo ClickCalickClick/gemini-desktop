@@ -37,6 +37,7 @@ See `src/main/managers/ipc/BaseIpcHandler.ts` and `docs/ARCHITECTURE.md` (IPC Ha
 - Using global mutable state for managers instead of DI via `ApplicationContext`
 - Forgetting `unregister()` cleanup for IPC handlers
 - Sending to destroyed windows without checking `isDestroyed()` first
+- Adding `process.on('SIGTERM' | 'SIGINT' | 'SIGHUP')` listeners while the app starts on Linux: Node.js installs a signal's handler only for its first listener, so they stop `utils/terminationSignals.ts` from taking these signals over from Electron once the app is ready (B15)
 
 ## When You Change Files Here
 
