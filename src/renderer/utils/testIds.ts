@@ -120,6 +120,7 @@ export const QUICK_CHAT_SETTINGS_TEST_IDS = {
 
 export const TRAY_ICON_SETTINGS_TEST_IDS = {
     TRAY_ICON_SETTINGS: 'tray-icon-settings',
+    TRAY_ICON_SETTINGS_LOADING: 'tray-icon-settings-loading',
     TRAY_CLICK_ACTION: 'tray-click-action-select',
 } as const;
 

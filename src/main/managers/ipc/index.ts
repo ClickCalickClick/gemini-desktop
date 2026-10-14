@@ -30,4 +30,4 @@ export { TabStateIpcHandler } from './TabStateIpcHandler';
 export { SmartEnterIpcHandler } from './SmartEnterIpcHandler';
 export { AgentIpcHandler } from './AgentIpcHandler';
 export { LookIpcHandler } from './LookIpcHandler';
-export { TrayIpcHandler, readTrayClickAction } from './TrayIpcHandler';
+export { TrayIpcHandler } from './TrayIpcHandler';

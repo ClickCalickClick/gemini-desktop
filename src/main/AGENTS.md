@@ -36,8 +36,8 @@ A manager announces a change by emitting an event on `windowManager`, for exampl
 
 ## Tray
 
-- `src/main/managers/trayManager.ts` builds the tray from `TRAY_MENU_ITEMS` (`utils/constants.ts`: Quick Chat, Show Gemini Desktop, separator, Quit) and loads the icon file named by `PlatformAdapter.getTrayIconFilename()` from the resources folder (`icon-tray.png` on Linux, `icon.ico` on Windows, `icon-mac-trayTemplate.png` on macOS), falling back to the app icon when it is missing.
-- The Tray `click` handler calls the injected `getClickAction()` at click time and opens Quick Chat (`windowManager.showQuickChat()`) or the main window (`restoreFromTray()`). `main.ts` passes a getter that reads `trayClickAction` from `IpcManager`'s user preferences through `readTrayClickAction()`; without one the click opens Quick Chat. `executeTrayAction('click')` follows the same setting, `'show'` always restores the main window.
+- `src/main/managers/trayManager.ts` builds the tray from `TRAY_MENU_ITEMS` (`utils/constants.ts`: Quick Chat, Show Gemini Desktop, separator, Quit) and loads the icon file named by `PlatformAdapter.getTrayIconFilename()` from the resources folder, `build/` in development (`icon-tray.png` on Linux, `icon.ico` on Windows, `icon-mac-trayTemplate.png` on macOS), falling back to the app icon when it is missing.
+- The Tray `click` handler calls the injected `getClickAction()` at click time and opens Quick Chat (`windowManager.showQuickChat()`) or the main window (`restoreFromTray()`). `main.ts` passes a getter that reads `trayClickAction` from `IpcManager`'s user preferences through `readTrayClickAction()`; without one the click opens Quick Chat. `executeTrayAction('click')` follows the same setting, `'show'` always restores the main window. On macOS Electron emits `click` and shows the context menu on the same left click (`tray_icon_cocoa.mm`), so the setting works there too, alongside the menu.
 - `src/main/managers/ipc/TrayIpcHandler.ts` handles `tray-click-action:get` and `tray-click-action:set` (validated with `isTrayClickAction`, saved as `trayClickAction`, default `'quickChat'`).
 
 ## Canonical Examples

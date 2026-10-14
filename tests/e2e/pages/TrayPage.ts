@@ -135,11 +135,17 @@ export class TrayPage extends BasePage {
      */
     private async clickToRestoreMainWindow(): Promise<void> {
         const previous = await getTrayClickAction();
+        if (previous === null) {
+            // The settings store is not reachable, so the setting cannot be changed either
+            this.log('Tray click action not readable; clicking with the current setting');
+            await this.click();
+            return;
+        }
         await setTrayClickAction('mainWindow');
         try {
             await this.click();
         } finally {
-            if (previous && previous !== 'mainWindow') {
+            if (previous !== 'mainWindow') {
                 await setTrayClickAction(previous);
             }
         }

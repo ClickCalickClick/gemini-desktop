@@ -163,6 +163,8 @@ Until then, build on a Mac by hand ([recipe](docs/CODEBASE_OVERVIEW.md#55-buildi
 - [ ] **S12 (owner)** Restore Dependabot version updates, grouped monthly. Forks must turn them on explicitly.
 - [ ] **S13** Report the fpm `pacman_opt_depends` template bug upstream, so the pacman package can declare optional dependencies later.
 
+- [ ] **I1** Icon follow-ups from the Twin Sparks review: `build/icon.icns` is unused because `mac.icon` in `config/electron-builder.config.cjs` points at `build/icon.png` (point `mac.icon` at it, adding 16 and 32 px 1x entries, or delete it); `build/icon-mac-tray.png` is shipped to `resources/` by the `*.png` `extraFiles` filter but nothing loads it (delete it or list the shipped files); and the white Linux tray icon `build/icon-tray.png` may be invisible on light panels such as Plasma's light Breeze (consider a light grey fill or a thin dark outline). Also confirm on a Mac that a tray click opens the chosen window as well as the menu.
+
 ## Done log
 
 - **2026-10-13:** Codebase overview and this TODO list ([docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md), `TODO.md`), [#1](https://github.com/ClickCalickClick/gemini-desktop/pull/1).

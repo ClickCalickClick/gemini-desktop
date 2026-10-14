@@ -2,6 +2,12 @@
     padding: 0;
 }
 
+.tray-icon-settings.loading {
+    padding: 8px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
 .tray-icon-settings__row {
     display: flex;
     align-items: center;

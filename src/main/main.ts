@@ -88,6 +88,7 @@ import TerminationSignals from './utils/terminationSignals';
 import { parseLaunchOptions, wantsQuickChat, type SingleInstanceData } from './utils/launchArgs';
 import { ensureQuickChatLauncher } from './utils/quickChatLauncher';
 import type { ApplicationContext, E2EGlobals, ReadyManagers } from './ApplicationContext';
+import { DEFAULT_TRAY_CLICK_ACTION } from '../shared/types/tray';
 import type { TrayClickAction } from '../shared/types/tray';
 
 // Path to the production build
@@ -163,10 +164,12 @@ function initializeManagers(): void {
 
     // Create tray and badge managers
     logger.debug('initializeManagers() - creating TrayManager');
-    // IpcManager (created below) owns the user preferences; the tray reads its click action
-    // from them at click time, which is always after initializeManagers() has finished.
+    // IpcManager owns the user preferences and is created below (it needs UpdateManager, which
+    // needs the tray). The tray reads its click action through appContext at click time, so a
+    // click before the managers exist gets the default instead of touching ipcManager early.
     const trayManager = new TrayManager(windowManager, {
-        getClickAction: (): TrayClickAction => readTrayClickAction(ipcManager.store),
+        getClickAction: (): TrayClickAction =>
+            appContext ? readTrayClickAction(appContext.ipcManager.store) : DEFAULT_TRAY_CLICK_ACTION,
     });
     logger.debug('initializeManagers() - TrayManager created');
 
