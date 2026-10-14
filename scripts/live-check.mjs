@@ -200,7 +200,12 @@ function launchApp() {
     if (opts['copy-profile']) copyProfile(path.resolve(expandHome(opts['copy-profile'])), profile);
     const log = fs.openSync(path.join(outDir, 'app.log'), 'w');
     const args = [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, ...appArgs];
-    app = spawn(expandHome(opts.launch), args, { stdio: ['ignore', log, log], detached: true });
+    // GEMINI_DESKTOP_NO_LAUNCHER keeps the app from writing a Quick Chat launcher to ~/.local/share/applications
+    app = spawn(expandHome(opts.launch), args, {
+        stdio: ['ignore', log, log],
+        detached: true,
+        env: { ...process.env, GEMINI_DESKTOP_NO_LAUNCHER: '1' },
+    });
     app.exitedAt = null;
     app.on('exit', (code, signal) => {
         app.exitedAt = Date.now();

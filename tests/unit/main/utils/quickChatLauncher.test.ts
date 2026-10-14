@@ -12,6 +12,7 @@ import {
     buildQuickChatDesktopEntry,
     ensureQuickChatLauncher,
     GENERATED_MARKER,
+    NO_LAUNCHER_ENV,
     QUICK_CHAT_DESKTOP_FILE,
     QUICK_CHAT_ICON_FILE,
     quoteDesktopExecArg,
@@ -83,7 +84,6 @@ describe('ensureQuickChatLauncher', () => {
             env: overrides.env ?? {},
             homeDir,
             resourcesPath,
-            execPath: path.join(root, 'app', 'gemini-desktop'),
         });
     }
 
@@ -105,18 +105,33 @@ describe('ensureQuickChatLauncher', () => {
         expect(fs.readFileSync(iconFile, 'utf8')).toBe('png');
     });
 
-    it('writes a launcher for the executable of a tar.gz install', async () => {
-        expect(await run()).toBe('written');
+    it('writes nothing for a tar.gz or release/linux-unpacked run, which has no $APPIMAGE', async () => {
+        expect(await run()).toBe('skipped');
+        expect(fs.existsSync(desktopFile)).toBe(false);
+        expect(fs.existsSync(iconFile)).toBe(false);
+    });
 
-        expect(fs.readFileSync(desktopFile, 'utf8')).toContain(
-            `Exec=${path.join(root, 'app', 'gemini-desktop')} --quick-chat\n`
-        );
+    it('leaves a launcher an AppImage wrote alone in a tar.gz or unpacked run', async () => {
+        await run({ env: { APPIMAGE: '/a/App.AppImage' } });
+
+        expect(await run()).toBe('skipped');
+        expect(fs.readFileSync(desktopFile, 'utf8')).toContain('Exec=/a/App.AppImage --quick-chat');
+    });
+
+    it('does nothing at all with GEMINI_DESKTOP_NO_LAUNCHER=1 (test runs)', async () => {
+        expect(await run({ env: { APPIMAGE: '/a/App.AppImage', [NO_LAUNCHER_ENV]: '1' } })).toBe('skipped');
+        expect(fs.existsSync(desktopFile)).toBe(false);
+
+        await run({ env: { APPIMAGE: '/a/App.AppImage' } });
+        fs.writeFileSync(path.join(resourcesPath, 'package-type'), 'pacman');
+        expect(await run({ env: { [NO_LAUNCHER_ENV]: '1' } })).toBe('skipped');
+        expect(fs.existsSync(desktopFile)).toBe(true);
     });
 
     it('follows XDG_DATA_HOME', async () => {
         const dataHome = path.join(root, 'data');
 
-        expect(await run({ env: { XDG_DATA_HOME: dataHome } })).toBe('written');
+        expect(await run({ env: { XDG_DATA_HOME: dataHome, APPIMAGE: '/a/App.AppImage' } })).toBe('written');
         expect(fs.existsSync(path.join(dataHome, 'applications', QUICK_CHAT_DESKTOP_FILE))).toBe(true);
     });
 
@@ -145,7 +160,7 @@ describe('ensureQuickChatLauncher', () => {
         expect(fs.existsSync(iconFile)).toBe(false);
 
         fs.writeFileSync(desktopFile, '[Desktop Entry]\nName=Mine\n');
-        expect(await run()).toBe('kept-package-file');
+        expect(await run()).toBe('package-ships-launcher');
         expect(fs.existsSync(desktopFile)).toBe(true);
     });
 });

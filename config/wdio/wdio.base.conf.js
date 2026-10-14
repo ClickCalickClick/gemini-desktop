@@ -19,6 +19,10 @@ import {
 import { getChromedriverOptions } from './chromedriver-options.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
+// Test runs must not write the Gemini Quick Chat launcher to the user's ~/.local/share/applications
+// (src/main/utils/quickChatLauncher.ts). The app inherits this through chromedriver.
+process.env.GEMINI_DESKTOP_NO_LAUNCHER = '1';
 const chromedriverOptions = getChromedriverOptions();
 const SPEC_FILE_RETRIES = Number(process.env.WDIO_SPEC_FILE_RETRIES ?? 2);
 const SPEC_FILE_RETRY_DELAY_SECONDS = Number(process.env.WDIO_SPEC_FILE_RETRY_DELAY_SECONDS ?? 5);
