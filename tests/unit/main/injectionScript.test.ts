@@ -153,6 +153,30 @@ describe('InjectionScriptBuilder', () => {
         });
     });
 
+    describe('withSubmitWait', () => {
+        it('returns the builder for chaining', () => {
+            const builder = new InjectionScriptBuilder();
+            expect(builder.withSubmitWait(1000)).toBe(builder);
+        });
+
+        it('defaults to no wait', () => {
+            const script = new InjectionScriptBuilder().withText('test').build();
+            expect(script).toContain('const submitWaitMs = 0;');
+        });
+
+        it('puts the wait into the script, rounded down', () => {
+            const script = new InjectionScriptBuilder().withText('test').withSubmitWait(15000.7).build();
+            expect(script).toContain('const submitWaitMs = 15000;');
+            expect(script).toContain("getAttribute('aria-disabled') === 'true'");
+            expect(() => new Function(script)).not.toThrow();
+        });
+
+        it('clamps a negative wait to 0', () => {
+            const script = new InjectionScriptBuilder().withText('test').withSubmitWait(-50).build();
+            expect(script).toContain('const submitWaitMs = 0;');
+        });
+    });
+
     describe('withEditorSelectors', () => {
         it('returns the builder for chaining', () => {
             const builder = new InjectionScriptBuilder();

@@ -125,6 +125,30 @@ describe('AgentManager', () => {
                 'conversation id'
             );
         });
+
+        it('accepts a screenshot id and ignores an empty one', () => {
+            const screenshotId = '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b';
+            expect(validateRunRequest({ prompt: 'hi', category: 'general', screenshotId })).toEqual({
+                prompt: 'hi',
+                category: 'general',
+                screenshotId,
+            });
+            expect(validateRunRequest({ prompt: 'hi', category: 'general', screenshotId: '' })).toEqual({
+                prompt: 'hi',
+                category: 'general',
+            });
+            expect(validateRunRequest({ prompt: 'hi', category: 'files', conversationId: 'c1', screenshotId })).toEqual(
+                { prompt: 'hi', category: 'files', conversationId: 'c1', screenshotId }
+            );
+        });
+
+        it('rejects a malformed screenshot id', () => {
+            for (const screenshotId of ['../../etc/passwd', 'not-a-uuid', 7]) {
+                expect(() => validateRunRequest({ prompt: 'hi', category: 'general', screenshotId })).toThrow(
+                    'Invalid screenshot id.'
+                );
+            }
+        });
     });
 
     describe('describeFailure', () => {
@@ -459,6 +483,46 @@ describe('AgentManager', () => {
             expect(readArgs().inputs).toEqual([`${runId}/1-doc.txt`]);
             const inputs = path.join(layout.userData, 'agent-workspace', 'inputs', runId);
             await vi.waitFor(() => expect(fs.existsSync(inputs)).toBe(false));
+        });
+
+        it('writes an attached screenshot into the run inputs and names it in the prompt', async () => {
+            const png = Buffer.from('fake screenshot png');
+            let seenOnSpawn: Buffer | null = null;
+            const { spawn } = await import('node:child_process');
+            const manager = createManager({
+                spawnProcess: ((command: string, args: string[], options: object) => {
+                    const cwd = (options as { cwd: string }).cwd;
+                    const inputs = fs.readdirSync(path.join(cwd, 'inputs'));
+                    seenOnSpawn = fs.readFileSync(path.join(cwd, 'inputs', inputs[0], 'screenshot.png'));
+                    return spawn(command, args, options);
+                }) as unknown as typeof import('node:child_process').spawn,
+            });
+            const events: AgentRunEvent[] = [];
+            const { runId } = await manager.run(
+                { prompt: 'what is on my screen?', category: 'general' },
+                { enginePreference: 'auto', model: '', screenshot: png, emit: (event) => events.push(event) }
+            );
+            const done = await waitForDone(events);
+            expect(done.status).toBe('SUCCESS');
+            expect(seenOnSpawn).toEqual(png);
+
+            const { args, inputs } = readArgs();
+            expect(inputs).toEqual([`${runId}/screenshot.png`]);
+            const prompt = args[args.indexOf('-p') + 1];
+            expect(prompt).toContain(`inputs/${runId}/screenshot.png`);
+            expect(prompt.endsWith('User request:\nwhat is on my screen?')).toBe(true);
+
+            const inputsDir = path.join(layout.userData, 'agent-workspace', 'inputs', runId);
+            await vi.waitFor(() => expect(fs.existsSync(inputsDir)).toBe(false));
+        });
+
+        it('passes a question without a screenshot as it is', async () => {
+            const manager = createManager();
+            const { events } = await startRun(manager, 'hello');
+            await waitForDone(events);
+            const { args, inputs } = readArgs();
+            expect(inputs).toEqual([]);
+            expect(args[args.indexOf('-p') + 1]).toBe('hello');
         });
 
         it('checks the settings again before running even when the status is cached', async () => {

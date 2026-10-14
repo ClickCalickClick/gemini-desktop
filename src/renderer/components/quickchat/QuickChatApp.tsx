@@ -422,6 +422,8 @@ function QuickChatApp(): React.ReactElement {
                 // The main process keeps only the latest screenshot.
                 screenshotRef.current = result.preview;
                 setScreenshot(result.preview);
+                // Ghost text is not drawn beside the thumbnail, so a hidden prediction must not take Tab or Escape.
+                setPrediction(null);
             } else if (result.status === 'error') {
                 setScreenshotError(result.error);
             }
@@ -699,7 +701,7 @@ function QuickChatApp(): React.ReactElement {
                 try {
                     const result = await window.electronAPI?.predictText(newValue);
                     // Only set prediction if we got a result and input hasn't changed
-                    if (result) {
+                    if (result && !screenshotRef.current) {
                         setPrediction(result);
                     }
                 } catch {

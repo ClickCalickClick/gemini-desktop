@@ -145,6 +145,35 @@ describe('Preload Script', () => {
         });
     });
 
+    describe('Quick Chat API', () => {
+        it('submitQuickChat sends only the text without options', () => {
+            exposedAPI.submitQuickChat('hello');
+            expect(ipcRendererMock.send).toHaveBeenCalledWith('quick-chat:submit', 'hello');
+            expect(ipcRendererMock.send.mock.calls[0]).toHaveLength(2);
+        });
+
+        it('submitQuickChat sends the options with a screenshot id', () => {
+            const options = { screenshotId: '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b' };
+            exposedAPI.submitQuickChat('what is this?', options);
+            expect(ipcRendererMock.send).toHaveBeenCalledWith('quick-chat:submit', 'what is this?', options);
+        });
+
+        it('captureQuickChatScreenshot invokes the capture handler with the mode', async () => {
+            const result = { status: 'cancelled' };
+            (ipcRendererMock.invoke as any).mockResolvedValue(result);
+            await expect(exposedAPI.captureQuickChatScreenshot('area')).resolves.toBe(result);
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('quick-chat:screenshot-capture', 'area');
+        });
+
+        it('discardQuickChatScreenshot sends the id', () => {
+            exposedAPI.discardQuickChatScreenshot('3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b');
+            expect(ipcRendererMock.send).toHaveBeenCalledWith(
+                'quick-chat:screenshot-discard',
+                '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b'
+            );
+        });
+    });
+
     describe('Tabs API', () => {
         it('onTabTitleUpdated should register listener and return unsubscribe', () => {
             const callback = vi.fn();
