@@ -343,8 +343,17 @@ const SIGN_IN_FINDER = `(() => {
     const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
     const byText = [...document.querySelectorAll('a, button')].filter(
         (el) => /^\\s*sign in\\s*$/i.test(el.textContent || '') && visible(el));
-    const byLink = [...document.querySelectorAll('a[href]')].filter(
-        (el) => /accounts\\.google\\.com|ServiceLogin/.test(el.href) && visible(el));
+    // A link to a sign-in page, by its path: when signed in, the account button links to accounts.google.com too
+    const signInPage = (href) => {
+        try {
+            const url = new URL(href);
+            return (url.hostname === 'accounts.google.com' && /^\\/(ServiceLogin|(v3\\/)?signin)/i.test(url.pathname)) ||
+                (url.hostname === 'gemini.google.com' && url.pathname === '/signin');
+        } catch {
+            return false;
+        }
+    };
+    const byLink = [...document.querySelectorAll('a[href]')].filter((el) => signInPage(el.href) && visible(el));
     const el = byText[0] || byLink[0];
     if (!el) return null;
     const r = el.getBoundingClientRect();
