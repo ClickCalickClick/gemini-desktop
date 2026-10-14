@@ -380,13 +380,25 @@ describe('agentPermissions', () => {
                 'env rm x',
                 'nice -n 5 rm x',
                 'timeout 5s rm x',
+                'setsid rm -rf x',
+                'flock /tmp/l rm x',
+                'trap "rm -rf ~" EXIT',
             ]) {
                 expect(needsCaution(command)).toBe(true);
             }
         });
 
         it('does not flag commands that only look', () => {
-            for (const command of ['df -h', 'lsblk -f', 'du -sh /tmp 2>/dev/null', 'free -h | head', 'df -h 2>&1']) {
+            for (const command of [
+                'df -h',
+                'lsblk -f',
+                'du -sh /tmp 2>/dev/null',
+                'free -h | head',
+                'df -h 2>&1',
+                // On the lookup list, though their program can also change things.
+                'systemctl status sshd',
+                'ip -br addr show',
+            ]) {
                 expect(needsCaution(command)).toBe(false);
             }
         });
