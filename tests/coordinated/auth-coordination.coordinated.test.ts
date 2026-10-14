@@ -77,20 +77,24 @@ describe('Auth Coordination Integration', () => {
             expect(windowManager.createAuthWindow).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth');
         });
 
-        it('should open sign-in from a Gemini tab in the auth window and reload after it closes', () => {
+        it.each([
+            ["Gemini's Sign in button navigates", 'will-frame-navigate', 'https://gemini.google.com/app'],
+            ["Gemini's server redirects a loading", 'will-redirect', ''],
+        ])('should open sign-in in the auth window when %s tab there, and reload after', (_name, event, tabUrl) => {
             const mainBrowserWindow = windowManager.createMainWindow() as any;
-            const frameNavigateHandler = mainBrowserWindow.webContents.on.mock.calls.find(
-                (call: [string, unknown]) => call[0] === 'will-frame-navigate'
+            const handler = mainBrowserWindow.webContents.on.mock.calls.find(
+                (call: [string, unknown]) => call[0] === event
             )[1];
             const signInUrl = 'https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fgemini.google.com%2Fapp';
             const details = {
                 url: signInUrl,
                 isMainFrame: false,
-                frame: { url: 'https://gemini.google.com/app' },
+                // A tab: one of the main window's iframes
+                frame: { url: tabUrl, parent: { url: 'file:///app/index.html', parent: null } },
                 preventDefault: vi.fn(),
             };
 
-            frameNavigateHandler(details);
+            handler(details);
 
             expect(details.preventDefault).toHaveBeenCalled();
             expect(windowManager.createAuthWindow).toHaveBeenCalledWith(signInUrl);
