@@ -1,6 +1,6 @@
 /**
  * Unit tests for the command allow rules the app writes to Antigravity CLI's settings,
- * and for the read-only command list. Only temporary folders are used.
+ * and for the lookup command list. Only temporary folders are used.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -12,18 +12,21 @@ import {
     isDeniedPrefix,
     isSafeLastingPrefix,
     lastingRuleFor,
+    detectIndent,
+    needsCaution,
     PermissionTracker,
     readAllowRules,
+    wantedRules,
     refuseAllowRule,
     updateAllowRules,
 } from '../../../../src/main/agent/agentPermissions';
 import { findRiskySettings } from '../../../../src/main/agent/workspace';
 import {
     commandRule,
-    READ_ONLY_COMMAND_GROUPS,
-    READ_ONLY_COMMAND_PREFIXES,
-    READ_ONLY_COMMAND_RULES,
-} from '../../../../src/shared/constants/agentReadOnlyCommands';
+    LOOKUP_COMMAND_GROUPS,
+    LOOKUP_COMMAND_PREFIXES,
+    LOOKUP_COMMAND_RULES,
+} from '../../../../src/shared/constants/agentLookupCommands';
 import { createTempLayout, type TempLayout } from './fakeCli';
 
 describe('agentPermissions', () => {
@@ -73,6 +76,10 @@ describe('agentPermissions', () => {
                 'command(df))',
                 'command(echo ) (x)',
                 'command(a(b)',
+                'command(ls \u202Etxt.exe)',
+                'command(df\u200B)',
+                'command(df \u001b[2J)',
+                'command(df\t-h)',
                 'write_file(*)',
                 'unsandboxed(df)',
                 'mcp(server)',
@@ -182,6 +189,51 @@ describe('agentPermissions', () => {
             expect(() => updateAllowRules(settingsFile, { add: ['command(df)'] })).toThrow('not a list');
         });
 
+        it('keeps the indentation of the file', () => {
+            writeSettings('{\n    "model": "x",\n    "permissions": {\n        "allow": []\n    }\n}\n');
+            updateAllowRules(settingsFile, { add: ['command(df)'] });
+            expect(fs.readFileSync(settingsFile, 'utf8')).toBe(
+                '{\n    "model": "x",\n    "permissions": {\n        "allow": [\n            "command(df)"\n        ]\n    }\n}\n'
+            );
+            writeSettings('{\n\t"model": "x"\n}');
+            updateAllowRules(settingsFile, { add: ['command(df)'] });
+            expect(fs.readFileSync(settingsFile, 'utf8')).toContain('\n\t"permissions": {\n\t\t"allow"');
+            expect(detectIndent(null)).toBe('  ');
+            expect(detectIndent('{"a":1}')).toBe('  ');
+        });
+
+        it('refuses a link to a missing file instead of replacing the link with a file', () => {
+            fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
+            fs.symlinkSync(path.join(layout.root, 'gone', 'settings.json'), settingsFile);
+            expect(() => updateAllowRules(settingsFile, { add: ['command(df)'] })).toThrow('does not exist');
+            expect(() => readAllowRules(settingsFile)).toThrow('does not exist');
+            expect(fs.lstatSync(settingsFile).isSymbolicLink()).toBe(true);
+        });
+
+        it('starts again from the new version when the file changes while it is written', () => {
+            writeSettings('{"permissions":{"allow":["command(ls)"]}}');
+            let changes = 0;
+            const change = updateAllowRules(settingsFile, { add: ['command(df)'] }, () => {
+                // An interactive agy saves a rule of its own right after the first read.
+                if (changes++ === 0) {
+                    fs.writeFileSync(settingsFile, '{"permissions":{"allow":["command(ls)","command(npm test)"]}}');
+                }
+            });
+            expect(change.added).toEqual(['command(df)']);
+            expect(readAllowRules(settingsFile)).toEqual(['command(ls)', 'command(npm test)', 'command(df)']);
+
+            // A file that keeps changing is left alone.
+            const before = fs.readFileSync(settingsFile, 'utf8');
+            let n = 0;
+            expect(() =>
+                updateAllowRules(settingsFile, { add: ['command(free)'] }, () => {
+                    fs.writeFileSync(settingsFile, before.replace('npm test', `npm test ${n++}`));
+                })
+            ).toThrow('kept changing');
+            expect(readAllowRules(settingsFile)).not.toContain('command(free)');
+            expect(fs.readdirSync(path.dirname(settingsFile))).toEqual(['settings.json']);
+        });
+
         it('treats an empty file as empty settings', () => {
             writeSettings('  \n');
             updateAllowRules(settingsFile, { add: ['command(df)'] });
@@ -207,17 +259,27 @@ describe('agentPermissions', () => {
     });
 
     describe('lasting rules', () => {
-        it('offers the read-only list entry or the first word for safe commands', () => {
+        it('offers the longest lookup list entry the command starts with', () => {
             expect(lastingRuleFor('df -h')).toBe('command(df)');
             expect(lastingRuleFor('  lsblk -f ')).toBe('command(lsblk)');
             expect(lastingRuleFor('systemctl status sshd')).toBe('command(systemctl status)');
             expect(lastingRuleFor('systemctl --user status pipewire')).toBe('command(systemctl --user status)');
             expect(lastingRuleFor('ip -br addr show')).toBe('command(ip -br addr show)');
-            expect(lastingRuleFor('git status --short')).toBe('command(git status)');
             expect(lastingRuleFor('python3 --version')).toBe('command(python3 --version)');
             expect(lastingRuleFor('pacman -Qi linux')).toBe('command(pacman -Qi)');
-            // Not in the list and not a state-changing command.
-            expect(lastingRuleFor('dmidecode-like-tool --summary')).toBe('command(dmidecode-like-tool)');
+            // Not in the list: never offered for good, even when it is on no denylist.
+            for (const command of [
+                'dmidecode-like-tool --summary',
+                'xrandr --output eDP-1 --off',
+                'busctl --user call org.gnome.SessionManager',
+                'git status',
+                'inxi -F',
+                'sysctl -n vm.swappiness',
+                'ss -tuln',
+                'sensors',
+            ]) {
+                expect(lastingRuleFor(command)).toBeUndefined();
+            }
         });
 
         it('offers nothing for state-changing commands, readers, shells and shell syntax', () => {
@@ -257,19 +319,23 @@ describe('agentPermissions', () => {
                 '/usr/bin/df -h',
                 './script',
                 'neofetch',
+                'df\u202E -h',
+                'df -h\u200B',
                 '',
             ]) {
                 expect(lastingRuleFor(command)).toBeUndefined();
             }
         });
 
-        it('treats a read-only subcommand of a denied command as allowed only when it matches exactly', () => {
+        it('treats a lookup subcommand of a denied command as allowed only when it matches exactly', () => {
             expect(isDeniedPrefix('systemctl status')).toBe(false);
             expect(isDeniedPrefix('systemctl')).toBe(true);
             expect(isDeniedPrefix('systemctl stop')).toBe(true);
             expect(isDeniedPrefix('mkfs.btrfs')).toBe(true);
             expect(isDeniedPrefix('df')).toBe(false);
             expect(isSafeLastingPrefix('top')).toBe(false);
+            expect(isSafeLastingPrefix('neofetch')).toBe(false);
+            expect(isSafeLastingPrefix('xdotool')).toBe(false);
             expect(isSafeLastingPrefix('top -b')).toBe(true);
             expect(isSafeLastingPrefix('df -h')).toBe(false);
             expect(hasShellSyntax('df -h')).toBe(false);
@@ -277,16 +343,39 @@ describe('agentPermissions', () => {
         });
     });
 
-    describe('read-only command list', () => {
+    describe('needsCaution', () => {
+        it('flags state-changing commands, also in chains, after a path and behind assignments', () => {
+            for (const command of [
+                'rm -rf /tmp/x',
+                '/bin/rm x',
+                'df -h && rm -rf ~',
+                'df -h | tee out.txt',
+                'LANG=C sudo df',
+                'df -h > /tmp/out',
+                'echo $(rm x)',
+                'xdotool type hi',
+            ]) {
+                expect(needsCaution(command)).toBe(true);
+            }
+        });
+
+        it('does not flag commands that only look', () => {
+            for (const command of ['df -h', 'lsblk -f', 'du -sh /tmp 2>/dev/null', 'free -h | head', 'df -h 2>&1']) {
+                expect(needsCaution(command)).toBe(false);
+            }
+        });
+    });
+
+    describe('lookup command list', () => {
         it('has no duplicates and no empty groups', () => {
-            expect(new Set(READ_ONLY_COMMAND_PREFIXES).size).toBe(READ_ONLY_COMMAND_PREFIXES.length);
-            expect(READ_ONLY_COMMAND_RULES).toEqual(READ_ONLY_COMMAND_PREFIXES.map(commandRule));
-            for (const group of READ_ONLY_COMMAND_GROUPS) {
+            expect(new Set(LOOKUP_COMMAND_PREFIXES).size).toBe(LOOKUP_COMMAND_PREFIXES.length);
+            expect(LOOKUP_COMMAND_RULES).toEqual(LOOKUP_COMMAND_PREFIXES.map(commandRule));
+            for (const group of LOOKUP_COMMAND_GROUPS) {
                 expect(group.prefixes.length).toBeGreaterThan(0);
             }
         });
 
-        it.each(READ_ONLY_COMMAND_PREFIXES.map((prefix) => [prefix]))(
+        it.each(LOOKUP_COMMAND_PREFIXES.map((prefix) => [prefix]))(
             '%s passes the denylist and is a rule the app may write',
             (prefix) => {
                 expect(prefix).toBe(prefix.trim());
@@ -300,12 +389,12 @@ describe('agentPermissions', () => {
                     expect(isDeniedPrefix(words[0] ?? '')).toBe(true);
                 } else {
                     // A single word never has state-changing subcommands in the list.
-                    expect(READ_ONLY_COMMAND_PREFIXES.some((other) => other.startsWith(`${prefix} `))).toBe(false);
+                    expect(LOOKUP_COMMAND_PREFIXES.some((other) => other.startsWith(`${prefix} `))).toBe(false);
                 }
             }
         );
 
-        it('leaves out file readers, environment dumps, find, journalctl, date and hostname', () => {
+        it('leaves out file readers, environment dumps, find, journalctl, date, hostname, git, sysctl, ss, inxi and sensors', () => {
             for (const word of [
                 'cat',
                 'head',
@@ -322,14 +411,19 @@ describe('agentPermissions', () => {
                 'ping',
                 'curl',
                 'dig',
+                'git',
+                'sysctl',
+                'ss',
+                'inxi',
+                'sensors',
             ]) {
-                expect(READ_ONLY_COMMAND_PREFIXES.some((prefix) => prefix.split(' ')[0] === word)).toBe(false);
+                expect(LOOKUP_COMMAND_PREFIXES.some((prefix) => prefix.split(' ')[0] === word)).toBe(false);
             }
         });
 
         it('passes the engine safety check as a whole', async () => {
-            updateAllowRules(settingsFile, { add: [...READ_ONLY_COMMAND_RULES] });
-            expect(readAllowRules(settingsFile)).toEqual(READ_ONLY_COMMAND_RULES);
+            updateAllowRules(settingsFile, { add: [...LOOKUP_COMMAND_RULES] });
+            expect(readAllowRules(settingsFile)).toEqual(LOOKUP_COMMAND_RULES);
             expect(await findRiskySettings('antigravity', [settingsFile])).toEqual([]);
         });
     });
@@ -338,16 +432,26 @@ describe('agentPermissions', () => {
         it('reads an empty record from a missing or broken file and writes it back', () => {
             const file = path.join(layout.userData, 'agent-permissions.json');
             const tracker = new PermissionTracker(() => file);
-            expect(tracker.read()).toEqual({ lasting: [], readOnly: [], readOnlyEnabled: false, pending: [] });
+            expect(tracker.read()).toEqual({
+                lasting: [],
+                lookup: [],
+                lookupEnabled: false,
+                pending: [],
+                userOwned: [],
+            });
             fs.writeFileSync(file, 'not json');
             expect(tracker.read().pending).toEqual([]);
-            fs.writeFileSync(file, JSON.stringify({ lasting: ['command(df)', 3], pending: 'x', readOnlyEnabled: 1 }));
+            fs.writeFileSync(file, JSON.stringify({ lasting: ['command(df)', 3], pending: 'x', lookupEnabled: 1 }));
             expect(tracker.read()).toEqual({
                 lasting: ['command(df)'],
-                readOnly: [],
-                readOnlyEnabled: false,
+                lookup: [],
+                lookupEnabled: false,
                 pending: [],
+                userOwned: [],
             });
+            expect(wantedRules({ ...tracker.read(), userOwned: ['command(ls)'] })).toEqual(
+                new Set(['command(df)', 'command(ls)'])
+            );
             tracker.update((record) => ({ ...record, pending: ['command(df -h)'] }));
             expect(tracker.read().pending).toEqual(['command(df -h)']);
             expect(fs.statSync(file).mode & 0o777).toBe(0o600);

@@ -81,7 +81,13 @@ export type ParsedAgentEvent =
           error?: string;
           /** The full command line, for tools that run a terminal command. */
           command?: string;
-          /** Antigravity, DONE steps: whether the step carries output. A refused command has none. */
+          /** Antigravity: the step's index in the conversation. */
+          stepIndex?: number;
+          /**
+           * Antigravity, DONE steps: whether the step carries `output`. With agy 1.3.5 a
+           * refused command has none, but neither has a command that ran and printed
+           * nothing, so this alone does not mean the command was refused.
+           */
           hasOutput?: boolean;
       }
     | { kind: 'warning'; message: string }
@@ -92,8 +98,10 @@ export type ParsedAgentEvent =
           error?: string;
           conversationId?: string;
           structuredOutput?: unknown;
-          /** Antigravity: the actions headless mode denied (`command`, ...). */
+          /** Antigravity: the actions headless mode denied (`command`, ...), without repeats. */
           deniedActions?: string[];
+          /** Antigravity: how many terminal commands headless mode denied. */
+          deniedCommands?: number;
       };
 
 function str(value: unknown): string | undefined {
@@ -164,6 +172,16 @@ export function commandLineOf(parameters: unknown): string | undefined {
         }
     }
     return undefined;
+}
+
+/** How many entries of Antigravity's `result.denied_actions` are terminal commands. */
+function deniedCommandCount(value: unknown): number {
+    if (!Array.isArray(value)) {
+        return 0;
+    }
+    return value.filter(
+        (entry) => isObject(entry) && (entry.action === 'command' || entry.display_name === 'RunCommand')
+    ).length;
 }
 
 /** The actions in Antigravity's `result.denied_actions`, e.g. `command`. */
@@ -248,6 +266,10 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
                 const name = nonEmpty(toolInfo.name) ?? nonEmpty(step.tool_name) ?? 'tool';
                 const error = errorMessage(toolInfo.error);
                 const command = commandLineOf(toolInfo.parameters);
+                const stepIndex =
+                    typeof step.step_index === 'number' && Number.isInteger(step.step_index)
+                        ? step.step_index
+                        : undefined;
                 return [
                     {
                         kind: 'tool',
@@ -256,7 +278,8 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
                         state,
                         ...(error ? { error } : {}),
                         ...(command ? { command } : {}),
-                        // A command that headless mode refused ends DONE without output or error.
+                        ...(stepIndex !== undefined ? { stepIndex } : {}),
+                        // agy 1.3.5: a refused command, and a command that printed nothing, end DONE without output.
                         ...(state === 'DONE'
                             ? { hasOutput: toolInfo.output !== undefined && toolInfo.output !== null }
                             : {}),
@@ -279,6 +302,7 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
             const conversationId = nonEmpty(result.conversation_id);
             const error = errorMessage(result.error);
             const deniedActions = deniedActionsOf(result.denied_actions);
+            const deniedCommands = deniedCommandCount(result.denied_actions);
             return [
                 {
                     kind: 'result',
@@ -288,6 +312,7 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
                     ...(conversationId ? { conversationId } : {}),
                     ...(result.structured_output !== undefined ? { structuredOutput: result.structured_output } : {}),
                     ...(deniedActions && deniedActions.length > 0 ? { deniedActions } : {}),
+                    ...(deniedCommands > 0 ? { deniedCommands } : {}),
                 },
             ];
         }

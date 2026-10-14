@@ -6,7 +6,7 @@
  * - Agent engine: Auto, Antigravity CLI or Gemini CLI
  * - Model passed to the CLI: a list from `agy models` for Antigravity CLI, else a text box
  * - The engine's status, with install and sign-in hints when it is not usable
- * - Antigravity CLI only: the read-only system commands toggle (with the full list) and
+ * - Antigravity CLI only (not on Windows): the system lookup commands toggle (with the full list) and
  *   the commands the user allowed for good from Quick Chat's approval card
  *
  * @module QuickChatSettings
@@ -17,7 +17,7 @@ import React, { memo, useCallback, useEffect, useId, useRef, useState } from 're
 import { CapsuleToggle } from '../common/CapsuleToggle';
 import { createRendererLogger } from '../../utils';
 import { QUICK_CHAT_SETTINGS_TEST_IDS } from '../../utils/testIds';
-import { READ_ONLY_COMMAND_GROUPS, READ_ONLY_COMMAND_PREFIXES } from '../../../shared/constants/agentReadOnlyCommands';
+import { LOOKUP_COMMAND_GROUPS, LOOKUP_COMMAND_PREFIXES } from '../../../shared/constants/agentLookupCommands';
 import type {
     AgentEngineId,
     AgentEnginePreference,
@@ -90,38 +90,39 @@ function ruleTarget(rule: string): string {
 interface CommandPermissionsProps {
     permissions: AgentPermissionsInfo;
     busy: boolean;
-    onToggleReadOnly: (enabled: boolean) => void;
+    onToggleLookup: (enabled: boolean) => void;
     onRemoveRule: (rule: string) => void;
 }
 
-/** Antigravity CLI only: the read-only command list and the commands the user allowed for good. */
+/** Antigravity CLI only (not on Windows): the lookup command list and the commands the user allowed for good. */
 function CommandPermissions({
     permissions,
     busy,
-    onToggleReadOnly,
+    onToggleLookup,
     onRemoveRule,
 }: CommandPermissionsProps): React.ReactElement {
     return (
         <div className="quick-chat-settings__permissions">
             <CapsuleToggle
-                checked={permissions.readOnlyCommandsEnabled}
-                onChange={onToggleReadOnly}
+                checked={permissions.lookupCommandsEnabled}
+                onChange={onToggleLookup}
                 disabled={busy || Boolean(permissions.error)}
-                label="Read-only system commands"
-                description="Let the agent run read-only commands (like df, free, lsblk) to answer questions about this computer. Commands run inside the agent's sandbox."
-                testId={QUICK_CHAT_SETTINGS_TEST_IDS.QUICK_CHAT_SETTINGS_READ_ONLY}
+                label="System lookup commands"
+                description="Let the agent run commands that only look at this computer (like df, free, lsblk) to answer questions about it. They run inside the agent's sandbox: no network, limited file access, and your home folders are not visible there."
+                testId={QUICK_CHAT_SETTINGS_TEST_IDS.QUICK_CHAT_SETTINGS_LOOKUP}
             />
             <details
                 className="quick-chat-settings__disclosure"
-                data-testid={QUICK_CHAT_SETTINGS_TEST_IDS.QUICK_CHAT_SETTINGS_READ_ONLY_LIST}
+                data-testid={QUICK_CHAT_SETTINGS_TEST_IDS.QUICK_CHAT_SETTINGS_LOOKUP_LIST}
             >
-                <summary>Show the {READ_ONLY_COMMAND_PREFIXES.length} commands</summary>
+                <summary>Show the {LOOKUP_COMMAND_PREFIXES.length} commands</summary>
                 <p className="quick-chat-settings__description">
                     Each one is added to {permissions.settingsFile} as an allow rule such as command(df), which also
-                    allows the same command with more words after it (df -h). Turning this off removes only the rules
-                    the app added.
+                    allows the same command with more words after it (df -h), also behind wrappers such as env or nice,
+                    so the agent can run code of its own inside the sandbox with it. Turning this off removes these
+                    rules again, except ones you also allowed from Quick Chat or had before.
                 </p>
-                {READ_ONLY_COMMAND_GROUPS.map((group) => (
+                {LOOKUP_COMMAND_GROUPS.map((group) => (
                     <div key={group.name} className="quick-chat-settings__group">
                         <span className="quick-chat-settings__group-name">{group.name}</span>
                         <ul className="quick-chat-settings__rules">
@@ -536,8 +537,8 @@ export const QuickChatSettings = memo(function QuickChatSettings() {
                 <CommandPermissions
                     permissions={permissions}
                     busy={permissionsBusy}
-                    onToggleReadOnly={(enabled) =>
-                        void changePermissions(() => window.electronAPI?.setReadOnlyAgentCommands(enabled))
+                    onToggleLookup={(enabled) =>
+                        void changePermissions(() => window.electronAPI?.setLookupAgentCommands(enabled))
                     }
                     onRemoveRule={(rule) =>
                         void changePermissions(() => window.electronAPI?.removeAllowedAgentRule(rule))

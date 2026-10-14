@@ -607,9 +607,28 @@ body {
     background: var(--qc-surface-subtle);
 }
 
+.qc-approval__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 .qc-approval__title {
     margin: 0;
     font-weight: 500;
+}
+
+.qc-approval__close {
+    padding: 0 6px;
+    font-size: 16px;
+    line-height: 1.2;
+}
+
+.qc-approval__caution {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--qc-danger);
 }
 
 .qc-approval__commands {
@@ -628,6 +647,8 @@ body {
     background: var(--qc-code-bg);
     border-radius: 4px;
     padding: 1px 4px;
+    /* Doubled spaces and tabs stay visible. */
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
     user-select: text;
 }

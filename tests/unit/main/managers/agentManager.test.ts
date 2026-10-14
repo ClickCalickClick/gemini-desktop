@@ -2,13 +2,12 @@
  * Unit tests for AgentManager, driving a fake agent CLI (a Node script in a temporary
  * bin folder) through real child processes.
  */
-import { spawn, type SpawnOptions } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentManager, { describeFailure, validateRunRequest } from '../../../../src/main/managers/agentManager';
-import { READ_ONLY_COMMAND_RULES } from '../../../../src/shared/constants/agentReadOnlyCommands';
+import { LOOKUP_COMMAND_RULES } from '../../../../src/shared/constants/agentLookupCommands';
 import type { AgentEnginePreference, AgentRunEvent } from '../../../../src/shared/types/agent';
 import { createMockLogger } from '../../../helpers/mocks';
 import { createTempLayout, fakePath, installFakeCli, type TempLayout } from '../agent/fakeCli';
@@ -196,7 +195,7 @@ describe('AgentManager', () => {
 
             expect(events[0]).toEqual({ type: 'started', runId, engine: 'antigravity' });
             expect(events.filter((event) => event.type === 'tool')).toEqual([
-                { type: 'tool', runId, name: 'run_command', summary: 'ls -la', state: 'ACTIVE' },
+                { type: 'tool', runId, name: 'run_command', summary: 'ls -la', state: 'ACTIVE', command: 'ls -la' },
                 {
                     type: 'tool',
                     runId,
@@ -204,6 +203,7 @@ describe('AgentManager', () => {
                     summary: 'ls -la',
                     state: 'DONE',
                     error: 'Command needs approval',
+                    command: 'ls -la',
                 },
             ]);
             expect(events.filter((event) => event.type === 'text').map((event) => event.delta)).toEqual([
@@ -588,6 +588,12 @@ describe('AgentManager', () => {
         const recordFile = () => path.join(layout.userData, 'agent-permissions.json');
         const readRecord = () => JSON.parse(fs.readFileSync(recordFile(), 'utf8'));
         const readAllow = (): string[] => JSON.parse(fs.readFileSync(agySettingsFile(), 'utf8')).permissions.allow;
+        const env = (extra: Record<string, string> = {}) => ({
+            PATH: fakePath(layout.bin),
+            FAKE_HOME: layout.home,
+            FAKE_ARGS_FILE: argsFile,
+            ...extra,
+        });
 
         const startBlocked = async (manager: AgentManager, category: 'general' | 'files' = 'general') => {
             const first = await startRun(manager, 'MODE:blocked how much disk space is left', category);
@@ -595,7 +601,7 @@ describe('AgentManager', () => {
             return { ...first, done };
         };
 
-        const approve = async (manager: AgentManager, runId: string, decision: 'once' | 'always') => {
+        const decide = async (manager: AgentManager, runId: string, decision: 'once' | 'always' | 'without') => {
             const events: AgentRunEvent[] = [];
             const result = await manager.approveBlockedCommands(
                 { runId, decision },
@@ -612,39 +618,56 @@ describe('AgentManager', () => {
             const manager = createManager();
             const { runId, events, done } = await startBlocked(manager);
             expect(
-                events.filter((event) => event.type === 'tool').map((event) => event.type === 'tool' && event.state)
-            ).toEqual(['ACTIVE', 'DONE']);
+                events.filter((event) => event.type === 'tool').map((event) => event.type === 'tool' && event.stepIndex)
+            ).toEqual([3, 3]);
             expect(done).toEqual({
                 type: 'done',
                 runId,
                 status: 'SUCCESS',
                 response: '',
                 conversationId: 'c1',
-                blocked: [{ tool: 'run_command', command: 'df -h', summary: 'df -h', lastingRule: 'command(df)' }],
+                blocked: [
+                    {
+                        tool: 'run_command',
+                        command: 'df -h',
+                        summary: 'df -h',
+                        stepIndex: 3,
+                        lastingRule: 'command(df)',
+                    },
+                ],
                 deniedActions: ['command'],
-                canApprove: true,
+                canResume: true,
             });
         });
 
-        it('offers only Allow once for a state-changing command, and no approval for file tasks', async () => {
-            const manager = createManager({
-                env: {
-                    PATH: fakePath(layout.bin),
-                    FAKE_HOME: layout.home,
-                    FAKE_ARGS_FILE: argsFile,
-                    FAKE_BLOCKED_COMMAND: 'rm -rf ~/old',
-                },
-            });
+        it('counts only the last output-less commands as refused, not a silent command that ran', async () => {
+            const manager = createManager({ env: env({ FAKE_SILENT_FIRST: '1' }) });
             const { done } = await startBlocked(manager);
-            expect(done.blocked).toEqual([{ tool: 'run_command', command: 'rm -rf ~/old', summary: 'rm -rf ~/old' }]);
-            expect(done.canApprove).toBe(true);
+            expect(done.blocked?.map((entry) => entry.command)).toEqual(['df -h']);
+
+            // Without denied_actions a silent command is just a command that ran.
+            const silent = await startRun(manager, 'MODE:silent');
+            const silentDone = await waitForDone(silent.events);
+            expect(silentDone).toMatchObject({ status: 'SUCCESS', response: 'done\n' });
+            expect(silentDone.blocked).toBeUndefined();
+            expect(silentDone.canResume).toBeUndefined();
+        });
+
+        it('offers only Allow for this answer, with a caution, for a state-changing command', async () => {
+            const manager = createManager({ env: env({ FAKE_BLOCKED_COMMAND: 'rm -rf ~/old' }) });
+            const { runId, done } = await startBlocked(manager);
+            expect(done.blocked).toEqual([
+                { tool: 'run_command', command: 'rm -rf ~/old', summary: 'rm -rf ~/old', stepIndex: 3, caution: true },
+            ]);
+            expect(done.canResume).toBe(true);
+            expect((await decide(manager, runId, 'always')).result.error).toContain('only be allowed for this answer');
 
             const files = await startBlocked(manager, 'files');
-            expect(files.done.canApprove).toBeUndefined();
-            expect((await approve(manager, files.runId, 'once')).result.error).toContain('no longer be approved');
+            expect(files.done.canResume).toBeUndefined();
+            expect((await decide(manager, files.runId, 'once')).result.error).toContain('no longer be approved');
         });
 
-        it('Allow once adds a full-line rule for the resumed run only and removes it afterwards', async () => {
+        it('Allow for this answer adds a full-line rule for the resumed run only and removes it afterwards', async () => {
             fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
             fs.writeFileSync(
                 agySettingsFile(),
@@ -653,7 +676,7 @@ describe('AgentManager', () => {
             const manager = createManager();
             const { runId } = await startBlocked(manager);
 
-            const { result, events } = await approve(manager, runId, 'once');
+            const { result, events } = await decide(manager, runId, 'once');
             expect(result.runId).toEqual(expect.any(String));
             expect(result.runId).not.toBe(runId);
             const done = await waitForDone(events);
@@ -663,7 +686,9 @@ describe('AgentManager', () => {
             const seen = readArgs();
             expect(seen.allow).toEqual(['command(ls)', 'command(df -h)']);
             expect(seen.args).toEqual(expect.arrayContaining(['--conversation', 'c1', '--sandbox']));
-            expect(seen.args[1]).toContain('The user approved this command: `df -h`.');
+            expect(seen.args[1]).toBe(
+                'The user approved this command: `df -h`. Run it now and finish answering the original question.'
+            );
             expect(seen.args).not.toContain('--dangerously-skip-permissions');
 
             // Afterwards only the user's settings are left, and nothing is pending.
@@ -673,33 +698,94 @@ describe('AgentManager', () => {
             });
             expect(readRecord().pending).toEqual([]);
 
-            // A run's commands are approved once.
-            expect((await approve(manager, runId, 'once')).result.error).toContain('no longer be approved');
+            // A run's commands are decided about once.
+            expect((await decide(manager, runId, 'once')).result.error).toContain('no longer be approved');
         });
 
-        it('removes the temporary rule when the resumed run is cancelled', async () => {
-            const manager = createManager({
-                env: {
-                    PATH: fakePath(layout.bin),
-                    FAKE_HOME: layout.home,
-                    FAKE_ARGS_FILE: argsFile,
-                    // The resumed prompt names the command, so this one makes the fake CLI hang.
-                    FAKE_BLOCKED_COMMAND: 'du -sh MODE:hang',
-                },
-            });
+        it('gathers no context and copies no files for a resumed run', async () => {
+            fs.mkdirSync(path.join(layout.home, 'Documents'));
+            fs.writeFileSync(path.join(layout.home, 'Documents', 'taxes.csv'), 'secret,1\n');
+            for (const decision of ['once', 'without'] as const) {
+                const manager = createManager({
+                    env: env({ FAKE_BLOCKED_COMMAND: 'wc -l ~/Documents/taxes.csv' }),
+                });
+                const { runId } = await startBlocked(manager);
+                const { events } = await decide(manager, runId, decision);
+                await waitForDone(events);
+                const seen = readArgs();
+                expect(seen.inputs).toEqual([]);
+                expect(seen.files).toEqual(['.git']);
+                expect(seen.args[1]).not.toContain('gathered');
+                expect(seen.args[1]).not.toContain('secret');
+                expect(seen.args[1]).toMatch(
+                    /^The user (approved this command|did not allow): `wc -l ~\/Documents\/taxes.csv`/
+                );
+            }
+        });
+
+        it('Answer without it resumes without rules and asks for an answer from what the agent has', async () => {
+            const manager = createManager();
             const { runId } = await startBlocked(manager);
-            const { result, events } = await approve(manager, runId, 'once');
-            await vi.waitFor(() => expect(events.some((event) => event.type === 'started')).toBe(true));
-            expect(readAllow()).toEqual(['command(du -sh MODE:hang)']);
-            expect(readRecord().pending).toEqual(['command(du -sh MODE:hang)']);
-
-            manager.cancel(result.runId);
-            expect((await waitForDone(events)).status).toBe('CANCELED');
-            expect(readAllow()).toEqual([]);
-            expect(readRecord().pending).toEqual([]);
+            const { result, events } = await decide(manager, runId, 'without');
+            expect(result.runId).toEqual(expect.any(String));
+            expect((await waitForDone(events)).status).toBe('SUCCESS');
+            const seen = readArgs();
+            expect(seen.args[1]).toBe(
+                'The user did not allow: `df -h`. Do not run any more commands. Answer the original question from the command output you already have, and say briefly what you could not check.'
+            );
+            expect(seen.args).toEqual(expect.arrayContaining(['--conversation', 'c1']));
+            expect(seen.allow).toBeNull();
+            expect(fs.existsSync(agySettingsFile())).toBe(false);
         });
 
-        it('removes leftover temporary rules at startup, and only those', () => {
+        it('does not offer another decision when the run that answers without the commands is blocked again', async () => {
+            // The resumed prompt names the command, so this one makes the fake CLI block again.
+            const manager = createManager({ env: env({ FAKE_BLOCKED_COMMAND: 'df MODE:blocked' }) });
+            const { runId } = await startBlocked(manager);
+            const { result, events } = await decide(manager, runId, 'without');
+            const done = await waitForDone(events);
+            expect(done.blocked).toHaveLength(1);
+            expect(done.canResume).toBeUndefined();
+            expect((await decide(manager, result.runId ?? '', 'without')).result.error).toContain(
+                'no longer be approved'
+            );
+        });
+
+        it('refuses to allow a command with control or invisible characters, but can answer without it', async () => {
+            const manager = createManager({ env: env({ FAKE_BLOCKED_COMMAND: 'ls ‮txt.exe' }) });
+            const { runId, done } = await startBlocked(manager);
+            expect(done.canResume).toBe(true);
+            expect(done.approvalUnavailable).toContain('invisible characters');
+            for (const decision of ['once', 'always'] as const) {
+                expect((await decide(manager, runId, decision)).result.error).toContain('invisible characters');
+            }
+            expect(fs.existsSync(agySettingsFile())).toBe(false);
+            const { result } = await decide(manager, runId, 'without');
+            expect(result.runId).toEqual(expect.any(String));
+        });
+
+        for (const [name, command, extra, expected] of [
+            ['is cancelled', 'du -sh MODE:hang', {}, 'CANCELED'],
+            ['times out', 'du -sh MODE:hang', { runTimeoutMs: 600 }, 'TIMEOUT'],
+            ['fails', 'du -sh MODE:fail', {}, 'ERROR'],
+        ] as const) {
+            it(`removes the rule for this answer when the resumed run ${name}`, async () => {
+                const manager = createManager({ env: env({ FAKE_BLOCKED_COMMAND: command }), ...extra });
+                const { runId } = await startBlocked(manager);
+                const { result, events } = await decide(manager, runId, 'once');
+                await vi.waitFor(() => expect(events.some((event) => event.type === 'started')).toBe(true));
+                if (expected === 'CANCELED') {
+                    expect(readAllow()).toEqual([`command(${command})`]);
+                    expect(readRecord().pending).toEqual([`command(${command})`]);
+                    manager.cancel(result.runId);
+                }
+                expect((await waitForDone(events)).status).toBe(expected);
+                expect(readAllow()).toEqual([]);
+                expect(readRecord().pending).toEqual([]);
+            });
+        }
+
+        it('removes leftover rules for an answer at startup, but none the app or the user still wants', () => {
             fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
             fs.writeFileSync(
                 agySettingsFile(),
@@ -709,13 +795,13 @@ describe('AgentManager', () => {
                 recordFile(),
                 JSON.stringify({
                     lasting: ['command(free)'],
-                    readOnly: [],
-                    pending: ['command(df -h)', 'command(free)'],
+                    pending: ['command(df -h)', 'command(free)', 'command(ls)'],
+                    userOwned: ['command(ls)'],
                 })
             );
             createManager().initialize();
             expect(readAllow()).toEqual(['command(ls)', 'command(free)']);
-            expect(readRecord()).toMatchObject({ pending: [], lasting: ['command(free)'] });
+            expect(readRecord()).toMatchObject({ pending: [], lasting: ['command(free)'], userOwned: [] });
         });
 
         it('keeps pending rules when the settings file is not valid JSON at startup', () => {
@@ -727,10 +813,10 @@ describe('AgentManager', () => {
             expect(readRecord().pending).toEqual(['command(df -h)']);
         });
 
-        it('Always allow adds the lasting prefix rule, which Options lists and can remove', async () => {
+        it('Always allow adds the lasting lookup rule, which Options lists and can remove', async () => {
             const manager = createManager();
             const { runId } = await startBlocked(manager);
-            const { result, events } = await approve(manager, runId, 'always');
+            const { result, events } = await decide(manager, runId, 'always');
             expect(result.runId).toEqual(expect.any(String));
             await waitForDone(events);
             expect(readArgs().allow).toEqual(['command(df)']);
@@ -739,11 +825,10 @@ describe('AgentManager', () => {
             // The engine stays usable with the rule.
             expect(await manager.getStatus('antigravity', true)).toMatchObject({ available: true });
 
-            const info = await manager.getPermissions('antigravity');
-            expect(info).toEqual({
+            expect(await manager.getPermissions('antigravity')).toEqual({
                 supported: true,
                 settingsFile: agySettingsFile(),
-                readOnlyCommandsEnabled: false,
+                lookupCommandsEnabled: false,
                 allowedRules: ['command(df)'],
             });
             const removed = await manager.removeAllowedRule('command(df)', 'antigravity');
@@ -751,61 +836,81 @@ describe('AgentManager', () => {
             expect(readAllow()).toEqual([]);
         });
 
-        it('refuses Always allow for a command offered only once', async () => {
-            const manager = createManager({
-                env: {
-                    PATH: fakePath(layout.bin),
-                    FAKE_HOME: layout.home,
-                    FAKE_ARGS_FILE: argsFile,
-                    FAKE_BLOCKED_COMMAND: 'df -h | sort',
-                },
-            });
+        it('refuses Always allow for a command not in the lookup list', async () => {
+            const manager = createManager({ env: env({ FAKE_BLOCKED_COMMAND: 'df -h | sort' }) });
             const { runId, done } = await startBlocked(manager);
             expect(done.blocked?.[0]?.lastingRule).toBeUndefined();
-            expect((await approve(manager, runId, 'always')).result.error).toContain('only be allowed once');
+            expect((await decide(manager, runId, 'always')).result.error).toContain('only be allowed for this answer');
             expect(fs.existsSync(agySettingsFile())).toBe(false);
-            // Allow once still works.
-            const once = await approve(manager, runId, 'once');
+            const once = await decide(manager, runId, 'once');
             await waitForDone(once.events);
             expect(readArgs().allow).toEqual(['command(df -h | sort)']);
         });
 
-        it('does not remove rules the user had, nor rules it did not add', async () => {
+        it("records the user's choice even when the rule is already there, and never removes the user's own rule", async () => {
             fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
             fs.writeFileSync(agySettingsFile(), JSON.stringify({ permissions: { allow: ['command(df)'] } }));
             const manager = createManager();
             const { runId } = await startBlocked(manager);
-            const { events } = await approve(manager, runId, 'always');
+            const { events } = await decide(manager, runId, 'always');
             await waitForDone(events);
-            // command(df) was already there, so the app did not record it as its own.
-            expect(fs.existsSync(recordFile()) ? readRecord().lasting : []).toEqual([]);
+            expect(readRecord()).toMatchObject({ lasting: ['command(df)'], userOwned: ['command(df)'] });
+            expect((await manager.getPermissions('antigravity')).allowedRules).toEqual(['command(df)']);
+            // Taking the choice back leaves the rule the user had before.
+            await manager.removeAllowedRule('command(df)', 'antigravity');
+            expect(readAllow()).toEqual(['command(df)']);
+            expect(readRecord()).toMatchObject({ lasting: [], userOwned: [] });
             expect((await manager.removeAllowedRule('command(df)', 'antigravity')).error).toContain('did not add');
             expect((await manager.removeAllowedRule(42, 'antigravity')).error).toContain('did not add');
-            expect(readAllow()).toEqual(['command(df)']);
         });
 
-        it('refuses to approve when the settings file is not valid JSON, and keeps the approval open', async () => {
+        it('keeps a rule that one source still wants when another lets go of it', async () => {
+            const manager = createManager({ env: env({ FAKE_BLOCKED_COMMAND: 'df' }) });
+            await manager.setLookupCommands(true, 'antigravity');
+            const first = await startBlocked(manager);
+            const always = await decide(manager, first.runId, 'always');
+            await waitForDone(always.events);
+            expect(readRecord().lasting).toEqual(['command(df)']);
+            expect(readRecord().userOwned).toEqual([]);
+
+            // The lookup list goes off; "Always allow df" still wants command(df).
+            await manager.setLookupCommands(false, 'antigravity');
+            expect(readAllow()).toEqual(['command(df)']);
+
+            // A rule for this answer equal to a lasting rule stays when the answer ends.
+            const second = await startBlocked(manager);
+            const once = await decide(manager, second.runId, 'once');
+            await waitForDone(once.events);
+            expect(readAllow()).toEqual(['command(df)']);
+            expect(readRecord().pending).toEqual([]);
+
+            // Taking the choice back finally removes it.
+            await manager.removeAllowedRule('command(df)', 'antigravity');
+            expect(readAllow()).toEqual([]);
+        });
+
+        it('refuses to decide when the settings file is not valid JSON, and keeps the card open', async () => {
             const manager = createManager();
             const { runId } = await startBlocked(manager);
             fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
             fs.writeFileSync(agySettingsFile(), '{ "permissions": // no\n }');
             for (const decision of ['once', 'always'] as const) {
-                const { result } = await approve(manager, runId, decision);
+                const { result } = await decide(manager, runId, decision);
                 expect(result.error).toContain('not valid JSON');
             }
             expect(fs.readFileSync(agySettingsFile(), 'utf8')).toBe('{ "permissions": // no\n }');
 
             fs.writeFileSync(agySettingsFile(), '{}');
-            const { result, events } = await approve(manager, runId, 'once');
+            const { result, events } = await decide(manager, runId, 'once');
             expect(result.runId).toEqual(expect.any(String));
             await waitForDone(events);
         });
 
-        it('rejects invalid approvals', async () => {
+        it('rejects invalid decisions', async () => {
             const manager = createManager();
             const options = { enginePreference: 'auto' as const, model: '', emit: () => undefined };
             expect((await manager.approveBlockedCommands(null, options)).error).toBe('Invalid approval.');
-            expect((await manager.approveBlockedCommands({ runId: 'x', decision: 'yes' }, options)).error).toBe(
+            expect((await manager.approveBlockedCommands({ runId: 'x', decision: 'never' }, options)).error).toBe(
                 'Invalid approval.'
             );
             expect((await manager.approveBlockedCommands({ runId: 'x', decision: 'once' }, options)).error).toContain(
@@ -813,7 +918,7 @@ describe('AgentManager', () => {
             );
         });
 
-        it("turns the read-only command list on and off, keeping the user's own rules", async () => {
+        it("turns the lookup command list on and off, keeping the user's own rules", async () => {
             fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
             fs.writeFileSync(
                 agySettingsFile(),
@@ -821,24 +926,25 @@ describe('AgentManager', () => {
             );
             const manager = createManager();
 
-            const on = await manager.setReadOnlyCommands(true, 'antigravity');
-            expect(on).toMatchObject({ supported: true, readOnlyCommandsEnabled: true });
+            const on = await manager.setLookupCommands(true, 'antigravity');
+            expect(on).toMatchObject({ supported: true, lookupCommandsEnabled: true });
             expect(on.error).toBeUndefined();
             const allow = readAllow();
-            for (const rule of READ_ONLY_COMMAND_RULES) {
+            for (const rule of LOOKUP_COMMAND_RULES) {
                 expect(allow).toContain(rule);
             }
             expect(allow.filter((rule) => rule === 'command(df)')).toHaveLength(1);
-            expect(readRecord().readOnly).not.toContain('command(df)');
+            expect(readRecord().lookup).toEqual([...LOOKUP_COMMAND_RULES]);
+            expect(readRecord().userOwned).toEqual(['command(df)']);
             expect(await manager.getStatus('antigravity', true)).toMatchObject({ available: true });
 
-            const off = await manager.setReadOnlyCommands(false, 'antigravity');
-            expect(off.readOnlyCommandsEnabled).toBe(false);
+            const off = await manager.setLookupCommands(false, 'antigravity');
+            expect(off.lookupCommandsEnabled).toBe(false);
             expect(JSON.parse(fs.readFileSync(agySettingsFile(), 'utf8'))).toEqual({
                 theme: 'x',
                 permissions: { allow: ['command(df)', 'command(npm)'] },
             });
-            await expect(manager.setReadOnlyCommands('yes', 'antigravity')).rejects.toThrow('Invalid value');
+            await expect(manager.setLookupCommands('yes', 'antigravity')).rejects.toThrow('Invalid value');
         });
 
         it('reports an invalid settings file in Options and changes nothing', async () => {
@@ -846,31 +952,30 @@ describe('AgentManager', () => {
             fs.writeFileSync(agySettingsFile(), 'nope');
             const manager = createManager();
             expect((await manager.getPermissions('antigravity')).error).toContain('not valid JSON');
-            const result = await manager.setReadOnlyCommands(true, 'antigravity');
+            const result = await manager.setLookupCommands(true, 'antigravity');
             expect(result.error).toContain('not valid JSON');
-            expect(result.readOnlyCommandsEnabled).toBe(false);
+            expect(result.lookupCommandsEnabled).toBe(false);
             expect(fs.readFileSync(agySettingsFile(), 'utf8')).toBe('nope');
         });
 
-        it('says permissions are not supported for Gemini CLI', async () => {
+        it('says command rules are not supported for Gemini CLI or on Windows', async () => {
             installFakeCli(layout.bin, 'gemini');
             const manager = createManager();
             expect(await manager.getPermissions('gemini-cli')).toMatchObject({ supported: false, allowedRules: [] });
-            expect((await manager.setReadOnlyCommands(true, 'gemini-cli')).supported).toBe(false);
+            expect((await manager.setLookupCommands(true, 'gemini-cli')).supported).toBe(false);
+
+            fs.copyFileSync(path.join(layout.bin, 'agy'), path.join(layout.bin, 'agy.exe'));
+            const windows = createManager({ platform: 'win32', env: { PATH: layout.bin } });
+            expect(await windows.getStatus('antigravity')).toMatchObject({ engine: 'antigravity' });
+            expect(await windows.getPermissions('antigravity')).toMatchObject({ supported: false });
+            expect((await windows.setLookupCommands(true, 'antigravity')).supported).toBe(false);
             expect(fs.existsSync(agySettingsFile())).toBe(false);
         });
 
-        it('removes the temporary rules when the app quits during the resumed run', async () => {
-            const manager = createManager({
-                env: {
-                    PATH: fakePath(layout.bin),
-                    FAKE_HOME: layout.home,
-                    FAKE_ARGS_FILE: argsFile,
-                    FAKE_BLOCKED_COMMAND: 'du -sh MODE:hang',
-                },
-            });
+        it('removes the rules for an answer when the app quits during the resumed run', async () => {
+            const manager = createManager({ env: env({ FAKE_BLOCKED_COMMAND: 'du -sh MODE:hang' }) });
             const { runId } = await startBlocked(manager);
-            const { events } = await approve(manager, runId, 'once');
+            const { events } = await decide(manager, runId, 'once');
             await vi.waitFor(() => expect(events.some((event) => event.type === 'started')).toBe(true));
             expect(readAllow()).toHaveLength(1);
             manager.dispose();
@@ -880,17 +985,33 @@ describe('AgentManager', () => {
     });
 
     describe('listModels', () => {
-        it('lists the models and the default, and caches them for 5 minutes', async () => {
+        const callsFile = () => path.join(layout.root, 'calls.txt');
+        const readCalls = (): string[][] =>
+            fs.existsSync(callsFile())
+                ? fs
+                      .readFileSync(callsFile(), 'utf8')
+                      .trim()
+                      .split('\n')
+                      .map((line) => JSON.parse(line))
+                : [];
+        const modelEnv = (extra: Record<string, string> = {}) => ({
+            PATH: fakePath(layout.bin),
+            FAKE_HOME: layout.home,
+            FAKE_ARGS_FILE: argsFile,
+            FAKE_CALLS_FILE: callsFile(),
+            ...extra,
+        });
+
+        beforeEach(() => {
             installFakeCli(layout.bin, 'agy');
+        });
+
+        it('lists the models, then reads the default, and caches them for 5 minutes', async () => {
             let now = 0;
-            const spawned: string[][] = [];
-            const manager = createManager({
-                now: () => now,
-                spawnProcess: ((command: string, args: string[], options: SpawnOptions) => {
-                    spawned.push(args);
-                    return spawn(command, args, options);
-                }) as typeof spawn,
-            });
+            // A leftover in the CLI's folder is cleaned away.
+            fs.mkdirSync(path.join(layout.userData, 'agent-cli'), { recursive: true });
+            fs.writeFileSync(path.join(layout.userData, 'agent-cli', 'GEMINI.md'), 'planted');
+            const manager = createManager({ now: () => now, env: modelEnv() });
             const list = await manager.listModels('auto');
             expect(list).toEqual({
                 models: [
@@ -899,20 +1020,44 @@ describe('AgentManager', () => {
                 ],
                 defaultModel: { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash (High)' },
             });
-            expect(spawned).toEqual([['models'], ['-p', '/model']]);
+            expect(readCalls()).toEqual([['models'], ['-p', '/model', '--print-timeout', '20s']]);
             expect(readArgs().cwd).toBe(path.join(layout.userData, 'agent-cli'));
+            expect(readArgs().files).toEqual([]);
 
             expect(await manager.listModels('auto')).toBe(list);
-            expect(spawned).toHaveLength(2);
+            expect(readCalls()).toHaveLength(2);
             await manager.listModels('auto', true);
-            expect(spawned).toHaveLength(4);
+            expect(readCalls()).toHaveLength(4);
             now += 5 * 60 * 1000 + 1;
             await manager.listModels('auto');
-            expect(spawned).toHaveLength(6);
+            expect(readCalls()).toHaveLength(6);
+        });
+
+        it('ignores a default that is not one of the listed models', async () => {
+            const manager = createManager({
+                env: modelEnv({ FAKE_DEFAULT_MODEL: 'made-up\tSomething the model said' }),
+            });
+            const list = await manager.listModels('auto');
+            expect(list.models).toHaveLength(2);
+            expect(list.defaultModel).toBeUndefined();
+        });
+
+        it('does not ask for the default when listing fails, and keeps the failure for a minute', async () => {
+            let now = 0;
+            const manager = createManager({ now: () => now, env: modelEnv({ FAKE_MODELS_FAIL: '1' }) });
+            expect(await manager.listModels('auto')).toEqual({
+                models: [],
+                error: 'Could not list the models of Antigravity CLI.',
+            });
+            expect(readCalls()).toEqual([['models']]);
+            await manager.listModels('auto');
+            expect(readCalls()).toHaveLength(1);
+            now += 61 * 1000;
+            await manager.listModels('auto');
+            expect(readCalls()).toHaveLength(2);
         });
 
         it('gives up after the timeout and reports Gemini CLI and a missing engine', async () => {
-            installFakeCli(layout.bin, 'agy');
             const manager = createManager({
                 modelListTimeoutMs: 300,
                 env: { PATH: fakePath(layout.bin), FAKE_HOME: layout.home, FAKE_MODELS_HANG: '1' },

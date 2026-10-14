@@ -3,12 +3,15 @@
  * temporary bin folder. The prompt picks its behaviour with `MODE:<name>`.
  *
  * Modes: text (default), partial, plan, badplan, auth, fail, hang, turbo (reports a permission
- * mode that runs tools without asking), noresult, apikey, blocked (a command headless mode
+ * mode that runs tools without asking), noresult, apikey, silent (a command that ran and
+ * printed nothing), blocked (a command headless mode
  * refused, as agy 1.3.5 reports it; the command is `$FAKE_BLOCKED_COMMAND` or `df -h`). It
  * writes its arguments, working directory, the workspace's entries, its input copies and
  * the allow rules in `$FAKE_HOME/.gemini/antigravity-cli/settings.json` to `$FAKE_ARGS_FILE`
- * when set. `agy models` and `agy -p /model` print a model list and the default model
- * (`$FAKE_MODELS_HANG` makes them hang).
+ * when set (`$FAKE_SILENT_FIRST` adds a silent `true` that ran before it). `agy models` and
+ * `agy -p /model` print a model list and the default model (`$FAKE_MODELS_HANG` makes them
+ * hang, `$FAKE_MODELS_FAIL` makes `models` fail, `$FAKE_DEFAULT_MODEL` replaces the default
+ * line) and append their arguments to `$FAKE_CALLS_FILE`.
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -47,17 +50,23 @@ if (process.env.FAKE_ARGS_FILE) {
         JSON.stringify({ args, cwd: process.cwd(), files: fs.readdirSync(process.cwd()).sort(), inputs: listInputs(), allow: readAllow() })
     );
 }
-if (args[0] === 'models' || (args[0] === '-p' && args[1] === '/model' && args.length === 2)) {
+if (args[0] === 'models' || (args[0] === '-p' && args[1] === '/model')) {
+    if (process.env.FAKE_CALLS_FILE) {
+        fs.appendFileSync(process.env.FAKE_CALLS_FILE, JSON.stringify(args) + '\n');
+    }
     if (process.env.FAKE_MODELS_HANG) {
         setInterval(() => {}, 1000);
         return;
     }
     if (args[0] === 'models') {
+        if (process.env.FAKE_MODELS_FAIL) {
+            process.exit(2);
+        }
         process.stdout.write('Fetching available models...\n');
         process.stdout.write('gemini-3.8-flash-high\tGemini 3.8 Flash (High)\n');
         process.stdout.write('claude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\n');
     } else {
-        process.stdout.write('gemini-3.8-flash-high\tGemini 3.8 Flash (High)\n');
+        process.stdout.write((process.env.FAKE_DEFAULT_MODEL || 'gemini-3.8-flash-high\tGemini 3.8 Flash (High)') + '\n');
     }
     process.exit(0);
 }
@@ -135,11 +144,22 @@ if (mode === 'plan' || mode === 'badplan') {
 }
 if (mode === 'blocked') {
     const command = process.env.FAKE_BLOCKED_COMMAND || 'df -h';
-    const tool = (state) => ({ event: 'step_update', step_update: { conversation_id: 'c1', step_index: 2, state, step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: command } } } });
-    out(tool('ACTIVE'));
-    out(tool('DONE'));
+    const tool = (state, index, line) => ({ event: 'step_update', step_update: { conversation_id: 'c1', step_index: index, state, step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: line } } } });
+    if (process.env.FAKE_SILENT_FIRST) {
+        // A command that ran and printed nothing: agy 1.3.5 reports no output for it either.
+        out(tool('ACTIVE', 2, 'true'));
+        out(tool('DONE', 2, 'true'));
+    }
+    out(tool('ACTIVE', 3, command));
+    out(tool('DONE', 3, command));
     process.stderr.write('jetski: no output produced - a tool required the "command" permission that headless mode cannot prompt for, so it was auto-denied.\n');
     out({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response: '', duration_seconds: 4.4, num_turns: 1, usage: {}, denied_actions: [{ action: 'command', display_name: 'RunCommand' }] } });
+    process.exit(0);
+}
+if (mode === 'silent') {
+    // A command that ran and printed nothing, as agy 1.3.5 reports it: no output, no denied_actions.
+    out({ event: 'step_update', step_update: { conversation_id: 'c1', step_index: 2, state: 'DONE', step_type: 'tool', tool_name: 'run_command', duration_seconds: 0.4, tool_info: { name: 'run_command', parameters: { CommandLine: 'true' } } } });
+    out({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response: 'done\n' } });
     process.exit(0);
 }
 if (mode === 'noresult') {

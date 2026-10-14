@@ -5,7 +5,7 @@
  * agent:settings-changed), agent:run (streams agent:event), agent:cancel,
  * agent:apply-plan, agent:undo-last, agent:approve-commands (resumes a run whose
  * commands were blocked, streaming agent:event), agent:permissions-get,
- * agent:read-only-commands-set, agent:allowed-rule-remove and agent:models-list.
+ * agent:lookup-commands-set, agent:allowed-rule-remove and agent:models-list.
  * The work is done by AgentManager.
  *
  * @module ipc/AgentIpcHandler
@@ -85,8 +85,8 @@ export class AgentIpcHandler extends BaseIpcHandler {
             this.handleApproveCommands(event, request)
         );
         ipcMain.handle(IPC_CHANNELS.AGENT_PERMISSIONS_GET, () => this.handlePermissionsGet());
-        ipcMain.handle(IPC_CHANNELS.AGENT_READ_ONLY_COMMANDS_SET, (_event, enabled: unknown) =>
-            this.handleReadOnlyCommandsSet(enabled)
+        ipcMain.handle(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, (_event, enabled: unknown) =>
+            this.handleLookupCommandsSet(enabled)
         );
         ipcMain.handle(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE, (_event, rule: unknown) =>
             this.handleAllowedRuleRemove(rule)
@@ -196,7 +196,7 @@ export class AgentIpcHandler extends BaseIpcHandler {
     }
 
     private unsupportedPermissions(): AgentPermissionsInfo {
-        return { supported: false, settingsFile: '', readOnlyCommandsEnabled: false, allowedRules: [] };
+        return { supported: false, settingsFile: '', lookupCommandsEnabled: false, allowedRules: [] };
     }
 
     private async handlePermissionsGet(): Promise<AgentPermissionsInfo> {
@@ -212,7 +212,7 @@ export class AgentIpcHandler extends BaseIpcHandler {
         }
     }
 
-    private async handleReadOnlyCommandsSet(enabled: unknown): Promise<AgentPermissionsInfo> {
+    private async handleLookupCommandsSet(enabled: unknown): Promise<AgentPermissionsInfo> {
         const manager = this.deps.agentManager;
         if (!manager) {
             return this.unsupportedPermissions();
@@ -220,7 +220,7 @@ export class AgentIpcHandler extends BaseIpcHandler {
         if (typeof enabled !== 'boolean') {
             throw new Error('Invalid value.');
         }
-        return manager.setReadOnlyCommands(enabled, this.getSettings().agentEngine);
+        return manager.setLookupCommands(enabled, this.getSettings().agentEngine);
     }
 
     private async handleAllowedRuleRemove(rule: unknown): Promise<AgentPermissionsInfo> {
@@ -286,7 +286,7 @@ export class AgentIpcHandler extends BaseIpcHandler {
         ipcMain.removeHandler(IPC_CHANNELS.AGENT_UNDO_LAST);
         ipcMain.removeHandler(IPC_CHANNELS.AGENT_APPROVE_COMMANDS);
         ipcMain.removeHandler(IPC_CHANNELS.AGENT_PERMISSIONS_GET);
-        ipcMain.removeHandler(IPC_CHANNELS.AGENT_READ_ONLY_COMMANDS_SET);
+        ipcMain.removeHandler(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET);
         ipcMain.removeHandler(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE);
         ipcMain.removeHandler(IPC_CHANNELS.AGENT_MODELS_LIST);
     }

@@ -9,7 +9,7 @@
  *
  * Keys: Enter sends to the shown route, Ctrl+Enter (Cmd+Enter on macOS) to the
  * other one, Tab accepts a text prediction, Escape dismisses a prediction, stops
- * a running agent, declines blocked commands waiting for approval, or hides Quick Chat.
+ * a running agent, dismisses the approval card for blocked commands, or hides Quick Chat.
  *
  * @module QuickChatApp
  */
@@ -414,10 +414,11 @@ function QuickChatApp(): React.ReactElement {
     );
 
     /**
-     * Approve the blocked commands: the main process writes the allow rules and resumes the
-     * conversation, and the resumed run streams into the panel like a follow-up.
+     * Decide about the blocked commands (allow for this answer, always allow, or answer
+     * without them): the main process writes any allow rules and resumes the conversation,
+     * and the resumed run streams into the panel like a follow-up.
      */
-    const handleApproveCommands = useCallback(
+    const handleDecideCommands = useCallback(
         async (decision: CommandApprovalDecision) => {
             const api = window.electronAPI;
             const approvedRunId = run.runId;
@@ -451,7 +452,12 @@ function QuickChatApp(): React.ReactElement {
                     return;
                 }
                 runIdRef.current = null;
-                dispatch({ type: 'start', prompt: run.prompt, category: run.category });
+                dispatch({
+                    type: 'start',
+                    prompt: run.prompt,
+                    category: run.category,
+                    resume: decision === 'without' ? 'declined' : 'approved',
+                });
                 attachRun(result.runId, token);
             } catch (error) {
                 if (token !== startTokenRef.current) {
@@ -466,8 +472,8 @@ function QuickChatApp(): React.ReactElement {
         [attachRun, run.approval, run.category, run.prompt, run.runId]
     );
 
-    const handleDenyCommands = useCallback(() => {
-        dispatch({ type: 'approvalDenied' });
+    const handleDismissCommands = useCallback(() => {
+        dispatch({ type: 'approvalDismissed' });
         inputRef.current?.focus();
     }, []);
 
@@ -590,8 +596,8 @@ function QuickChatApp(): React.ReactElement {
             } else if (isRunActive(run)) {
                 stopRun();
             } else if (run.approval === 'pending') {
-                // Escape declines blocked commands before it hides Quick Chat.
-                handleDenyCommands();
+                // Escape dismisses the approval card (without resuming) before it hides Quick Chat.
+                handleDismissCommands();
             } else {
                 window.electronAPI?.cancelQuickChat();
                 if (panelVisible) {
@@ -599,7 +605,7 @@ function QuickChatApp(): React.ReactElement {
                 }
             }
         },
-        [handleDenyCommands, panelVisible, prediction, resetPanel, run, stopRun]
+        [handleDismissCommands, panelVisible, prediction, resetPanel, run, stopRun]
     );
 
     /**
@@ -715,8 +721,8 @@ function QuickChatApp(): React.ReactElement {
                     onUndoPlan={handleUndoPlan}
                     onNew={handleNew}
                     onContinueInGemini={handleContinueInGemini}
-                    onApproveCommands={(decision) => void handleApproveCommands(decision)}
-                    onDenyCommands={handleDenyCommands}
+                    onDecideCommands={(decision) => void handleDecideCommands(decision)}
+                    onDismissCommands={handleDismissCommands}
                 />
             )}
         </div>

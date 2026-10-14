@@ -521,7 +521,8 @@ export interface ElectronAPI {
     undoLastFilePlan: () => Promise<FileActionResult>;
 
     /**
-     * Approve a finished run's blocked commands (Antigravity CLI) and resume its
+     * Decide about a finished run's blocked commands (Antigravity CLI): allow them for this
+     * answer, always allow their lookup prefix, or answer without them. Resumes the
      * conversation; resolves with the resumed run's id, or an error for the UI
      */
     approveAgentCommands: (request: CommandApprovalRequest) => Promise<{ runId?: string; error?: string }>;
@@ -529,8 +530,8 @@ export interface ElectronAPI {
     /** The command allow rules the app manages in Antigravity CLI's settings */
     getAgentPermissions: () => Promise<AgentPermissionsInfo>;
 
-    /** Turn the read-only command list on or off */
-    setReadOnlyAgentCommands: (enabled: boolean) => Promise<AgentPermissionsInfo>;
+    /** Turn the lookup command list on or off */
+    setLookupAgentCommands: (enabled: boolean) => Promise<AgentPermissionsInfo>;
 
     /** Remove a lasting rule added with "Always allow" */
     removeAllowedAgentRule: (rule: string) => Promise<AgentPermissionsInfo>;

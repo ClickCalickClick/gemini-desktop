@@ -1,39 +1,48 @@
 /**
- * Read-only command prefixes for the local agent (Antigravity CLI).
+ * Lookup command prefixes for the local agent (Antigravity CLI): commands that only look
+ * at this computer (disk space, memory, hardware, services' status).
  *
- * When the user turns on "Read-only system commands" in Options → Quick Chat, the app
- * adds one `command(<prefix>)` allow rule per entry to Antigravity CLI's settings, so
- * the agent can answer questions about this computer (disk space, memory, hardware)
- * without asking. Antigravity matches a rule word by word against the start of each
- * command in a line, so `command(df)` allows `df -h` but not `rm` in `df; rm x`.
+ * When the user turns on "System lookup commands" in Options → Quick Chat, the app adds
+ * one `command(<prefix>)` allow rule per entry to Antigravity CLI's settings, so the agent
+ * can answer questions about this computer without asking. Antigravity matches a rule
+ * word by word against the start of each command in a line, so `command(df)` allows
+ * `df -h` but not `rm` in `df; rm x`.
+ *
+ * What this list does not promise: a prefix rule also matches the command with any
+ * arguments after it, and Antigravity looks through transparent wrappers (`env`, `nice`,
+ * `timeout`, `nohup`), so `env LD_PRELOAD=./x.so df` or `env PATH=. df` matches
+ * `command(df)` and runs code the agent wrote into its workspace. Every rule therefore
+ * lets the agent run code inside the sandbox; the list only keeps the commands it names
+ * from changing things by themselves. The sandbox (`--sandbox`) is what confines them:
+ * per Antigravity's docs commands can write the workspace, temporary folders and common
+ * build caches, read system folders such as `/usr` and `/etc`, cannot see `~/.ssh`,
+ * `.env` files or anything not mounted (home folders included, so `du ~/Downloads` finds
+ * nothing), and have no network.
  *
  * Rules for this list:
  * - A single word only for a command that has no mode that changes anything for an
  *   unprivileged user (`df`, `free`, `lsblk`, ...).
  * - Several words for a tool that also has state-changing subcommands or flags: the
- *   prefix pins a read-only subcommand (`systemctl status`, `nmcli device status`).
+ *   prefix pins a subcommand that only looks (`systemctl status`, `nmcli device status`).
  *   A flag-only prefix is not enough when the tool reads its subcommand after the flag
  *   (`systemctl --failed restart x` restarts x), so those use the subcommand form.
- * - No generic file readers (`cat`, `head`, `grep`, ...): the agent must not read the
- *   user's files. A prefix such as `cat /proc/cpuinfo` would also allow
- *   `cat /proc/cpuinfo ~/.ssh/id_ed25519`, so `/proc` and `/etc` files are left out too.
- * - No environment dumps (`env`, `printenv`, `set`), which hold secrets, no tools that
- *   can set the clock or host name (`date`, `hostname`), no `find` (it has `-delete` and
- *   `-exec`), no `journalctl` (`--vacuum-*`, `--rotate`), no tools that write their own
- *   config on first run (`neofetch`, `fastfetch`), and nothing networked: the sandbox
- *   has no network.
+ * - Left out: generic file readers (`cat`, `head`, `grep`, ...; `cat /proc/cpuinfo` would
+ *   also allow `cat /proc/cpuinfo ~/.ssh/id_ed25519`), environment dumps (`env`,
+ *   `printenv`, `set`), tools that can set the clock or host name (`date`, `hostname`),
+ *   `find` (`-delete`, `-exec`), `journalctl` (`--vacuum-*`), tools that write their own
+ *   config or update themselves (`neofetch`, `fastfetch`, `inxi -U`), `git` (repository
+ *   config can run commands), `sysctl` (`name=value` writes), `ss` (`-K` closes sockets),
+ *   `sensors` (`-s`), and anything networked.
  *
- * Every entry is checked by tests against the app's list of state-changing commands
- * and against the engine safety check (tests/unit/main/agent/agentPermissions.test.ts).
- * Commands still run inside Antigravity's sandbox (`--sandbox`), where only the scratch
- * workspace is writable.
+ * Every entry is checked by tests against the app's list of state-changing commands and
+ * against the engine safety check (tests/unit/main/agent/agentPermissions.test.ts).
  *
- * @module agentReadOnlyCommands
+ * @module agentLookupCommands
  */
 
-import type { ReadOnlyCommandGroup } from '../types/agent';
+import type { LookupCommandGroup } from '../types/agent';
 
-export const READ_ONLY_COMMAND_GROUPS: readonly ReadOnlyCommandGroup[] = [
+export const LOOKUP_COMMAND_GROUPS: readonly LookupCommandGroup[] = [
     {
         name: 'System information',
         prefixes: [
@@ -45,7 +54,6 @@ export const READ_ONLY_COMMAND_GROUPS: readonly ReadOnlyCommandGroup[] = [
             'locale',
             'cal',
             'lsb_release',
-            'inxi',
             'hostnamectl status',
             'timedatectl status',
             'localectl status',
@@ -55,8 +63,6 @@ export const READ_ONLY_COMMAND_GROUPS: readonly ReadOnlyCommandGroup[] = [
             'sw_vers',
             'system_profiler',
             'hostinfo',
-            'sysctl -a',
-            'sysctl -n',
             'csrutil status',
             'scutil --get',
             // Windows
@@ -109,7 +115,6 @@ export const READ_ONLY_COMMAND_GROUPS: readonly ReadOnlyCommandGroup[] = [
             'lspci',
             'lsmod',
             'modinfo',
-            'sensors',
             'acpi',
             'upower -e',
             'upower -i',
@@ -126,15 +131,13 @@ export const READ_ONLY_COMMAND_GROUPS: readonly ReadOnlyCommandGroup[] = [
         ],
     },
     {
-        name: 'Network (read-only)',
+        name: 'Network settings',
         prefixes: [
             'ip addr show',
             'ip -br addr show',
             'ip route show',
             'ip link show',
             'ip -br link show',
-            'ss -tuln',
-            'ss -s',
             'nmcli general status',
             'nmcli device status',
             'nmcli connection show',
@@ -207,10 +210,6 @@ export const READ_ONLY_COMMAND_GROUPS: readonly ReadOnlyCommandGroup[] = [
         prefixes: [
             'which',
             'whereis',
-            'git status',
-            'git log',
-            'git diff',
-            'git --version',
             'node --version',
             'python3 --version',
             'rustc --version',
@@ -221,15 +220,13 @@ export const READ_ONLY_COMMAND_GROUPS: readonly ReadOnlyCommandGroup[] = [
     },
 ];
 
-/** Every read-only prefix, in list order. */
-export const READ_ONLY_COMMAND_PREFIXES: readonly string[] = READ_ONLY_COMMAND_GROUPS.flatMap(
-    (group) => group.prefixes
-);
+/** Every lookup prefix, in list order. */
+export const LOOKUP_COMMAND_PREFIXES: readonly string[] = LOOKUP_COMMAND_GROUPS.flatMap((group) => group.prefixes);
 
 /** The allow rule Antigravity CLI uses for a command prefix or a full command line. */
 export function commandRule(target: string): string {
     return `command(${target})`;
 }
 
-/** The allow rules the read-only list adds, in list order. */
-export const READ_ONLY_COMMAND_RULES: readonly string[] = READ_ONLY_COMMAND_PREFIXES.map(commandRule);
+/** The allow rules the lookup list adds, in list order. */
+export const LOOKUP_COMMAND_RULES: readonly string[] = LOOKUP_COMMAND_PREFIXES.map(commandRule);

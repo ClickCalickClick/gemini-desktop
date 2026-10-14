@@ -182,7 +182,16 @@ describe('parseAntigravityEvent', () => {
         it('keeps the command line, marks the DONE step without output and reads denied_actions', () => {
             const events = LINES.map((line) => parseAntigravityEvent(parseJsonLine(line) ?? {}));
             expect(events).toEqual([
-                [{ kind: 'tool', name: 'run_command', summary: 'df -h', state: 'ACTIVE', command: 'df -h' }],
+                [
+                    {
+                        kind: 'tool',
+                        name: 'run_command',
+                        summary: 'df -h',
+                        state: 'ACTIVE',
+                        command: 'df -h',
+                        stepIndex: 2,
+                    },
+                ],
                 [
                     {
                         kind: 'tool',
@@ -190,6 +199,7 @@ describe('parseAntigravityEvent', () => {
                         summary: 'df -h',
                         state: 'DONE',
                         command: 'df -h',
+                        stepIndex: 2,
                         hasOutput: false,
                     },
                 ],
@@ -200,9 +210,51 @@ describe('parseAntigravityEvent', () => {
                         response: '',
                         conversationId: '66c0',
                         deniedActions: ['command'],
+                        deniedCommands: 1,
                     },
                 ],
             ]);
+        });
+
+        it('reports a silent command that ran exactly like a refused one, without denied actions (agy 1.3.5)', () => {
+            // Real lines with `command(true)` allowed: `true` ran, printed nothing, and has no output field.
+            const silent = [
+                '{"event":"step_update","step_update":{"conversation_id":"f23c6b68-1fd6-4ae0-8f5f-a55392785515","step_index":2,"state":"DONE","step_type":"tool","tool_name":"run_command","duration_seconds":0.400024258,"tool_info":{"name":"run_command","parameters":{"CommandLine":"true"}}}}',
+                '{"event":"result","result":{"conversation_id":"f23c6b68-1fd6-4ae0-8f5f-a55392785515","status":"SUCCESS","response":"done\\n"}}',
+            ].map((line) => parseAntigravityEvent(parseJsonLine(line) ?? {}));
+            expect(silent).toEqual([
+                [
+                    {
+                        kind: 'tool',
+                        name: 'run_command',
+                        summary: 'true',
+                        state: 'DONE',
+                        command: 'true',
+                        stepIndex: 2,
+                        hasOutput: false,
+                    },
+                ],
+                [
+                    {
+                        kind: 'result',
+                        status: 'SUCCESS',
+                        response: 'done\n',
+                        conversationId: 'f23c6b68-1fd6-4ae0-8f5f-a55392785515',
+                    },
+                ],
+            ]);
+        });
+
+        it('keeps control and invisible characters in the command line for the app to refuse', () => {
+            const [event] = parseAntigravityEvent({
+                event: 'step_update',
+                step_update: {
+                    state: 'DONE',
+                    step_type: 'tool',
+                    tool_info: { name: 'run_command', parameters: { CommandLine: 'ls \u202Etxt.exe \u001b[2J' } },
+                },
+            });
+            expect(event).toMatchObject({ command: 'ls \u202Etxt.exe \u001b[2J' });
         });
 
         it('marks a command that ran (its DONE step carries output)', () => {
@@ -271,7 +323,14 @@ describe('parseAntigravityEvent', () => {
                         ],
                     },
                 })
-            ).toEqual([{ kind: 'result', status: 'SUCCESS', deniedActions: ['command', 'ReadFile', 'write_file'] }]);
+            ).toEqual([
+                {
+                    kind: 'result',
+                    status: 'SUCCESS',
+                    deniedActions: ['command', 'ReadFile', 'write_file'],
+                    deniedCommands: 2,
+                },
+            ]);
             expect(
                 parseAntigravityEvent({ event: 'result', result: { status: 'SUCCESS', denied_actions: [] } })
             ).toEqual([{ kind: 'result', status: 'SUCCESS' }]);

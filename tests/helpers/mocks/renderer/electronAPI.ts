@@ -262,19 +262,19 @@ export function createMockElectronAPI(overrides: MockElectronAPIOverrides = {}):
         getAgentPermissions: vi.fn().mockResolvedValue({
             supported: false,
             settingsFile: '',
-            readOnlyCommandsEnabled: false,
+            lookupCommandsEnabled: false,
             allowedRules: [],
         }),
-        setReadOnlyAgentCommands: vi.fn().mockImplementation(async (enabled: boolean) => ({
+        setLookupAgentCommands: vi.fn().mockImplementation(async (enabled: boolean) => ({
             supported: true,
             settingsFile: '',
-            readOnlyCommandsEnabled: enabled,
+            lookupCommandsEnabled: enabled,
             allowedRules: [],
         })),
         removeAllowedAgentRule: vi.fn().mockResolvedValue({
             supported: true,
             settingsFile: '',
-            readOnlyCommandsEnabled: false,
+            lookupCommandsEnabled: false,
             allowedRules: [],
         }),
         listAgentModels: vi.fn().mockResolvedValue({ models: [], error: 'No agent CLI is available.' }),

@@ -57,7 +57,7 @@ export const IPC_CHANNELS = {
     AGENT_UNDO_LAST: 'agent:undo-last',
     AGENT_APPROVE_COMMANDS: 'agent:approve-commands',
     AGENT_PERMISSIONS_GET: 'agent:permissions-get',
-    AGENT_READ_ONLY_COMMANDS_SET: 'agent:read-only-commands-set',
+    AGENT_LOOKUP_COMMANDS_SET: 'agent:lookup-commands-set',
     AGENT_ALLOWED_RULE_REMOVE: 'agent:allowed-rule-remove',
     AGENT_MODELS_LIST: 'agent:models-list',
 

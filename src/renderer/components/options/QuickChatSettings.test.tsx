@@ -7,7 +7,7 @@ import { render, screen, fireEvent, act, waitFor, cleanup } from '@testing-libra
 
 import { QuickChatSettings } from './QuickChatSettings';
 import { createMockElectronAPI } from '../../../../tests/helpers/mocks/renderer/electronAPI';
-import { READ_ONLY_COMMAND_PREFIXES } from '../../../shared/constants/agentReadOnlyCommands';
+import { LOOKUP_COMMAND_PREFIXES } from '../../../shared/constants/agentLookupCommands';
 import type {
     AgentEngineStatus,
     AgentModelList,
@@ -244,7 +244,7 @@ describe('QuickChatSettings', () => {
         const PERMISSIONS: AgentPermissionsInfo = {
             supported: true,
             settingsFile: '/home/u/.gemini/antigravity-cli/settings.json',
-            readOnlyCommandsEnabled: false,
+            lookupCommandsEnabled: false,
             allowedRules: ['command(lsblk)'],
         };
 
@@ -319,28 +319,31 @@ describe('QuickChatSettings', () => {
             expect(screen.getByTestId('quick-chat-settings-model').tagName).toBe('INPUT');
             expect(api.listAgentModels).not.toHaveBeenCalled();
             expect(api.getAgentPermissions).not.toHaveBeenCalled();
-            expect(screen.queryByTestId('quick-chat-settings-read-only')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('quick-chat-settings-lookup')).not.toBeInTheDocument();
         });
 
-        it('turns the read-only commands on and lists every rule, grouped', async () => {
+        it('turns the lookup commands on and lists every rule, grouped', async () => {
             setupAntigravity();
             await renderSettings();
-            const toggle = await screen.findByTestId('quick-chat-settings-read-only');
-            expect(toggle).toHaveTextContent('Read-only system commands');
-            expect(toggle).toHaveTextContent("Commands run inside the agent's sandbox.");
+            const toggle = await screen.findByTestId('quick-chat-settings-lookup');
+            expect(toggle).toHaveTextContent('System lookup commands');
+            expect(toggle).toHaveTextContent('commands that only look at this computer');
+            expect(toggle).toHaveTextContent("inside the agent's sandbox: no network, limited file access");
+            expect(toggle).not.toHaveTextContent(/read-only/i);
 
-            const list = screen.getByTestId('quick-chat-settings-read-only-list');
-            expect(list).toHaveTextContent(`Show the ${READ_ONLY_COMMAND_PREFIXES.length} commands`);
+            const list = screen.getByTestId('quick-chat-settings-lookup-list');
+            expect(list).toHaveTextContent(`Show the ${LOOKUP_COMMAND_PREFIXES.length} commands`);
             const shown = Array.from(list.querySelectorAll('li code')).map((code) => code.textContent);
-            expect(shown).toEqual([...READ_ONLY_COMMAND_PREFIXES]);
+            expect(shown).toEqual([...LOOKUP_COMMAND_PREFIXES]);
             expect(list).toHaveTextContent('Disks and file systems');
+            expect(list).toHaveTextContent('wrappers such as env');
 
             const button = screen.getByRole('switch');
             expect(button).toHaveAttribute('aria-checked', 'false');
             await act(async () => {
                 fireEvent.click(button);
             });
-            expect(api.setReadOnlyAgentCommands).toHaveBeenCalledWith(true);
+            expect(api.setLookupAgentCommands).toHaveBeenCalledWith(true);
             await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true'));
             // The engine check runs again after the rules changed.
             expect(api.getAgentStatus).toHaveBeenCalledTimes(2);
@@ -357,6 +360,17 @@ describe('QuickChatSettings', () => {
             });
             expect(api.removeAllowedAgentRule).toHaveBeenCalledWith('command(lsblk)');
             await waitFor(() => expect(allowed).toHaveTextContent('None.'));
+        });
+
+        it('hides the command rules when the main process does not support them (Windows)', async () => {
+            setupAntigravity({
+                getAgentPermissions: vi.fn().mockResolvedValue({ ...PERMISSIONS, supported: false, allowedRules: [] }),
+            });
+            await renderSettings();
+            await waitFor(() => expect(api.getAgentPermissions).toHaveBeenCalled());
+            await modelSelect();
+            expect(screen.queryByTestId('quick-chat-settings-lookup')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('quick-chat-settings-allowed')).not.toBeInTheDocument();
         });
 
         it('shows an invalid settings file and disables the toggle', async () => {

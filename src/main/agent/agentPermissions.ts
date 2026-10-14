@@ -5,21 +5,37 @@
  * `~/.gemini/antigravity-cli/settings.json` (`permissions.allow|deny|ask`). In headless
  * mode a terminal command without an allow rule is soft-denied, so the agent cannot
  * answer "how much disk space is left?". After an explicit user action (the approval
- * card in Quick Chat, or the read-only list in Options) the app adds specific
+ * card in Quick Chat, or the lookup command list in Options) the app adds specific
  * `command(...)` allow rules there, and nothing else:
  *
  * - Only plain `command(<target>)` rules with a specific target are written: never
- *   `command(*)`, `regex:` rules, other actions, or the deny and ask lists.
- * - Every rule the app adds is recorded in its own state file, and the app only ever
- *   removes rules it recorded. Rules the user had before are left alone.
- * - Temporary rules ("Allow once") are recorded as pending before they are written, so
- *   they are removed on the next start if the app stopped before removing them.
- * - The file is changed in place: other keys are kept, the result is written to a
- *   temporary file in the same folder and renamed over the original (keeping its mode),
- *   and a file that is not valid JSON is never overwritten.
+ *   `command(*)`, `regex:` rules, other actions, or the deny and ask lists, and never a
+ *   target with control or invisible formatting characters.
+ * - What each rule means: Antigravity matches a rule word by word against the start of
+ *   each command in a line, so even a full-line rule also allows that line with more
+ *   arguments or with its output redirected, and transparent wrappers (`env`, `nice`,
+ *   `timeout`, `nohup`) are looked through, so `env LD_PRELOAD=./x.so df` matches
+ *   `command(df)`. There is no documented exact-match rule. Every rule therefore lets
+ *   the agent run code inside the sandbox; the lists only make accidents less likely.
+ * - The app records which rules it wants and why (lasting "Always allow" rules, the
+ *   lookup list, pending "Allow for this answer" rules) in its own state file, and
+ *   removes a rule from the settings file only when no reason to keep it is left. Rules
+ *   that were in the file before the app wanted them are recorded as the user's own and
+ *   are never removed.
+ * - Temporary rules are recorded as pending before they are written, so they are
+ *   removed on the next start if the app stopped before removing them.
+ * - The file keeps its other keys and its indentation. The result is written to a
+ *   temporary file in the same folder and renamed over the original (keeping its mode,
+ *   following a symbolic link). A file that is not valid JSON, or a link to a missing
+ *   file, is never written. If the file changes while the app writes it (an interactive
+ *   `agy` saving a rule, for example), the app reads it again and retries once; a change
+ *   in the last moments before the rename can still be lost.
  *
- * Commands that are allowed still run inside Antigravity's sandbox (`--sandbox`), where
- * only the scratch workspace is writable.
+ * Allowed commands run inside Antigravity's sandbox (`--sandbox`, Linux namespaces or
+ * macOS `sandbox-exec`): per its docs they can write the workspace, temporary folders
+ * and common build caches, read system folders such as `/usr` and `/etc`, cannot see
+ * `~/.ssh`, `.env` files or anything not mounted (home folders included), and have no
+ * network. The docs say nothing about Windows, so the app writes no rules there.
  *
  * Writes are synchronous: the files are small, and it keeps read-modify-write cycles
  * from interleaving.
@@ -31,7 +47,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { commandRule, READ_ONLY_COMMAND_PREFIXES } from '../../shared/constants/agentReadOnlyCommands';
+import { commandRule, LOOKUP_COMMAND_PREFIXES } from '../../shared/constants/agentLookupCommands';
 import { isObject, type JsonObject } from './json';
 
 /** A settings problem the user has to fix; its message is fit for the UI. */
@@ -51,11 +67,12 @@ export const MAX_RULE_TARGET_LENGTH = 2000;
 
 /**
  * Characters that make a line more than one plain command: pipes, chains, redirection,
- * substitution, quoting, globbing, brace and history expansion, comments. Antigravity
- * only prefix-matches plain commands, so these lines are only ever allowed once, as a
- * full-line rule.
+ * substitution, quoting, globbing, brace and history expansion, comments.
  */
 const SHELL_METACHARACTERS = /[|&;<>()$`\\"'*?[\]{}!#\r\n]/;
+
+/** Control characters and invisible formatting characters (bidi overrides, zero-width spaces). */
+const INVISIBLE_CHARACTERS = /[\p{Cc}\p{Cf}]/u;
 
 /** True for a plain program name (no path, no shell syntax). */
 function isPlainCommandName(word: string): boolean {
@@ -72,6 +89,14 @@ function tokenize(commandLine: string): string[] {
 /** True when a command line uses shell syntax beyond one plain command. */
 export function hasShellSyntax(commandLine: string): boolean {
     return SHELL_METACHARACTERS.test(commandLine);
+}
+
+/**
+ * True when a command line holds control or invisible formatting characters, which
+ * would make the line shown to the user differ from the rule that is written.
+ */
+export function hasInvisibleCharacters(commandLine: string): boolean {
+    return INVISIBLE_CHARACTERS.test(commandLine);
 }
 
 /** True when the parentheses in a rule target are balanced, so `)` cannot end the rule early. */
@@ -92,8 +117,9 @@ function hasBalancedParentheses(text: string): boolean {
 
 /**
  * Why a rule must not be written, or null when it is a plain `command(...)` rule with a
- * specific target. Refused: other actions, an empty target, `*`, `regex:` targets, line
- * breaks and an unbalanced `)`.
+ * specific target. Refused: other actions, an empty target, `*`, `regex:` targets,
+ * control and invisible formatting characters (line breaks included) and an unbalanced
+ * `)`. How Antigravity reads a target that contains a balanced `)` is not documented.
  */
 export function refuseAllowRule(rule: string): string | null {
     const match = /^command\((.*)\)$/s.exec(rule);
@@ -107,8 +133,8 @@ export function refuseAllowRule(rule: string): string | null {
     if (target.length > MAX_RULE_TARGET_LENGTH) {
         return 'The command is too long.';
     }
-    if (/[\r\n\0]/.test(target)) {
-        return 'The command spans several lines.';
+    if (hasInvisibleCharacters(target)) {
+        return 'The command contains control or invisible characters, so what you see may not be what would run.';
     }
     if (target === '*' || /^regex:/i.test(target)) {
         return 'A rule for every command is never added.';
@@ -120,10 +146,12 @@ export function refuseAllowRule(rule: string): string | null {
 }
 
 /**
- * Commands that change things (files, packages, services, users, the network or the
- * machine), run other code, or read files' contents. A lasting "Always allow" rule is
- * never offered for them. The listed subcommands are the read-only exceptions; a rule
- * matches one when the words after the command are exactly that subcommand.
+ * Commands that change things (files, packages, services, users, the desktop session,
+ * the network or the machine), run other code, or read files' contents. The approval
+ * card warns about them, and they never get a lasting rule. The listed subcommands are
+ * the exceptions the lookup list uses; a prefix matches one when the words after the
+ * command are exactly that subcommand. The list cannot be complete, so lasting rules are
+ * only ever offered for entries of the lookup list.
  */
 const DENIED_COMMANDS: Readonly<Record<string, readonly string[]>> = {
     // Files
@@ -237,7 +265,7 @@ const DENIED_COMMANDS: Readonly<Record<string, readonly string[]>> = {
     umount: [],
     swapoff: [],
     swapon: ['--show'],
-    sysctl: ['-a', '-n'],
+    sysctl: [],
     modprobe: [],
     insmod: [],
     rmmod: [],
@@ -288,7 +316,7 @@ const DENIED_COMMANDS: Readonly<Record<string, readonly string[]>> = {
     top: ['-b', '-l'],
     // Network
     ip: ['addr show', '-br addr show', 'route show', 'link show', '-br link show'],
-    ss: ['-tuln', '-s'],
+    ss: [],
     nmcli: ['general status', 'device status', 'connection show'],
     networkctl: ['status', 'list'],
     resolvectl: ['status'],
@@ -369,7 +397,7 @@ const DENIED_COMMANDS: Readonly<Record<string, readonly string[]>> = {
     clang: [],
     rustc: ['--version'],
     // Version control and containers
-    git: ['status', 'log', 'diff', '--version'],
+    git: [],
     hg: [],
     svn: [],
     docker: [],
@@ -387,6 +415,78 @@ const DENIED_COMMANDS: Readonly<Record<string, readonly string[]>> = {
     tmutil: [],
     nvram: [],
     spctl: [],
+    // Desktop sessions, input, clipboard, printing and mail
+    xrandr: [],
+    xset: [],
+    xinput: [],
+    rfkill: [],
+    iwctl: [],
+    wpa_cli: [],
+    busctl: [],
+    gdbus: [],
+    'dbus-send': [],
+    qdbus: [],
+    'gnome-session-quit': [],
+    hyprctl: [],
+    swaymsg: [],
+    'i3-msg': [],
+    xdotool: [],
+    ydotool: [],
+    wtype: [],
+    'wl-copy': [],
+    'wl-paste': [],
+    xclip: [],
+    xsel: [],
+    playerctl: [],
+    fuser: [],
+    'ssh-keygen': [],
+    gpg: [],
+    lp: [],
+    lpr: [],
+    mail: [],
+    mailx: [],
+    sendmail: [],
+    msmtp: [],
+    'xdg-email': [],
+    // More file writers, runtimes and network tools
+    fallocate: [],
+    mkfifo: [],
+    mknod: [],
+    exiftool: [],
+    convert: [],
+    magick: [],
+    ffmpeg: [],
+    sqlite3: [],
+    openssl: [],
+    pandoc: [],
+    trash: [],
+    'trash-put': [],
+    rename: [],
+    mawk: [],
+    nawk: [],
+    java: [],
+    dotnet: [],
+    R: [],
+    Rscript: [],
+    julia: [],
+    tclsh: [],
+    uv: [],
+    uvx: [],
+    pipx: [],
+    poetry: [],
+    conda: [],
+    screen: [],
+    tmux: [],
+    expect: [],
+    toybox: [],
+    bwrap: [],
+    unshare: [],
+    dig: [],
+    nslookup: [],
+    host: [],
+    http: [],
+    xh: [],
+    aria2c: [],
     // Windows
     ipconfig: ['/all'],
     reg: [],
@@ -397,7 +497,7 @@ const DENIED_COMMANDS: Readonly<Record<string, readonly string[]>> = {
 /** Families of commands denied by name: file system makers and interpreter versions. */
 const DENIED_COMMAND_PATTERNS = [/^mkfs/, /^python/, /^pip/, /^perl/, /^ruby/, /^php/, /^lua/, /^node/, /^qemu/];
 
-/** True when a prefix names a state-changing command and is not one of its read-only subcommands. */
+/** True when a prefix names a state-changing command and is not one of its listed subcommands. */
 export function isDeniedPrefix(prefix: string): boolean {
     const [first = '', ...rest] = tokenize(prefix);
     const command = first.toLowerCase();
@@ -412,58 +512,104 @@ export function isDeniedPrefix(prefix: string): boolean {
     return !exceptions.includes(rest.join(' '));
 }
 
-/** Commands that the read-only list only allows with a subcommand. */
-const COMMANDS_WITH_SUBCOMMAND_RULES = new Set(
-    READ_ONLY_COMMAND_PREFIXES.map(tokenize)
-        .filter((words) => words.length > 1)
-        .map((words) => words[0] ?? '')
-);
-
 /**
- * True when a prefix may become a lasting allow rule: plain words, not a state-changing
- * command, and for a single word, not a tool that the read-only list only allows with a
- * subcommand.
+ * True when a prefix may become a lasting allow rule: it is an entry of the lookup list
+ * (and, as a second check, not a state-changing command). Anything else is only allowed
+ * for one answer.
  */
 export function isSafeLastingPrefix(prefix: string): boolean {
     const words = tokenize(prefix);
-    const first = words[0];
-    if (!first || hasShellSyntax(prefix) || !isPlainCommandName(first)) {
+    if (words.length === 0 || hasShellSyntax(prefix) || hasInvisibleCharacters(prefix)) {
         return false;
     }
-    if (READ_ONLY_COMMAND_PREFIXES.includes(words.join(' '))) {
-        return !isDeniedPrefix(prefix);
-    }
-    if (words.length > 1) {
-        return false;
-    }
-    return !isDeniedPrefix(first) && !COMMANDS_WITH_SUBCOMMAND_RULES.has(first);
+    return LOOKUP_COMMAND_PREFIXES.includes(words.join(' ')) && !isDeniedPrefix(prefix);
 }
 
 /**
- * The lasting rule "Always allow" offers for a blocked command, or undefined when only
- * "Allow once" is safe. The prefix is the longest read-only list entry the command starts
- * with (`systemctl status` for `systemctl status sshd`), otherwise its first word.
+ * The lasting rule "Always allow" offers for a blocked command, or undefined when it may
+ * only be allowed for one answer: the longest lookup list entry the command starts with
+ * (`systemctl status` for `systemctl status sshd`, `df` for `df -h`).
  */
 export function lastingRuleFor(commandLine: string): string | undefined {
-    if (hasShellSyntax(commandLine)) {
+    if (hasShellSyntax(commandLine) || hasInvisibleCharacters(commandLine)) {
         return undefined;
     }
     const words = tokenize(commandLine);
-    const first = words[0];
-    if (!first || !isPlainCommandName(first)) {
+    if (words.length === 0) {
         return undefined;
     }
-    let prefix = first;
-    for (const candidate of READ_ONLY_COMMAND_PREFIXES) {
+    let best: string | undefined;
+    let bestLength = 0;
+    for (const candidate of LOOKUP_COMMAND_PREFIXES) {
         const candidateWords = tokenize(candidate);
-        if (
-            candidateWords.length > tokenize(prefix).length &&
-            candidateWords.every((word, index) => words[index] === word)
-        ) {
-            prefix = candidate;
+        if (candidateWords.length > bestLength && candidateWords.every((word, index) => words[index] === word)) {
+            best = candidate;
+            bestLength = candidateWords.length;
         }
     }
-    return isSafeLastingPrefix(prefix) ? commandRule(prefix) : undefined;
+    return best && isSafeLastingPrefix(best) ? commandRule(best) : undefined;
+}
+
+/**
+ * Denied commands that only read (files, pipes, the environment): not allowed for good,
+ * but no reason for the "can change or delete things" warning.
+ */
+const READING_COMMANDS = new Set([
+    'cat',
+    'head',
+    'tail',
+    'less',
+    'more',
+    'grep',
+    'egrep',
+    'fgrep',
+    'rg',
+    'strings',
+    'xxd',
+    'od',
+    'hexdump',
+    'base64',
+    'diff',
+    'cmp',
+    'sort',
+    'uniq',
+    'cut',
+    'jq',
+    'env',
+    'printenv',
+    'journalctl',
+    'date',
+    'hostname',
+]);
+
+/**
+ * True when any command in a line can change or delete things: its first word (in each
+ * part of a pipeline or chain, and after a path) is a state-changing command, the line
+ * redirects output into a file, or it substitutes a command.
+ */
+export function needsCaution(commandLine: string): boolean {
+    // Command substitution can run anything.
+    if (/\$\(|`/.test(commandLine)) {
+        return true;
+    }
+    if (/(^|[^0-9&])>{1,2}\s*[^\s&]/.test(commandLine.replace(/\d?>\s*\/dev\/null/g, ''))) {
+        return true;
+    }
+    return commandLine
+        .split(/\|\||&&|[|;&\n]/)
+        .map((part) => tokenize(part))
+        .some((words) => {
+            // Skip leading variable assignments (`LANG=C df`).
+            const first = words.find((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word));
+            if (!first) {
+                return false;
+            }
+            const name = first.split('/').pop() ?? first;
+            if (!isPlainCommandName(name)) {
+                return true;
+            }
+            return isDeniedPrefix(name) && !READING_COMMANDS.has(name);
+        });
 }
 
 // =========================================================================
@@ -518,13 +664,42 @@ function allowList(file: string, settings: JsonObject): string[] {
     return allow.filter((rule): rule is string => typeof rule === 'string');
 }
 
+/**
+ * The file to read and write: the target of a symbolic link, or the path itself when it
+ * does not exist yet. A link to a missing file is refused rather than replaced by a file.
+ */
+function resolveTarget(file: string): string {
+    let isLink = false;
+    try {
+        isLink = fs.lstatSync(file).isSymbolicLink();
+    } catch {
+        return file;
+    }
+    if (!isLink) {
+        return file;
+    }
+    try {
+        return fs.realpathSync(file);
+    } catch {
+        throw new AgentPermissionsError(
+            `${file} is a link to a file that does not exist, so the app will not change it.`
+        );
+    }
+}
+
 /** The allow rules currently in the settings file. Throws {@link AgentPermissionsError}. */
 export function readAllowRules(file: string): string[] {
-    return allowList(file, parseSettings(file, readText(file)));
+    return allowList(file, parseSettings(file, readText(resolveTarget(file))));
+}
+
+/** The indentation of a JSON text (its first indented line), or two spaces. */
+export function detectIndent(text: string | null): string {
+    const match = text ? /\n([ \t]+)\S/.exec(text) : null;
+    return match?.[1] ?? '  ';
 }
 
 /** Write a file atomically: a temporary file in the same folder, then a rename. */
-export function writeFileAtomic(file: string, content: string, mode: number): void {
+export function writeFileAtomic(file: string, content: string, mode: number, beforeRename?: () => void): void {
     const dir = path.dirname(file);
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const temp = path.join(dir, `.${path.basename(file)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
@@ -537,6 +712,7 @@ export function writeFileAtomic(file: string, content: string, mode: number): vo
         } finally {
             fs.closeSync(fd);
         }
+        beforeRename?.();
         fs.renameSync(temp, file);
     } catch (error) {
         fs.rmSync(temp, { force: true });
@@ -551,29 +727,61 @@ export interface AllowRuleChange {
     removed: string[];
 }
 
+/** What identifies a version of the file: missing, or its inode, size and change time. */
+function fingerprint(file: string): string {
+    try {
+        const stat = fs.statSync(file);
+        return `${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+    } catch {
+        return 'missing';
+    }
+}
+
+/** Thrown inside {@link updateAllowRules} when the file changed while it was being written. */
+class FileChangedError extends Error {}
+
 /**
  * Add and remove `command(...)` allow rules in Antigravity CLI's settings file. Rules
- * already there are not added twice; every other key and list is kept as it is. Throws
- * {@link AgentPermissionsError} for a rule the app must not write or a file it must not
- * change. A symbolic link to the file is followed, so dotfile managers keep working.
+ * already there are not added twice; every other key, list and entry is kept, and so is
+ * the indentation. Throws {@link AgentPermissionsError} for a rule the app must not
+ * write or a file it must not change.
  */
-export function updateAllowRules(file: string, change: { add?: string[]; remove?: string[] }): AllowRuleChange {
+export function updateAllowRules(
+    file: string,
+    change: { add?: string[]; remove?: string[] },
+    /** Tests: called after each read, to change the file behind the writer's back. */
+    afterRead?: () => void
+): AllowRuleChange {
     const add = [...new Set(change.add ?? [])];
-    const remove = new Set(change.remove ?? []);
     for (const rule of add) {
         const refusal = refuseAllowRule(rule);
         if (refusal) {
             throw new AgentPermissionsError(refusal);
         }
     }
-
-    let target = file;
     try {
-        target = fs.realpathSync(file);
-    } catch {
-        // Missing: it is created.
+        return updateOnce(file, add, new Set(change.remove ?? []), afterRead);
+    } catch (error) {
+        if (!(error instanceof FileChangedError)) {
+            throw error;
+        }
     }
+    // Someone else wrote the file meanwhile: start again from their version, once.
+    try {
+        return updateOnce(file, add, new Set(change.remove ?? []), afterRead);
+    } catch (error) {
+        if (error instanceof FileChangedError) {
+            throw new AgentPermissionsError(`${file} kept changing while the app was writing it. Try again.`);
+        }
+        throw error;
+    }
+}
+
+function updateOnce(file: string, add: string[], remove: Set<string>, afterRead?: () => void): AllowRuleChange {
+    const target = resolveTarget(file);
+    const before = fingerprint(target);
     const text = readText(target);
+    afterRead?.();
     const settings = parseSettings(file, text);
     const current = allowList(file, settings);
 
@@ -596,32 +804,41 @@ export function updateAllowRules(file: string, change: { add?: string[]; remove?
     } catch {
         // New file.
     }
-    writeFileAtomic(target, `${JSON.stringify(next, null, 2)}\n`, mode);
+    writeFileAtomic(target, `${JSON.stringify(next, null, detectIndent(text))}\n`, mode, () => {
+        if (fingerprint(target) !== before) {
+            throw new FileChangedError();
+        }
+    });
     return { added, removed };
 }
 
 // =========================================================================
-// The app's record of the rules it added
+// The app's record of the rules it wants
 // =========================================================================
 
 export interface PermissionRecord {
-    /** Lasting rules added with "Always allow". */
+    /** Lasting rules the user chose with "Always allow". */
     lasting: string[];
-    /** Rules added by the read-only list. */
-    readOnly: string[];
-    /** True while the read-only list is turned on. */
-    readOnlyEnabled: boolean;
-    /** Temporary "Allow once" rules that are (or may still be) in the settings file. */
+    /** Rules of the lookup list, while it is on. */
+    lookup: string[];
+    /** True while the lookup list is turned on. */
+    lookupEnabled: boolean;
+    /** Rules allowed for one answer that are (or may still be) in the settings file. */
     pending: string[];
+    /** Rules that were in the settings file before the app wanted them; never removed. */
+    userOwned: string[];
 }
-
-const EMPTY_RECORD: PermissionRecord = { lasting: [], readOnly: [], readOnlyEnabled: false, pending: [] };
 
 function stringList(value: unknown): string[] {
     return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
-/** The app's own record of the rules it added, kept in a JSON file in userData. */
+/** Every rule the app has a reason to keep in the settings file. */
+export function wantedRules(record: PermissionRecord): Set<string> {
+    return new Set([...record.lasting, ...record.lookup, ...record.pending, ...record.userOwned]);
+}
+
+/** The app's own record of the rules it wants, kept in a JSON file in userData. */
 export class PermissionTracker {
     /** `file` is resolved on every use, so it may depend on paths that are known late. */
     constructor(private readonly file: () => string) {}
@@ -631,14 +848,15 @@ export class PermissionTracker {
         try {
             value = JSON.parse(fs.readFileSync(this.file(), 'utf8'));
         } catch {
-            return { ...EMPTY_RECORD, lasting: [], readOnly: [], pending: [] };
+            value = {};
         }
         const record = isObject(value) ? value : {};
         return {
             lasting: stringList(record.lasting),
-            readOnly: stringList(record.readOnly),
-            readOnlyEnabled: record.readOnlyEnabled === true,
+            lookup: stringList(record.lookup),
+            lookupEnabled: record.lookupEnabled === true,
             pending: stringList(record.pending),
+            userOwned: stringList(record.userOwned),
         };
     }
 

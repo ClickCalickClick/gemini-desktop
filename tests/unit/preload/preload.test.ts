@@ -278,8 +278,8 @@ describe('Preload Script', () => {
             });
             await exposedAPI.getAgentPermissions();
             expect(ipcRendererMock.invoke).toHaveBeenCalledWith('agent:permissions-get');
-            await exposedAPI.setReadOnlyAgentCommands(true);
-            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('agent:read-only-commands-set', true);
+            await exposedAPI.setLookupAgentCommands(true);
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('agent:lookup-commands-set', true);
             await exposedAPI.removeAllowedAgentRule('command(df)');
             expect(ipcRendererMock.invoke).toHaveBeenCalledWith('agent:allowed-rule-remove', 'command(df)');
             await exposedAPI.listAgentModels();

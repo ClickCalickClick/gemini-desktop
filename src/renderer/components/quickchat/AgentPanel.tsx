@@ -130,7 +130,7 @@ function ToolStepRow({ step }: { step: ToolStep }): React.ReactElement {
     );
 }
 
-/** The prefixes of the lasting rules "Always allow" would add, or null when any command can only be allowed once. */
+/** The prefixes of the lasting rules "Always allow" would add, or null when a command can only be allowed for this answer. */
 function lastingPrefixes(blocked: BlockedCommand[]): { rules: string[]; prefixes: string[] } | null {
     const rules: string[] = [];
     for (const entry of blocked) {
@@ -144,24 +144,46 @@ function lastingPrefixes(blocked: BlockedCommand[]): { rules: string[]; prefixes
     return { rules, prefixes: rules.map((rule) => rule.replace(/^command\((.*)\)$/s, '$1')) };
 }
 
+/** A command line with control and invisible formatting characters made visible as `\u{…}`. */
+function visibleCommand(command: string): string {
+    return command.replace(
+        /[\p{Cc}\p{Cf}]/gu,
+        (char) => `\\u{${(char.codePointAt(0) ?? 0).toString(16).toUpperCase()}}`
+    );
+}
+
 interface ApprovalCardProps {
     blocked: BlockedCommand[];
     answered: boolean;
     busy: boolean;
     error: string | null;
-    onApprove: (decision: CommandApprovalDecision) => void;
-    onDeny: () => void;
+    /** Why the commands cannot be allowed; only "Answer without it" is offered then. */
+    unavailable: string | null;
+    onDecide: (decision: CommandApprovalDecision) => void;
+    onDismiss: () => void;
 }
 
-/** "The agent needs to run:" with Allow once, Always allow and Don't allow. */
-function ApprovalCard({ blocked, answered, busy, error, onApprove, onDeny }: ApprovalCardProps): React.ReactElement {
+/**
+ * "The agent needs to run:" with Allow for this answer, Always allow (lookup commands
+ * only), Answer without it, and a close button (Escape) that dismisses the card.
+ */
+function ApprovalCard({
+    blocked,
+    answered,
+    busy,
+    error,
+    unavailable,
+    onDecide,
+    onDismiss,
+}: ApprovalCardProps): React.ReactElement {
     const titleId = useId();
-    const lasting = lastingPrefixes(blocked);
+    const alwaysDescriptionId = useId();
+    const lasting = unavailable ? null : lastingPrefixes(blocked);
     const one = blocked.length === 1;
-    const alwaysTitle = lasting
+    const alwaysDescription = lasting
         ? `Adds ${lasting.rules.join(' and ')} to Antigravity CLI's settings, so the agent can run ${
               lasting.prefixes.length === 1 ? 'this command' : 'these commands'
-          } without asking. Remove it in Options → Quick Chat.`
+          }, with any arguments, without asking. Remove it in Options → Quick Chat.`
         : '';
     return (
         <div
@@ -170,59 +192,84 @@ function ApprovalCard({ blocked, answered, busy, error, onApprove, onDeny }: App
             aria-labelledby={titleId}
             data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVAL}
         >
-            <p className="qc-approval__title" id={titleId}>
-                {answered ? 'The agent was not allowed to run:' : 'The agent needs to run:'}
-            </p>
+            <div className="qc-approval__header">
+                <p className="qc-approval__title" id={titleId}>
+                    {answered ? 'The agent was not allowed to run:' : 'The agent needs to run:'}
+                </p>
+                <button
+                    type="button"
+                    className="qc-button qc-button--quiet qc-approval__close"
+                    onClick={onDismiss}
+                    disabled={busy}
+                    title="Dismiss (Esc)"
+                    aria-label="Dismiss without answering (Escape)"
+                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_DISMISS}
+                >
+                    ×
+                </button>
+            </div>
             <ul className="qc-approval__commands" aria-label={one ? 'Blocked command' : 'Blocked commands'}>
                 {blocked.map((entry) => (
                     <li key={entry.command}>
-                        <code className="qc-approval__command">{entry.command}</code>
+                        <code className="qc-approval__command">{visibleCommand(entry.command)}</code>
+                        {entry.caution && (
+                            <p
+                                className="qc-approval__caution"
+                                data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_CAUTION}
+                            >
+                                Careful: this command can change or delete things.
+                            </p>
+                        )}
                     </li>
                 ))}
             </ul>
             <p className="qc-approval__note">
-                {lasting
-                    ? "Commands run inside the agent's sandbox, which can only change its own scratch folder."
-                    : `Allow once runs ${one ? 'it' : 'them'} a single time, inside the agent's sandbox. ${
-                          one ? 'This command' : 'One of these commands'
-                      } can change things or uses shell syntax, so it is not offered for good.`}
+                {unavailable ??
+                    `Allow for this answer: the agent may run ${one ? 'this command' : 'these commands'}, also with extra arguments, until it finishes this answer. ${
+                        one ? 'It runs' : 'They run'
+                    } inside the agent's sandbox.`}
             </p>
             <div className="qc-approval__buttons">
-                <button
-                    type="button"
-                    className="qc-button qc-button--primary"
-                    onClick={() => onApprove('once')}
-                    disabled={busy}
-                    aria-label={`Allow ${one ? 'this command' : 'these commands'} once and let the agent finish`}
-                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_ONCE}
-                >
-                    {busy ? 'Allowing…' : 'Allow once'}
-                </button>
+                {!unavailable && (
+                    <button
+                        type="button"
+                        className="qc-button qc-button--primary"
+                        onClick={() => onDecide('once')}
+                        disabled={busy}
+                        data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_ONCE}
+                    >
+                        {busy ? 'Working…' : 'Allow for this answer'}
+                    </button>
+                )}
                 {lasting && (
                     <button
                         type="button"
                         className="qc-button"
-                        onClick={() => onApprove('always')}
+                        onClick={() => onDecide('always')}
                         disabled={busy}
-                        title={alwaysTitle}
-                        aria-label={`Always allow ${lasting.prefixes.join(', ')}. ${alwaysTitle}`}
+                        title={alwaysDescription}
+                        aria-describedby={alwaysDescriptionId}
                         data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_ALWAYS}
                     >
-                        <span>Always allow</span>
+                        <span>Always allow</span>{' '}
                         <code className="qc-approval__prefix">{lasting.prefixes.join(', ')}</code>
                     </button>
                 )}
                 <button
                     type="button"
-                    className="qc-button qc-button--quiet"
-                    onClick={onDeny}
+                    className={`qc-button${unavailable ? ' qc-button--primary' : ' qc-button--quiet'}`}
+                    onClick={() => onDecide('without')}
                     disabled={busy}
-                    aria-label="Don't allow (Escape)"
-                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_DENY}
+                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_WITHOUT}
                 >
-                    Don&apos;t allow
+                    {one ? 'Answer without it' : 'Answer without them'}
                 </button>
             </div>
+            {lasting && (
+                <span className="qc-visually-hidden" id={alwaysDescriptionId}>
+                    {alwaysDescription}
+                </span>
+            )}
             {error && (
                 <p className="qc-agent-error" role="alert">
                     {error}
@@ -263,8 +310,8 @@ export interface AgentPanelProps {
     onUndoPlan: () => void;
     onNew: () => void;
     onContinueInGemini: () => void;
-    onApproveCommands: (decision: CommandApprovalDecision) => void;
-    onDenyCommands: () => void;
+    onDecideCommands: (decision: CommandApprovalDecision) => void;
+    onDismissCommands: () => void;
 }
 
 /** What the panel says about a run that ended without an answer, or null. */
@@ -272,8 +319,11 @@ function emptyAnswerMessage(state: AgentRunState): string | null {
     if (state.approval === 'pending' || state.approval === 'approving') {
         return null;
     }
-    if (state.approval === 'denied') {
+    if (state.approval === 'dismissed') {
         return 'The agent could not finish without running these commands.';
+    }
+    if (state.resume === 'declined' && state.phase === 'done' && (isEmptyAnswer(state) || state.blocked.length > 0)) {
+        return 'The agent could not answer without running commands.';
     }
     if (!isEmptyAnswer(state)) {
         return null;
@@ -294,8 +344,8 @@ export function AgentPanel({
     onUndoPlan,
     onNew,
     onContinueInGemini,
-    onApproveCommands,
-    onDenyCommands,
+    onDecideCommands,
+    onDismissCommands,
 }: AgentPanelProps): React.ReactElement {
     const active = isRunActive(state);
     const html = useMemo(() => renderAgentMarkdown(state.text), [state.text]);
@@ -306,7 +356,7 @@ export function AgentPanel({
             : null;
     const showHint = state.phase === 'done' && needsSetupHint(state.error);
     const showApproval =
-        state.phase === 'done' && state.canApprove && (state.approval === 'pending' || state.approval === 'approving');
+        state.phase === 'done' && state.canResume && (state.approval === 'pending' || state.approval === 'approving');
     const emptyMessage = state.phase === 'done' && !statusMessage ? emptyAnswerMessage(state) : null;
     // One short announcement per state change for screen readers, instead of a live region on the streaming text.
     const announcement = active
@@ -467,8 +517,9 @@ export function AgentPanel({
                         answered={Boolean(state.text.trim())}
                         busy={state.approval === 'approving'}
                         error={state.approvalError}
-                        onApprove={onApproveCommands}
-                        onDeny={onDenyCommands}
+                        unavailable={state.approvalUnavailable}
+                        onDecide={onDecideCommands}
+                        onDismiss={onDismissCommands}
                     />
                 )}
 

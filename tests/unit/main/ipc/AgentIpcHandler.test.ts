@@ -45,7 +45,7 @@ vi.mock('electron', () => ({
 const PERMISSIONS = {
     supported: true,
     settingsFile: '/home/u/.gemini/antigravity-cli/settings.json',
-    readOnlyCommandsEnabled: false,
+    lookupCommandsEnabled: false,
     allowedRules: ['command(df)'],
 };
 
@@ -59,7 +59,7 @@ function createMockAgentManager() {
         undoLastPlan: vi.fn().mockResolvedValue({ applied: 1, failed: [], undoAvailable: false }),
         approveBlockedCommands: vi.fn().mockResolvedValue({ runId: 'run-2' }),
         getPermissions: vi.fn().mockResolvedValue(PERMISSIONS),
-        setReadOnlyCommands: vi.fn().mockResolvedValue({ ...PERMISSIONS, readOnlyCommandsEnabled: true }),
+        setLookupCommands: vi.fn().mockResolvedValue({ ...PERMISSIONS, lookupCommandsEnabled: true }),
         removeAllowedRule: vi.fn().mockResolvedValue(PERMISSIONS),
         listModels: vi.fn().mockResolvedValue({ models: [{ id: 'm', name: 'M' }] }),
     };
@@ -110,7 +110,7 @@ describe('AgentIpcHandler', () => {
             IPC_CHANNELS.AGENT_UNDO_LAST,
             IPC_CHANNELS.AGENT_APPROVE_COMMANDS,
             IPC_CHANNELS.AGENT_PERMISSIONS_GET,
-            IPC_CHANNELS.AGENT_READ_ONLY_COMMANDS_SET,
+            IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET,
             IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE,
             IPC_CHANNELS.AGENT_MODELS_LIST,
         ]) {
@@ -335,11 +335,11 @@ describe('AgentIpcHandler', () => {
             expect(await invoke(IPC_CHANNELS.AGENT_PERMISSIONS_GET, {})).toEqual(PERMISSIONS);
             expect(agentManager.getPermissions).toHaveBeenCalledWith('antigravity');
 
-            expect(await invoke(IPC_CHANNELS.AGENT_READ_ONLY_COMMANDS_SET, {}, true)).toMatchObject({
-                readOnlyCommandsEnabled: true,
+            expect(await invoke(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, {}, true)).toMatchObject({
+                lookupCommandsEnabled: true,
             });
-            expect(agentManager.setReadOnlyCommands).toHaveBeenCalledWith(true, 'antigravity');
-            await expect(invoke(IPC_CHANNELS.AGENT_READ_ONLY_COMMANDS_SET, {}, 'yes')).rejects.toThrow('Invalid');
+            expect(agentManager.setLookupCommands).toHaveBeenCalledWith(true, 'antigravity');
+            await expect(invoke(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, {}, 'yes')).rejects.toThrow('Invalid');
 
             await invoke(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE, {}, 'command(df)');
             expect(agentManager.removeAllowedRule).toHaveBeenCalledWith('command(df)', 'antigravity');
@@ -371,7 +371,7 @@ describe('AgentIpcHandler', () => {
             mockIpcMain._reset();
             createHandler(false);
             expect(await invoke(IPC_CHANNELS.AGENT_PERMISSIONS_GET, {})).toMatchObject({ supported: false });
-            expect(await invoke(IPC_CHANNELS.AGENT_READ_ONLY_COMMANDS_SET, {}, true)).toMatchObject({
+            expect(await invoke(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, {}, true)).toMatchObject({
                 supported: false,
             });
             expect(await invoke(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE, {}, 'command(df)')).toMatchObject({

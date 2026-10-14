@@ -23,12 +23,19 @@ export interface ToolStep {
     summary: string;
     state: 'ACTIVE' | 'DONE';
     error?: string;
+    /** The full command line, for terminal commands. */
+    command?: string;
+    /** The CLI's step index, when it reports one. */
+    stepIndex?: number;
     /** The CLI refused to run this command (headless mode could not ask). */
     blocked?: boolean;
 }
 
-/** The approval card for blocked commands: waiting, sending the decision, or declined. */
-export type ApprovalState = 'pending' | 'approving' | 'denied';
+/** The approval card for blocked commands: waiting, sending the decision, or dismissed. */
+export type ApprovalState = 'pending' | 'approving' | 'dismissed';
+
+/** How the turn on screen resumed a conversation after blocked commands. */
+export type ResumeKind = 'approved' | 'declined';
 
 export type AgentRunPhase = 'idle' | 'starting' | 'running' | 'stopping' | 'done';
 
@@ -58,14 +65,18 @@ export interface AgentRunState {
     blocked: BlockedCommand[];
     /** Actions the CLI reported as denied (`command`, ...). */
     deniedActions: string[];
-    /** True when the blocked commands can be approved and the run resumed. */
-    canApprove: boolean;
+    /** True when the conversation can be resumed after a decision (the card shows). */
+    canResume: boolean;
+    /** Why the commands cannot be allowed; the card then only offers to answer without them. */
+    approvalUnavailable: string | null;
     approval: ApprovalState | null;
     approvalError: string | null;
+    /** Set when this turn resumed a conversation after blocked commands. */
+    resume: ResumeKind | null;
 }
 
 export type AgentRunAction =
-    | { type: 'start'; prompt: string; category: AgentTaskCategory }
+    | { type: 'start'; prompt: string; category: AgentTaskCategory; resume?: ResumeKind }
     | { type: 'assigned'; runId: string }
     | { type: 'event'; event: AgentRunEvent }
     | { type: 'stopRequested' }
@@ -80,7 +91,7 @@ export type AgentRunAction =
     | { type: 'planFailed'; error: string }
     | { type: 'approvalStarted' }
     | { type: 'approvalFailed'; error: string }
-    | { type: 'approvalDenied' }
+    | { type: 'approvalDismissed' }
     | { type: 'reset' };
 
 export const INITIAL_AGENT_RUN_STATE: AgentRunState = {
@@ -102,9 +113,11 @@ export const INITIAL_AGENT_RUN_STATE: AgentRunState = {
     nextToolKey: 0,
     blocked: [],
     deniedActions: [],
-    canApprove: false,
+    canResume: false,
+    approvalUnavailable: null,
     approval: null,
     approvalError: null,
+    resume: null,
 };
 
 /** True while a run is starting, running or stopping. */
@@ -144,9 +157,13 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
         case 'tool': {
             if (event.state === 'DONE') {
                 let index = -1;
+                const sameStep = (step: ToolStep): boolean =>
+                    event.stepIndex !== undefined && step.stepIndex !== undefined
+                        ? step.stepIndex === event.stepIndex
+                        : step.name === event.name && step.summary === event.summary;
                 for (let i = state.tools.length - 1; i >= 0; i--) {
                     const step = state.tools[i];
-                    if (step && step.state === 'ACTIVE' && step.name === event.name && step.summary === event.summary) {
+                    if (step && step.state === 'ACTIVE' && sameStep(step)) {
                         index = i;
                         break;
                     }
@@ -154,7 +171,12 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 const existing = state.tools[index];
                 if (existing) {
                     const tools = state.tools.slice();
-                    tools[index] = { ...existing, state: 'DONE', error: event.error };
+                    tools[index] = {
+                        ...existing,
+                        state: 'DONE',
+                        error: event.error,
+                        command: event.command ?? existing.command,
+                    };
                     return { ...state, tools };
                 }
             }
@@ -164,6 +186,8 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 summary: event.summary,
                 state: event.state,
                 error: event.error,
+                ...(event.command ? { command: event.command } : {}),
+                ...(event.stepIndex !== undefined ? { stepIndex: event.stepIndex } : {}),
             };
             return { ...state, tools: [...state.tools, step], nextToolKey: state.nextToolKey + 1 };
         }
@@ -178,9 +202,18 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
             };
         case 'done': {
             const blocked = event.blocked ?? [];
-            const isBlocked = (step: ToolStep): boolean =>
-                !step.error && blocked.some((entry) => entry.tool === step.name && entry.summary === step.summary);
-            const canApprove = Boolean(event.canApprove) && blocked.length > 0;
+            // Match on the step index, else the full command line, else name and summary.
+            const matches = (step: ToolStep, entry: BlockedCommand): boolean => {
+                if (entry.stepIndex !== undefined && step.stepIndex !== undefined) {
+                    return entry.stepIndex === step.stepIndex;
+                }
+                if (step.command !== undefined) {
+                    return step.name === entry.tool && step.command === entry.command;
+                }
+                return step.name === entry.tool && step.summary === entry.summary;
+            };
+            const isBlocked = (step: ToolStep): boolean => !step.error && blocked.some((entry) => matches(step, entry));
+            const canResume = Boolean(event.canResume) && blocked.length > 0;
             return {
                 ...state,
                 phase: 'done',
@@ -195,8 +228,9 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 }),
                 blocked,
                 deniedActions: event.deniedActions ?? [],
-                canApprove,
-                approval: canApprove ? 'pending' : null,
+                canResume,
+                approvalUnavailable: event.approvalUnavailable ?? null,
+                approval: canResume ? 'pending' : null,
                 approvalError: null,
             };
         }
@@ -214,6 +248,7 @@ export function agentRunReducer(state: AgentRunState, action: AgentRunAction): A
                 prompt: action.prompt,
                 category: action.category,
                 conversationId: state.conversationId,
+                resume: action.resume ?? null,
             };
         case 'assigned':
             return { ...state, runId: action.runId };
@@ -255,8 +290,8 @@ export function agentRunReducer(state: AgentRunState, action: AgentRunAction): A
             return state.approval === 'pending' ? { ...state, approval: 'approving', approvalError: null } : state;
         case 'approvalFailed':
             return state.approval ? { ...state, approval: 'pending', approvalError: action.error } : state;
-        case 'approvalDenied':
-            return state.approval === 'pending' ? { ...state, approval: 'denied', approvalError: null } : state;
+        case 'approvalDismissed':
+            return state.approval === 'pending' ? { ...state, approval: 'dismissed', approvalError: null } : state;
         case 'reset':
             return INITIAL_AGENT_RUN_STATE;
         default:
