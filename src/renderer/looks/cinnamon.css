@@ -1,0 +1,76 @@
+/**
+ * Cinnamon look (Linux Mint, Mint-Y).
+ *
+ * Mint-Y greys, Ubuntu / Noto Sans, round window controls on the right with a red close on hover,
+ * 6px radii and Mint's green accent (#35a854).
+ */
+
+:root[data-look='cinnamon'] {
+    --look-font: 'Ubuntu', 'Noto Sans', 'DejaVu Sans', 'Segoe UI', sans-serif;
+    --look-accent: #35a854;
+    --look-accent-fg: #ffffff;
+    --look-radius-card: 6px;
+    --look-radius-button: 5px;
+    --look-title-size: 13px;
+    --look-title-weight: 700;
+    --look-heading-transform: none;
+    --look-heading-size: 13px;
+    --look-heading-weight: 700;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 22px;
+    --look-control-height: 22px;
+    --look-control-radius: 50%;
+    --look-control-gap: 6px;
+    --look-controls-padding: 8px;
+    --look-control-bg: transparent;
+    --look-control-hover-bg: rgba(255, 255, 255, 0.14);
+    --look-close-hover-bg: #e04c4c;
+    --look-close-hover-fg: #ffffff;
+
+    /* Mint-Y-Dark */
+    --bg-primary: #383838;
+    --bg-secondary: #2f2f2f;
+    --bg-tertiary: #505050;
+    --text-primary: #dadada;
+    --text-secondary: #a3a3a3;
+    --border-color: #4a4a4a;
+    --hover-bg: rgba(255, 255, 255, 0.07);
+    --titlebar-bg: #2f2f2f;
+    --titlebar-text: #dadada;
+    --titlebar-height: 32px;
+    --look-titlebar-border: #252525;
+    --look-tabbar-bg: #333333;
+    --look-switch-off-bg: #505050;
+
+    --look-qc-bg: #383838;
+    --look-qc-border: #252525;
+    --look-qc-radius: 6px;
+    --look-qc-backdrop: none;
+    --look-qc-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-look='cinnamon'][data-theme='light'] {
+    /* Mint-Y */
+    --bg-primary: #f2f2f2;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #cfcfcf;
+    --text-primary: #303030;
+    --text-secondary: #656565;
+    --border-color: #d0d0d0;
+    --hover-bg: rgba(0, 0, 0, 0.05);
+    --titlebar-bg: #e4e4e4;
+    --titlebar-text: #303030;
+    --look-titlebar-border: #cdcdcd;
+    --look-tabbar-bg: #ebebeb;
+    --look-switch-off-bg: #cfcfcf;
+    --look-control-hover-bg: rgba(0, 0, 0, 0.1);
+
+    --look-qc-bg: #ffffff;
+    --look-qc-border: #cdcdcd;
+    --look-qc-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-look='cinnamon'] .tab--active {
+    background: var(--bg-primary);
+}

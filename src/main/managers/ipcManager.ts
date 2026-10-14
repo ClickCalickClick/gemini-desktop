@@ -29,6 +29,7 @@ import {
     TabStateIpcHandler,
     SmartEnterIpcHandler,
     AgentIpcHandler,
+    LookIpcHandler,
     IpcHandlerDependencies,
 } from './ipc/index';
 import SettingsStore from '../store';
@@ -217,6 +218,8 @@ export default class IpcManager {
             this.tabStateHandler,
             new SmartEnterIpcHandler(handlerDeps),
             new AgentIpcHandler(handlerDeps),
+            // Desktop look (titlebar, controls, fonts and accent per desktop)
+            new LookIpcHandler(handlerDeps),
         ];
 
         this.logger.log('Initialized');

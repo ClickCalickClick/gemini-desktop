@@ -1,0 +1,19 @@
+/**
+ * Desktop looks.
+ *
+ * Imported once from theme.css, so every window (main, Options, Quick Chat) gets them.
+ * base.css holds the shared rules; each look file sets variables (and a few look-only rules)
+ * under :root[data-look='<look>'], for dark and for [data-theme='light'].
+ * The 'default' look has no file: it is the app as it always looked.
+ */
+@import './base.css';
+@import './gnome.css';
+@import './kde.css';
+@import './xfce.css';
+@import './cinnamon.css';
+@import './mate.css';
+@import './budgie.css';
+@import './elementary.css';
+@import './cosmic.css';
+@import './macos.css';
+@import './windows.css';

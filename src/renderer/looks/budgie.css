@@ -1,0 +1,82 @@
+/**
+ * Budgie look (Materia-style, as Budgie ships it).
+ *
+ * Flat material surfaces, a 36px titlebar, round flat window controls on the right, 4px radii,
+ * Noto Sans and Materia's blue (#1a73e8 light, #8ab4f8 dark with dark text on it).
+ */
+
+:root[data-look='budgie'] {
+    --look-font: 'Noto Sans', 'Roboto', 'Ubuntu', 'Segoe UI', sans-serif;
+    --look-accent: #8ab4f8;
+    --look-accent-fg: #202124;
+    --look-radius-card: 4px;
+    --look-radius-button: 4px;
+    --look-title-size: 13px;
+    --look-title-weight: 500;
+    --look-heading-transform: none;
+    --look-heading-size: 13px;
+    --look-heading-weight: 500;
+    --look-heading-spacing: 0.01em;
+
+    --look-control-width: 24px;
+    --look-control-height: 24px;
+    --look-control-radius: 50%;
+    --look-control-gap: 6px;
+    --look-controls-padding: 8px;
+    --look-control-bg: transparent;
+    --look-control-hover-bg: rgba(255, 255, 255, 0.12);
+    --look-close-hover-bg: #e53935;
+    --look-close-hover-fg: #ffffff;
+
+    /* Materia dark */
+    --bg-primary: #212121;
+    --bg-secondary: #2c2c2c;
+    --bg-tertiary: #4a4a4a;
+    --text-primary: #dedede;
+    --text-secondary: #a0a0a0;
+    --border-color: #3b3b3b;
+    --hover-bg: rgba(255, 255, 255, 0.08);
+    --titlebar-bg: #2c2c2c;
+    --titlebar-text: #dedede;
+    --titlebar-height: 36px;
+    --look-titlebar-border: transparent;
+    --look-tabbar-bg: #2c2c2c;
+    --look-switch-off-bg: #5a5a5a;
+
+    --look-qc-bg: #2c2c2c;
+    --look-qc-border: rgba(255, 255, 255, 0.06);
+    --look-qc-radius: 4px;
+    --look-qc-backdrop: none;
+    --look-qc-shadow: 0 8px 10px rgba(0, 0, 0, 0.3), 0 3px 14px rgba(0, 0, 0, 0.25);
+}
+
+:root[data-look='budgie'][data-theme='light'] {
+    /* Materia light */
+    --look-accent: #1a73e8;
+    --look-accent-fg: #ffffff;
+    --bg-primary: #f2f2f2;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #bdbdbd;
+    --text-primary: #212121;
+    --text-secondary: #6b6b6b;
+    --border-color: #dadada;
+    --hover-bg: rgba(0, 0, 0, 0.06);
+    --titlebar-bg: #e4e4e4;
+    --titlebar-text: #212121;
+    --look-tabbar-bg: #e4e4e4;
+    --look-switch-off-bg: #bdbdbd;
+    --look-control-hover-bg: rgba(0, 0, 0, 0.1);
+
+    --look-qc-bg: #ffffff;
+    --look-qc-border: rgba(0, 0, 0, 0.06);
+    --look-qc-shadow: 0 8px 10px rgba(0, 0, 0, 0.14), 0 3px 14px rgba(0, 0, 0, 0.12);
+}
+
+/* Material tabs: accent underline only */
+:root[data-look='budgie'] .tab {
+    border-right: none;
+}
+
+:root[data-look='budgie'] .tab--active {
+    background: transparent;
+}

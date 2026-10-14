@@ -1,0 +1,123 @@
+/**
+ * macOS look (Aqua, macOS 14/15).
+ *
+ * San Francisco, macOS window and toolbar greys, system blue, 10px cards and the frosted glass
+ * Quick Chat the app always had. On Windows and Linux the window controls become traffic lights
+ * on the left; on a Mac the native ones stay.
+ */
+
+:root[data-look='macos'] {
+    --look-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Inter', 'Segoe UI', sans-serif;
+    --look-accent: #0a84ff;
+    --look-accent-fg: #ffffff;
+    --look-radius-card: 10px;
+    --look-radius-button: 6px;
+    --look-title-size: 13px;
+    --look-title-weight: 600;
+    --look-heading-transform: none;
+    --look-heading-size: 13px;
+    --look-heading-weight: 600;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 12px;
+    --look-control-height: 12px;
+    --look-control-radius: 50%;
+    --look-control-gap: 8px;
+    --look-controls-padding: 12px;
+
+    /* macOS dark */
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #2a2a2a;
+    --bg-tertiary: #4a4a4a;
+    --text-primary: #dfdfdf;
+    --text-secondary: #9a9a9a;
+    --border-color: #3a3a3a;
+    --hover-bg: rgba(255, 255, 255, 0.08);
+    --titlebar-bg: #2b2b2b;
+    --titlebar-text: #dfdfdf;
+    --titlebar-height: 32px;
+    --look-titlebar-border: #111111;
+    --look-tabbar-bg: #252525;
+    --look-switch-off-bg: #4a4a4a;
+
+    /* The glass Quick Chat as before */
+    --look-qc-bg: rgba(30, 30, 30, 0.85);
+    --look-qc-border: rgba(255, 255, 255, 0.12);
+    --look-qc-radius: 12px;
+    --look-qc-backdrop: blur(20px);
+    --look-qc-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:root[data-look='macos'][data-theme='light'] {
+    /* macOS light */
+    --look-accent: #007aff;
+    --bg-primary: #ececec;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #c8c8c8;
+    --text-primary: #262626;
+    --text-secondary: #6e6e73;
+    --border-color: #d5d5d5;
+    --hover-bg: rgba(0, 0, 0, 0.05);
+    --titlebar-bg: #e8e8e8;
+    --titlebar-text: #262626;
+    --look-titlebar-border: #d0d0d0;
+    --look-tabbar-bg: #e3e3e3;
+    --look-switch-off-bg: #d1d1d6;
+
+    --look-qc-bg: rgba(255, 255, 255, 0.9);
+    --look-qc-border: rgba(0, 0, 0, 0.12);
+    --look-qc-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Traffic lights (only drawn where the app draws its own controls) */
+:root[data-look='macos'] .window-control-button,
+:root[data-look='macos'] .options-window-control-button {
+    border: 0.5px solid rgba(0, 0, 0, 0.2);
+    color: rgba(0, 0, 0, 0.55);
+}
+
+:root[data-look='macos'] .window-control-button.close,
+:root[data-look='macos'] .options-window-control-button.close,
+:root[data-look='macos'] .window-control-button.close:hover,
+:root[data-look='macos'] .options-window-control-button.close:hover {
+    background-color: #ff5f57;
+    color: rgba(77, 0, 0, 0.7);
+}
+
+:root[data-look='macos'] .window-control-button.minimize,
+:root[data-look='macos'] .options-window-control-button.minimize,
+:root[data-look='macos'] .window-control-button.minimize:hover,
+:root[data-look='macos'] .options-window-control-button.minimize:hover {
+    background-color: #febc2e;
+    color: rgba(100, 60, 0, 0.7);
+}
+
+:root[data-look='macos'] .window-control-button.maximize,
+:root[data-look='macos'] .window-control-button.maximize:hover {
+    background-color: #28c840;
+    color: rgba(0, 70, 0, 0.7);
+}
+
+/* Glyphs show only while the pointer is over the group, as on a Mac */
+:root[data-look='macos'] .window-control-button svg,
+:root[data-look='macos'] .options-window-control-button svg {
+    width: 6px;
+    height: 6px;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+}
+
+:root[data-look='macos'] .window-controls:hover svg,
+:root[data-look='macos'] .options-window-controls:hover svg,
+:root[data-look='macos'] .window-control-button:focus-visible svg,
+:root[data-look='macos'] .options-window-control-button:focus-visible svg {
+    opacity: 1;
+}
+
+/* Inactive look when the window is in the background is up to the OS; keep the bar calm */
+:root[data-look='macos'] .titlebar-title,
+:root[data-look='macos'] .options-titlebar-title {
+    color: var(--text-secondary);
+}

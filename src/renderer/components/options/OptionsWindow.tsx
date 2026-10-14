@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { OptionsWindowTitlebar } from './OptionsWindowTitlebar';
 import { ThemeSelector } from './ThemeSelector';
+import { LookSelector } from './LookSelector';
 import { IndividualHotkeyToggles } from './IndividualHotkeyToggles';
 import { AutoUpdateToggle } from './AutoUpdateToggle';
 import { AboutSection } from './AboutSection';
@@ -172,6 +173,7 @@ export function OptionsWindow() {
                             {/* Appearance Settings */}
                             <OptionsSection title="Appearance" testId="options-appearance">
                                 <ThemeSelector />
+                                <LookSelector />
                             </OptionsSection>
 
                             {/* Hotkey Settings */}

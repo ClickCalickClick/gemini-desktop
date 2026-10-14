@@ -1,0 +1,136 @@
+/**
+ * GNOME look (libadwaita, GNOME 47+).
+ *
+ * Headerbar with a bold centred title and a round, flat close button (GNOME's default button
+ * layout has no minimize or maximize), 12px cards, Adwaita Sans, the libadwaita palette and the
+ * desktop accent (default blue #3584e4). Quick Chat is a solid card, no glass.
+ */
+
+:root[data-look='gnome'] {
+    --look-font: 'Adwaita Sans', Cantarell, 'Noto Sans', 'Inter', 'Segoe UI', sans-serif;
+    --look-accent: #3584e4;
+    --look-accent-fg: #ffffff;
+    --look-radius-card: 12px;
+    --look-radius-button: 6px;
+    --look-title-size: 14px;
+    --look-title-weight: 700;
+    --look-heading-transform: none;
+    --look-heading-size: 14px;
+    --look-heading-weight: 700;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 24px;
+    --look-control-height: 24px;
+    --look-control-radius: 50%;
+    --look-control-gap: 12px;
+    --look-controls-padding: 11px;
+    --look-control-bg: rgba(255, 255, 255, 0.1);
+    --look-control-hover-bg: rgba(255, 255, 255, 0.15);
+    --look-close-hover-bg: rgba(255, 255, 255, 0.15);
+    --look-close-hover-fg: #ffffff;
+
+    /* libadwaita dark */
+    --bg-primary: #222226;
+    --bg-secondary: #2e2e32;
+    --bg-tertiary: rgba(255, 255, 255, 0.15);
+    --text-primary: #ffffff;
+    --text-secondary: #a2a2a6;
+    --border-color: #3d3d42;
+    --hover-bg: rgba(255, 255, 255, 0.07);
+    --titlebar-bg: #2e2e32;
+    --titlebar-text: #ffffff;
+    --titlebar-height: 46px;
+    --look-titlebar-border: rgba(0, 0, 6, 0.36);
+    --look-tabbar-bg: #2e2e32;
+    --look-switch-off-bg: rgba(255, 255, 255, 0.2);
+
+    --look-qc-bg: #2e2e32;
+    --look-qc-border: rgba(255, 255, 255, 0.09);
+    --look-qc-radius: 12px;
+    --look-qc-backdrop: none;
+    --look-qc-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+:root[data-look='gnome'][data-theme='light'] {
+    /* libadwaita light */
+    --bg-primary: #fafafb;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: rgba(0, 0, 6, 0.15);
+    --text-primary: #2e2e33;
+    --text-secondary: #6b6b70;
+    --border-color: #dcdce0;
+    --hover-bg: rgba(0, 0, 6, 0.07);
+    --titlebar-bg: #ffffff;
+    --titlebar-text: #2e2e33;
+    --look-titlebar-border: rgba(0, 0, 6, 0.12);
+    --look-tabbar-bg: #ffffff;
+    --look-switch-off-bg: rgba(0, 0, 6, 0.15);
+
+    --look-control-bg: rgba(0, 0, 6, 0.08);
+    --look-control-hover-bg: rgba(0, 0, 6, 0.14);
+    --look-close-hover-bg: rgba(0, 0, 6, 0.14);
+    --look-close-hover-fg: #2e2e33;
+
+    --look-qc-bg: #ffffff;
+    --look-qc-border: rgba(0, 0, 6, 0.12);
+    --look-qc-shadow: 0 4px 16px rgba(0, 0, 6, 0.15), 0 0 0 1px rgba(0, 0, 6, 0.05);
+}
+
+/* Window controls: icons at libadwaita's symbolic size */
+:root[data-look='gnome'] .window-control-button svg,
+:root[data-look='gnome'] .options-window-control-button svg {
+    width: 9px;
+    height: 9px;
+}
+
+/* View switcher: the active page is a soft pill, not an underline */
+:root[data-look='gnome'] .options-tabs {
+    background: var(--titlebar-bg);
+    gap: 4px;
+    padding: 6px 12px;
+}
+
+:root[data-look='gnome'] .options-tab-button {
+    padding: 6px 14px;
+    font-weight: 700;
+}
+
+:root[data-look='gnome'] .options-tab-button.active {
+    background: var(--hover-bg);
+}
+
+:root[data-look='gnome'] .options-tab-button.active::after {
+    display: none;
+}
+
+/* AdwTabBar: rounded tabs inset in the bar, the active one raised */
+:root[data-look='gnome'] .tab {
+    height: auto;
+    margin: 4px 2px;
+    border: none;
+    border-radius: 6px;
+}
+
+:root[data-look='gnome'] .tab--active {
+    background: var(--hover-bg);
+    box-shadow: inset 0 0 0 1px var(--border-color);
+}
+
+:root[data-look='gnome'] .tab-bar__new {
+    border-left: none;
+    margin: 4px;
+    border-radius: 6px;
+}
+
+/* libadwaita switch: 46x26 track */
+:root[data-look='gnome'] .capsule-toggle__switch {
+    width: 46px;
+    height: 26px;
+    border-radius: 13px;
+}
+
+:root[data-look='gnome'] .capsule-toggle__thumb {
+    top: 3px;
+    left: 3px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}

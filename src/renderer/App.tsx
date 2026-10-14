@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { MainLayout, OfflineOverlay, GeminiErrorBoundary, TabBar, TabPanel } from './components';
 import { ThemeProvider } from './context/ThemeContext';
+import { LookProvider } from './context/LookContext';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { UpdateToastProvider } from './context/UpdateToastContext';
 import { TabProvider, useTabContext } from './context/TabContext';
@@ -151,14 +152,16 @@ function AppContent() {
 function App() {
     return (
         <ThemeProvider>
-            <ToastProvider>
-                <UpdateToastProvider>
-                    <TabProvider>
-                        <AppContent />
-                    </TabProvider>
-                    <LinuxHotkeyNotice />
-                </UpdateToastProvider>
-            </ToastProvider>
+            <LookProvider>
+                <ToastProvider>
+                    <UpdateToastProvider>
+                        <TabProvider>
+                            <AppContent />
+                        </TabProvider>
+                        <LinuxHotkeyNotice />
+                    </UpdateToastProvider>
+                </ToastProvider>
+            </LookProvider>
         </ThemeProvider>
     );
 }
