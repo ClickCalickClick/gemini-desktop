@@ -37,7 +37,13 @@ import {
 } from '../agent/filePlan';
 import { buildAgentPrompt, gatherContext, type WellKnownFolder } from '../agent/promptContext';
 import { createEventParser, LineSplitter, parseJsonLine, type ParsedAgentEvent } from '../agent/streamParsers';
-import { describeRiskySettings, findRiskyAntigravitySettings, prepareWorkspace } from '../agent/workspace';
+import {
+    describeRiskySettings,
+    findRiskySettings,
+    prepareWorkspace,
+    removeRunInputs,
+    settingsFilesFor,
+} from '../agent/workspace';
 import { createLogger } from '../utils/logger';
 import type {
     AgentEngineId,
@@ -74,6 +80,9 @@ const MAX_STORED_PLANS = 10;
  */
 const ANTIGRAVITY_SANDBOX = true;
 
+/** Antigravity permission modes (from the `init` event) that ask before running tools. */
+const SAFE_PERMISSION_MODES = ['request-review', 'strict'];
+
 /** Options for a run that come from the user's settings. */
 export interface AgentRunOptions {
     enginePreference: AgentEnginePreference;
@@ -95,6 +104,8 @@ export interface AgentManagerOptions {
     extraSearchDirectories?: string[];
     spawnProcess?: typeof spawn;
     readVersion?: (binaryPath: string) => Promise<string | undefined>;
+    /** Settings files to check for an engine (tests); defaults to the CLI's own files. */
+    settingsFiles?: (engine: AgentEngineId) => string[];
     trashItem?: (target: string) => Promise<void>;
     runTimeoutMs?: number;
     cancelGraceMs?: number;
@@ -199,6 +210,7 @@ export default class AgentManager {
     private readonly extraSearchDirectories?: string[];
     private readonly spawnProcess: typeof spawn;
     private readonly readVersion?: (binaryPath: string) => Promise<string | undefined>;
+    private readonly settingsFiles?: (engine: AgentEngineId) => string[];
     private readonly fileOps: FileOperations;
     private readonly runTimeoutMs: number;
     private readonly cancelGraceMs: number;
@@ -231,6 +243,7 @@ export default class AgentManager {
         this.extraSearchDirectories = options.extraSearchDirectories;
         this.spawnProcess = options.spawnProcess ?? spawn;
         this.readVersion = options.readVersion;
+        this.settingsFiles = options.settingsFiles;
         this.fileOps = { trashItem: options.trashItem ?? ((target) => shell.trashItem(target)) };
         this.runTimeoutMs = options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
         this.cancelGraceMs = options.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS;
@@ -271,24 +284,16 @@ export default class AgentManager {
             platform: this.platform,
             extraDirectories: this.extraSearchDirectories,
             readVersion: this.readVersion ?? ((binaryPath: string) => readBinaryVersion(binaryPath, this.childEnv())),
+            checkEngine: (engine: AgentEngineId) => this.checkEngineSettings(engine),
         };
-        const status = await discoverEngine(preference, base);
-        if (status.engine !== 'antigravity' || !status.available) {
-            return status;
-        }
+        return discoverEngine(preference, base);
+    }
 
-        const findings = await findRiskyAntigravitySettings(homeDir);
-        if (findings.length === 0) {
-            return status;
-        }
-        const blocked: AgentEngineStatus = { ...status, available: false, error: describeRiskySettings(findings) };
-        if (preference === 'auto') {
-            const fallback = await discoverEngine('gemini-cli', base);
-            if (fallback.available) {
-                return fallback;
-            }
-        }
-        return blocked;
+    /** Why an engine's settings rule it out, or null when they keep the CLI's defaults. */
+    private async checkEngineSettings(engine: AgentEngineId): Promise<string | null> {
+        const files = this.settingsFiles?.(engine) ?? settingsFilesFor(engine, this.homeDir(), this.platform);
+        const risky = await findRiskySettings(engine, files);
+        return risky.length > 0 ? describeRiskySettings(engine, risky) : null;
     }
 
     // =========================================================================
@@ -348,9 +353,20 @@ export default class AgentManager {
         }
         run.engine = status.engine;
 
+        // The status may be cached; check the settings again right before running.
+        const refusal = await this.checkEngineSettings(status.engine);
+        if (refusal) {
+            this.invalidateStatus();
+            this.finish(run, { status: 'ERROR', response: '', error: refusal });
+            return;
+        }
+        if (run.finished) {
+            return;
+        }
+
         const homeDir = this.homeDir();
         const workspaceDir = this.workspaceDir();
-        await prepareWorkspace(workspaceDir, this.now());
+        await prepareWorkspace(workspaceDir);
         if (run.finished) {
             return;
         }
@@ -535,6 +551,27 @@ export default class AgentManager {
                 if (event.conversationId) {
                     run.conversationId = event.conversationId;
                 }
+                // Runtime guard, whatever the settings files say: the CLI reports how it
+                // handles tools that need approval.
+                if (
+                    run.engine === 'antigravity' &&
+                    event.permissionMode !== undefined &&
+                    !SAFE_PERMISSION_MODES.includes(event.permissionMode)
+                ) {
+                    this.logger.warn('Agent CLI runs tools without asking; stopping run:', {
+                        runId: run.runId,
+                        permissionMode: event.permissionMode,
+                    });
+                    this.invalidateStatus();
+                    this.finish(run, {
+                        status: 'ERROR',
+                        response: '',
+                        error: 'Antigravity CLI is set to run tools without asking; Quick Chat will not use it like that.',
+                    });
+                    if (run.child) {
+                        this.stopChild(run.child);
+                    }
+                }
                 break;
             case 'text':
                 if (run.text.length < MAX_RESPONSE_CHARS) {
@@ -587,7 +624,10 @@ export default class AgentManager {
         }
 
         if (run.category === 'files') {
-            const plan = normalizePlan(result.structuredOutput ?? response);
+            const plan = normalizePlan(result.structuredOutput ?? response, {
+                homeDir: this.homeDir(),
+                platform: this.platform,
+            });
             if (!plan) {
                 this.finish(run, {
                     status: 'ERROR',
@@ -626,6 +666,7 @@ export default class AgentManager {
         for (const timer of run.timers.splice(0)) {
             clearTimeout(timer);
         }
+        void removeRunInputs(this.workspaceDir(), run.runId).catch(() => undefined);
         this.logger.log('Agent run finished:', {
             runId: run.runId,
             status: done.status,
@@ -712,7 +753,7 @@ export default class AgentManager {
     // =========================================================================
 
     private pathPolicy(): PathPolicy {
-        return { homeDir: this.homeDir(), userDataDir: this.userDataDir() };
+        return { homeDir: this.homeDir(), userDataDir: this.userDataDir(), platform: this.platform };
     }
 
     private storePlan(runId: string, plan: FileActionPlan): void {
@@ -750,11 +791,17 @@ export default class AgentManager {
 
         // Every path is checked again on disk (symbolic links included) before each action.
         const policy = this.pathPolicy();
-        stored.applied = true;
         this.fileWorkBusy = true;
         try {
             const { result, undoLog } = await applyPlan(stored.plan, policy, this.fileOps);
-            this.undoLog = undoLog;
+            // A plan that changed nothing can be tried again; otherwise it is spent and
+            // becomes the plan Undo reverses.
+            if (result.applied > 0) {
+                stored.applied = true;
+            }
+            if (result.applied > 0 || isUndoable(undoLog)) {
+                this.undoLog = undoLog;
+            }
             this.logger.log('Applied file plan:', {
                 runId,
                 applied: result.applied,

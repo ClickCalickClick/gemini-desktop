@@ -50,6 +50,11 @@ export interface DiscoveryEnvironment {
 export interface DiscoveryOptions extends DiscoveryEnvironment {
     /** Reads a binary's version; replaceable in tests. */
     readVersion?: (binaryPath: string) => Promise<string | undefined>;
+    /**
+     * Returns why a found engine must not be used (its settings allow too much), or null.
+     * A refused engine is skipped; when no other engine is usable, its message is reported.
+     */
+    checkEngine?: (engine: AgentEngineId) => Promise<string | null>;
 }
 
 /**
@@ -118,12 +123,35 @@ export async function findEngineBinary(
 ): Promise<string | null> {
     const name = ENGINE_BINARIES[engine];
     const fileNames = environment.platform === 'win32' ? [`${name}.exe`] : [name];
-    const join = environment.platform === 'win32' ? path.win32.join : path.posix.join;
 
     for (const dir of getSearchDirectories(environment)) {
         for (const fileName of fileNames) {
-            const candidate = join(dir, fileName);
+            // The file system is the running one, so use its own path rules.
+            const candidate = path.join(dir, fileName);
             if (await isExecutableFile(candidate, environment.platform)) {
+                return candidate;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * On Windows, find a script launcher (`gemini.cmd` from npm, for example) that the app
+ * does not start: it would need a command shell, and the prompt must never go through one.
+ */
+export async function findWindowsScriptLauncher(
+    engine: AgentEngineId,
+    environment: DiscoveryEnvironment
+): Promise<string | null> {
+    if (environment.platform !== 'win32') {
+        return null;
+    }
+    const name = ENGINE_BINARIES[engine];
+    for (const dir of getSearchDirectories(environment)) {
+        for (const extension of ['.cmd', '.bat', '.ps1']) {
+            const candidate = path.join(dir, `${name}${extension}`);
+            if (await isExecutableFile(candidate, 'win32')) {
                 return candidate;
             }
         }
@@ -170,22 +198,41 @@ export async function discoverEngine(
     const readVersion = options.readVersion ?? ((binaryPath: string) => readBinaryVersion(binaryPath, options.env));
     const order = ENGINE_ORDER[preference] ?? ENGINE_ORDER.auto;
 
+    let refused: AgentEngineStatus | null = null;
+    const launcherNotes: string[] = [];
     for (const engine of order) {
         const binaryPath = await findEngineBinary(engine, options);
-        if (binaryPath) {
-            const version = await readVersion(binaryPath);
-            return {
-                engine,
-                available: true,
-                path: binaryPath,
-                ...(version ? { version } : {}),
-            };
+        if (!binaryPath) {
+            const launcher = await findWindowsScriptLauncher(engine, options);
+            if (launcher) {
+                launcherNotes.push(
+                    `${ENGINE_NAMES[engine]} is installed as ${launcher}, a script the app does not start ` +
+                        'because it needs a command shell and your prompt must not pass through one.'
+                );
+            }
+            continue;
         }
+        const version = await readVersion(binaryPath);
+        const status: AgentEngineStatus = {
+            engine,
+            available: true,
+            path: binaryPath,
+            ...(version ? { version } : {}),
+        };
+        const reason = options.checkEngine ? await options.checkEngine(engine) : null;
+        if (!reason) {
+            return status;
+        }
+        refused ??= { ...status, available: false, error: reason };
+    }
+    if (refused) {
+        return refused;
     }
 
-    const error =
+    const base =
         preference === 'auto'
             ? `No agent CLI was found. ${INSTALL_HINT}`
             : `${ENGINE_NAMES[preference]} was not found on PATH or in the usual install folders. ${INSTALL_HINT}`;
+    const error = launcherNotes.length > 0 ? `${base} ${launcherNotes.join(' ')}` : base;
     return { engine: null, available: false, error };
 }

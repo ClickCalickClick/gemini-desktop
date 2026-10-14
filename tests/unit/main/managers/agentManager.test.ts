@@ -45,6 +45,11 @@ describe('AgentManager', () => {
             platform: 'linux',
             extraSearchDirectories: [],
             readVersion: async () => '1.0.0',
+            // Only the temporary home's settings files, never the machine's system-wide ones.
+            settingsFiles: (engine) =>
+                engine === 'antigravity'
+                    ? [agySettingsFile(), path.join(layout.home, '.gemini', 'config', 'config.json')]
+                    : [geminiSettingsFile()],
             trashItem,
             ...overrides,
         });
@@ -82,7 +87,14 @@ describe('AgentManager', () => {
         return events.find((event): event is DoneEvent => event.type === 'done') as DoneEvent;
     };
 
-    const readArgs = (): { args: string[]; cwd: string } => JSON.parse(fs.readFileSync(argsFile, 'utf8'));
+    const readArgs = (): { args: string[]; cwd: string; files: string[]; inputs: string[] } =>
+        JSON.parse(fs.readFileSync(argsFile, 'utf8'));
+    const agySettingsFile = () => path.join(layout.home, '.gemini', 'antigravity-cli', 'settings.json');
+    const geminiSettingsFile = () => path.join(layout.home, '.gemini', 'settings.json');
+    const writeJson = (file: string, value: unknown) => {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify(value));
+    };
 
     describe('validateRunRequest', () => {
         it('accepts valid requests', () => {
@@ -384,6 +396,122 @@ describe('AgentManager', () => {
         it('rejects invalid requests before starting anything', async () => {
             const manager = createManager();
             await expect(startRun(manager, '')).rejects.toThrow('empty');
+        });
+
+        it('stops a run whose init event reports a permission mode that does not ask', async () => {
+            const manager = createManager();
+            const { events } = await startRun(manager, 'MODE:turbo');
+            const done = await waitForDone(events);
+            expect(done.status).toBe('ERROR');
+            expect(done.error).toBe(
+                'Antigravity CLI is set to run tools without asking; Quick Chat will not use it like that.'
+            );
+            const pid = (manager as unknown as { activeRun: { child: { pid: number } | null } }).activeRun.child?.pid;
+            if (pid) {
+                await vi.waitFor(() => expect(isAlive(pid)).toBe(false), { timeout: 3000 });
+            }
+            expect(events.filter((event) => event.type === 'text')).toEqual([]);
+        });
+
+        it('forwards no events after done when a cancelled CLI keeps talking', async () => {
+            const manager = createManager({
+                cancelGraceMs: 300,
+                env: {
+                    PATH: fakePath(layout.bin),
+                    FAKE_HOME: layout.home,
+                    FAKE_ARGS_FILE: argsFile,
+                    FAKE_IGNORE_SIGINT: '1',
+                    FAKE_CHATTY: '1',
+                },
+            });
+            const { runId, events } = await startRun(manager, 'MODE:hang');
+            await vi.waitFor(() => expect(events.some((event) => event.type === 'text')).toBe(true));
+            manager.cancel(runId);
+            await waitForDone(events);
+            const count = events.length;
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            expect(events).toHaveLength(count);
+            expect(events.at(-1)?.type).toBe('done');
+        });
+
+        it('empties the workspace before every run', async () => {
+            const workspace = path.join(layout.userData, 'agent-workspace');
+            for (const file of [
+                'GEMINI.md',
+                '.env',
+                path.join('.gemini', '.env'),
+                path.join('.agents', 'rules', 'r.md'),
+            ]) {
+                fs.mkdirSync(path.dirname(path.join(workspace, file)), { recursive: true });
+                fs.writeFileSync(path.join(workspace, file), 'planted');
+            }
+            const manager = createManager();
+            const { events } = await startRun(manager, 'hello');
+            await waitForDone(events);
+            expect(readArgs().files).toEqual(['.git']);
+        });
+
+        it("shows a run's input copies to the CLI and removes them when the run ends", async () => {
+            fs.writeFileSync(path.join(layout.home, 'doc.txt'), 'quarterly numbers');
+            const manager = createManager();
+            const { runId, events } = await startRun(manager, 'summarise ~/doc.txt', 'documents');
+            await waitForDone(events);
+            expect(readArgs().inputs).toEqual([`${runId}/1-doc.txt`]);
+            const inputs = path.join(layout.userData, 'agent-workspace', 'inputs', runId);
+            await vi.waitFor(() => expect(fs.existsSync(inputs)).toBe(false));
+        });
+
+        it('checks the settings again before running even when the status is cached', async () => {
+            const manager = createManager();
+            expect((await manager.getStatus('antigravity')).available).toBe(true);
+            writeJson(agySettingsFile(), { toolPermission: 'proceed-in-sandbox' });
+            const { events } = await startRun(manager, 'hello', 'general', { enginePreference: 'antigravity' });
+            const done = await waitForDone(events);
+            expect(done.status).toBe('ERROR');
+            expect(done.error).toContain('proceed-in-sandbox');
+            expect(events.some((event) => event.type === 'started')).toBe(false);
+        });
+
+        it('lets a plan whose actions all failed be applied again', async () => {
+            const manager = createManager();
+            const { runId, events } = await startRun(manager, 'MODE:plan', 'files');
+            await waitForDone(events);
+            fs.writeFileSync(path.join(layout.home, 'Sorted'), 'a file in the way');
+
+            const first = await manager.applyPlan(runId);
+            expect(first.applied).toBe(0);
+            expect(first.failed).toHaveLength(2);
+            expect(first.undoAvailable).toBe(false);
+
+            fs.rmSync(path.join(layout.home, 'Sorted'));
+            fs.writeFileSync(path.join(layout.home, 'a.txt'), 'A');
+            const second = await manager.applyPlan(runId);
+            expect(second).toEqual({ applied: 2, failed: [], undoAvailable: true });
+        });
+    });
+
+    describe('settings checks', () => {
+        it('refuses Gemini CLI when its settings auto-approve tools', async () => {
+            installFakeCli(layout.bin, 'gemini');
+            writeJson(geminiSettingsFile(), { tools: { allowed: ['run_shell_command'] } });
+            const manager = createManager();
+            const status = await manager.getStatus('auto');
+            expect(status).toMatchObject({ engine: 'gemini-cli', available: false });
+            expect(status.error).toContain('run_shell_command');
+
+            // Antigravity is used when it is installed and its settings are safe.
+            installFakeCli(layout.bin, 'agy');
+            expect(await manager.getStatus('auto', true)).toMatchObject({ engine: 'antigravity', available: true });
+        });
+
+        it('refuses Antigravity for mcp() allow rules in the desktop config', async () => {
+            installFakeCli(layout.bin, 'agy');
+            writeJson(path.join(layout.home, '.gemini', 'config', 'config.json'), {
+                permissions: { allow: ['mcp(*)'] },
+            });
+            const status = await createManager().getStatus('antigravity');
+            expect(status.available).toBe(false);
+            expect(status.error).toContain('mcp(*)');
         });
     });
 

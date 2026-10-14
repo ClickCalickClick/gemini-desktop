@@ -16,6 +16,7 @@ import {
     isUndoable,
     MAX_PLAN_ACTIONS,
     normalizePlan,
+    normalizePlanPath,
     undoPlan,
     type PathPolicy,
 } from '../../../../src/main/agent/filePlan';
@@ -134,15 +135,82 @@ describe('filePlan', () => {
         });
 
         it('refuses home itself, paths outside home, hidden top-level folders and userData', () => {
-            expect(checkPathStatic(layout.home, policy)).toContain('Outside your home folder');
+            expect(checkPathStatic(layout.home, policy)).toContain('home folder itself');
+            expect(checkPathStatic(`${layout.home}/`, policy)).toContain('home folder itself');
             expect(checkPathStatic('/etc/passwd', policy)).toContain('Outside your home folder');
             expect(checkPathStatic(`${layout.home}-other/x`, policy)).toContain('Outside your home folder');
             expect(checkPathStatic(home('.ssh', 'id_rsa'), policy)).toContain('hidden folder');
             expect(checkPathStatic(home('.bashrc'), policy)).toContain('hidden folder');
             expect(checkPathStatic(home('Documents', '.notes'), policy)).toBeNull();
-            const userDataPolicy = { ...policy, userDataDir: home('AppData') };
-            expect(checkPathStatic(home('AppData', 'x'), userDataPolicy)).toContain("app's own data folder");
-            expect(checkPathStatic(home('AppData'), userDataPolicy)).toContain("app's own data folder");
+            const userDataPolicy = { ...policy, userDataDir: home('Data', 'App', 'gemini-desktop') };
+            expect(checkPathStatic(home('Data', 'App', 'gemini-desktop', 'x'), userDataPolicy)).toContain(
+                "app's own data folder"
+            );
+            expect(checkPathStatic(home('Data', 'App', 'gemini-desktop'), userDataPolicy)).toContain(
+                "app's own data folder"
+            );
+        });
+
+        it('refuses every folder that contains userData', () => {
+            const userDataPolicy = { ...policy, userDataDir: home('Data', 'App', 'gemini-desktop') };
+            expect(checkPathStatic(home('Data', 'App'), userDataPolicy)).toContain('contains the app');
+            expect(checkPathStatic(home('Data'), userDataPolicy)).toContain('contains the app');
+            expect(checkPathStatic(home('Data', 'Other'), userDataPolicy)).toBeNull();
+        });
+
+        it('refuses Library on macOS and AppData on Windows, ignoring case', () => {
+            const mac = { ...policy, platform: 'darwin' as NodeJS.Platform };
+            expect(checkPathStatic(home('Library'), mac)).toContain('system folder');
+            expect(checkPathStatic(home('library', 'Preferences', 'x.plist'), mac)).toContain('system folder');
+            expect(checkPathStatic(home('Documents', 'Library'), mac)).toBeNull();
+            const linux = { ...policy, platform: 'linux' as NodeJS.Platform };
+            expect(checkPathStatic(home('Library'), linux)).toBeNull();
+            const windows = { ...policy, platform: 'win32' as NodeJS.Platform };
+            expect(checkPathStatic(home('AppData'), windows)).toContain('system folder');
+            expect(checkPathStatic(home('APPDATA', 'Roaming'), windows)).toContain('system folder');
+            expect(checkPathStatic(home('AppData'), mac)).toBeNull();
+        });
+
+        it('compares userData without case on macOS and Windows', () => {
+            const mac = { ...policy, userDataDir: home('Data', 'Gemini'), platform: 'darwin' as NodeJS.Platform };
+            expect(checkPathStatic(home('data', 'gemini', 'x'), mac)).toContain("app's own data folder");
+            expect(checkPathStatic(home('DATA'), mac)).toContain('contains the app');
+        });
+    });
+
+    describe('normalizePlanPath and plan paths', () => {
+        it('expands ~/ with the home folder and normalizes', () => {
+            expect(normalizePlanPath('~/Downloads/x.pdf', '/home/u', 'linux')).toBe('/home/u/Downloads/x.pdf');
+            expect(normalizePlanPath(' ~/Downloads//x/ ', '/home/u', 'linux')).toBe('/home/u/Downloads/x');
+            expect(normalizePlanPath('~', '/home/u', 'linux')).toBe('/home/u');
+            expect(normalizePlanPath('/home/u/a/../b', '/home/u', 'linux')).toBe('/home/u/b');
+            expect(normalizePlanPath('relative/x', '/home/u', 'linux')).toBe('relative/x');
+            expect(normalizePlanPath('/', '/home/u', 'linux')).toBe('/');
+        });
+
+        it('turns forward slashes into backslashes on Windows', () => {
+            expect(normalizePlanPath('C:/Users/u/Downloads/x.pdf', 'C:\\Users\\u', 'win32')).toBe(
+                'C:\\Users\\u\\Downloads\\x.pdf'
+            );
+            expect(normalizePlanPath('~/Desktop', 'C:\\Users\\u', 'win32')).toBe('C:\\Users\\u\\Desktop');
+            expect(normalizePlanPath('~\\Desktop', 'C:\\Users\\u', 'win32')).toBe('C:\\Users\\u\\Desktop');
+        });
+
+        it('keeps ~/ plan paths instead of dropping them as outside home', () => {
+            const plan = normalizePlan(
+                { summary: 's', actions: [{ op: 'move', from: '~/Downloads/a.pdf', to: '~/Documents/a.pdf' }] },
+                { homeDir: layout.home }
+            );
+            expect(plan?.actions[0]).toMatchObject({
+                from: home('Downloads', 'a.pdf'),
+                to: home('Documents', 'a.pdf'),
+            });
+            expect(filterUnsafeActions(plan as FileActionPlan, policy).removed).toBe(0);
+            const sneaky = normalizePlan(
+                { summary: 's', actions: [{ op: 'trash', from: '~/Downloads/../.ssh/id_rsa' }] },
+                { homeDir: layout.home }
+            );
+            expect(filterUnsafeActions(sneaky as FileActionPlan, policy).removed).toBe(1);
         });
     });
 
@@ -348,6 +416,73 @@ describe('filePlan', () => {
             fs.rmSync(home('b.txt'));
             const undo = await undoPlan(undoLog, policy, { trashItem });
             expect(undo.failed[0]?.error).toContain('Not found');
+        });
+
+        it('refuses a destination inside the source reached through a symlink', async () => {
+            write(home('Docs', 'a.txt'));
+            fs.symlinkSync(home('Docs'), home('link'));
+            const { result } = await applyPlan(
+                {
+                    summary: 's',
+                    actions: [
+                        { id: 'move', op: 'move', from: home('Docs'), to: home('link', 'Inner') },
+                        { id: 'copy', op: 'copy', from: home('Docs'), to: home('link', 'Copy') },
+                    ],
+                },
+                policy,
+                { trashItem }
+            );
+            expect(result.applied).toBe(0);
+            expect(result.failed.map((failure) => failure.error)).toEqual([
+                'Cannot move or copy a folder into itself.',
+                'Cannot move or copy a folder into itself.',
+            ]);
+            expect(fs.readdirSync(home('Docs'))).toEqual(['a.txt']);
+        });
+
+        it('allows a rename that only changes case of the same file', async () => {
+            write(home('report.txt'), 'R');
+            // On a case-sensitive file system a hard link stands in for the same file.
+            fs.linkSync(home('report.txt'), home('Report.txt'));
+            const { result, undoLog } = await applyPlan(
+                {
+                    summary: 's',
+                    actions: [{ id: 'r', op: 'rename', from: home('report.txt'), to: home('Report.txt') }],
+                },
+                policy,
+                { trashItem }
+            );
+            expect(result).toEqual({ applied: 1, failed: [], undoAvailable: true });
+            const undo = await undoPlan(undoLog, policy, { trashItem });
+            expect(undo.failed).toEqual([]);
+
+            // A different file with a name that differs only in case is still not overwritten.
+            write(home('notes.txt'), 'n');
+            write(home('Notes.txt'), 'N');
+            const other = await applyPlan(
+                { summary: 's', actions: [{ id: 'n', op: 'rename', from: home('notes.txt'), to: home('Notes.txt') }] },
+                policy,
+                { trashItem }
+            );
+            expect(other.result.failed[0]?.error).toContain('Already exists');
+        });
+
+        it('removes the folders it created when the move then fails', async () => {
+            write(home('a.txt'), 'A');
+            const tooLong = 'x'.repeat(300);
+            const { result, undoLog } = await applyPlan(
+                {
+                    summary: 's',
+                    actions: [{ id: 'm', op: 'move', from: home('a.txt'), to: home('New', 'Deep', tooLong) }],
+                },
+                policy,
+                { trashItem }
+            );
+            expect(result.applied).toBe(0);
+            expect(result.failed).toHaveLength(1);
+            expect(fs.existsSync(home('New'))).toBe(false);
+            expect(undoLog).toEqual([]);
+            expect(fs.readFileSync(home('a.txt'), 'utf8')).toBe('A');
         });
     });
 });

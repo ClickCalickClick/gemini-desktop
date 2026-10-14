@@ -14,6 +14,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import type { FileAction, FileActionPlan, FileActionResult } from '../../shared/types/agent';
+import { isObject } from './json';
 
 export const FILE_ACTION_OPS: readonly FileAction['op'][] = ['move', 'copy', 'rename', 'mkdir', 'trash'];
 export const MAX_PLAN_ACTIONS = 500;
@@ -44,14 +45,43 @@ export const FILE_PLAN_JSON_SCHEMA = {
 /** Paths the plan may touch. */
 export interface PathPolicy {
     homeDir: string;
-    /** The app's own data folder, always refused. */
+    /** The app's own data folder: refused, and so is every folder that contains it. */
     userDataDir: string;
+    /** Platform whose system folders are refused; defaults to the running platform. */
+    platform?: NodeJS.Platform;
 }
 
-type JsonObject = Record<string, unknown>;
+/**
+ * Top-level folders of home that hold system and app data, refused on each platform
+ * (compared without case). Hidden folders (starting with '.') are refused everywhere.
+ */
+const PROTECTED_TOP_FOLDERS: Partial<Record<NodeJS.Platform, string[]>> = {
+    darwin: ['library'],
+    win32: ['appdata'],
+};
 
-function isObject(value: unknown): value is JsonObject {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
+/**
+ * Turn a plan path into an absolute, normalized one: a leading `~/` becomes the home
+ * folder, and on Windows `C:/Users/x` becomes `C:\Users\x`. Other paths are returned
+ * trimmed and are refused later by {@link checkPathStatic}.
+ */
+export function normalizePlanPath(raw: string, homeDir: string, platform: NodeJS.Platform = process.platform): string {
+    const paths = platform === 'win32' ? path.win32 : path.posix;
+    let candidate = raw.trim();
+    if (candidate === '~') {
+        candidate = homeDir;
+    } else if (candidate.startsWith('~/') || (platform === 'win32' && candidate.startsWith('~\\'))) {
+        candidate = paths.join(homeDir, candidate.slice(2));
+    }
+    if (!paths.isAbsolute(candidate)) {
+        return candidate;
+    }
+    candidate = paths.normalize(candidate);
+    const root = paths.parse(candidate).root;
+    if (candidate.length > root.length) {
+        candidate = candidate.replace(/[\\/]+$/, '');
+    }
+    return candidate;
 }
 
 /** Find the plan in a fenced ```json block (or the whole text) of a plain-text answer. */
@@ -72,10 +102,14 @@ export function extractPlanFromText(text: string): unknown {
 }
 
 /**
- * Check a plan's shape and give every action a unique id. Paths are not checked here;
- * see {@link checkPathStatic}. Returns null when the value is not a plan.
+ * Check a plan's shape and give every action a unique id. With `options`, paths are
+ * normalized with {@link normalizePlanPath}; they are checked later, see
+ * {@link checkPathStatic}. Returns null when the value is not a plan.
  */
-export function normalizePlan(value: unknown): FileActionPlan | null {
+export function normalizePlan(
+    value: unknown,
+    options?: { homeDir: string; platform?: NodeJS.Platform }
+): FileActionPlan | null {
     let candidate = value;
     if (typeof candidate === 'string') {
         candidate = extractPlanFromText(candidate);
@@ -95,8 +129,14 @@ export function normalizePlan(value: unknown): FileActionPlan | null {
             return null;
         }
         const op = raw.op as FileAction['op'];
-        const from = typeof raw.from === 'string' ? raw.from : undefined;
-        const to = typeof raw.to === 'string' ? raw.to : undefined;
+        const fix = (p: unknown): string | undefined => {
+            if (typeof p !== 'string') {
+                return undefined;
+            }
+            return options ? normalizePlanPath(p, options.homeDir, options.platform) : p;
+        };
+        const from = fix(raw.from);
+        const to = fix(raw.to);
         if (op !== 'mkdir' && !from) {
             return null;
         }
@@ -144,20 +184,39 @@ export function checkPathStatic(candidate: unknown, policy: PathPolicy): string 
     if (resolved !== withoutTrailing) {
         return `Path is not normalized: ${candidate}`;
     }
-    return checkResolvedPath(resolved, path.resolve(policy.homeDir), path.resolve(policy.userDataDir));
+    return checkResolvedPath(
+        resolved,
+        path.resolve(policy.homeDir),
+        path.resolve(policy.userDataDir),
+        policy.platform ?? process.platform
+    );
 }
 
-function checkResolvedPath(resolved: string, homeDir: string, userDataDir: string): string | null {
+function checkResolvedPath(
+    resolved: string,
+    homeDir: string,
+    userDataDir: string,
+    platform: NodeJS.Platform
+): string | null {
     const relative = path.relative(homeDir, resolved);
-    if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+    if (relative === '') {
+        return `Your home folder itself cannot be changed: ${resolved}`;
+    }
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
         return `Outside your home folder: ${resolved}`;
     }
     const topSegment = relative.split(/[\\/]/)[0] ?? '';
     if (topSegment.startsWith('.')) {
         return `Inside a hidden folder of your home folder: ${resolved}`;
     }
-    if (isInsideOrEqual(userDataDir, resolved)) {
-        return `Inside the app's own data folder: ${resolved}`;
+    if ((PROTECTED_TOP_FOLDERS[platform] ?? []).includes(topSegment.toLowerCase())) {
+        return `Inside a system folder of your home folder: ${resolved}`;
+    }
+    // Case-insensitive file systems (macOS, Windows) must not get around the check by case.
+    const fold = (value: string): string =>
+        platform === 'darwin' || platform === 'win32' ? value.toLowerCase() : value;
+    if (isInsideOrEqual(fold(userDataDir), fold(resolved)) || isInsideOrEqual(fold(resolved), fold(userDataDir))) {
+        return `Is or contains the app's own data folder: ${resolved}`;
     }
     return null;
 }
@@ -194,27 +253,58 @@ export async function checkPathReal(candidate: string, policy: PathPolicy): Prom
         // The app's data folder may not exist in tests; keep the configured path.
     }
 
-    // The item itself may be a symlink (moving or trashing it acts on the link); its
-    // parent folders must not lead outside home.
+    const realTarget = await resolveThroughParents(resolved);
+    if (!realTarget) {
+        return `Could not resolve: ${resolved}`;
+    }
+    const error = checkResolvedPath(realTarget, realHome, realUserData, policy.platform ?? process.platform);
+    return error ? `${error} (through a symbolic link)` : null;
+}
+
+/**
+ * Where a path really points: the real path of its closest existing parent folder plus
+ * the rest of the path. The item itself may be a symlink (moving or trashing it acts on
+ * the link), so only its parent folders are resolved. Null when nothing can be resolved.
+ */
+async function resolveThroughParents(resolved: string): Promise<string | null> {
     let existingParent = path.dirname(resolved);
     const remainder: string[] = [path.basename(resolved)];
     while (!(await exists(existingParent))) {
         const next = path.dirname(existingParent);
         if (next === existingParent) {
-            return `No existing parent folder: ${resolved}`;
+            return null;
         }
         remainder.unshift(path.basename(existingParent));
         existingParent = next;
     }
-    let realParent: string;
     try {
-        realParent = await fs.realpath(existingParent);
+        return path.join(await fs.realpath(existingParent), ...remainder);
     } catch {
-        return `Could not resolve: ${resolved}`;
+        return null;
     }
-    const realTarget = path.join(realParent, ...remainder);
-    const error = checkResolvedPath(realTarget, realHome, realUserData);
-    return error ? `${error} (through a symbolic link)` : null;
+}
+
+/** True when two paths differ only in case and name the same file (a case-only rename). */
+async function isCaseOnlyRename(from: string, to: string): Promise<boolean> {
+    if (from === to || from.toLowerCase() !== to.toLowerCase()) {
+        return false;
+    }
+    try {
+        const [a, b] = await Promise.all([fs.lstat(from), fs.lstat(to)]);
+        return a.dev === b.dev && a.ino === b.ino;
+    } catch {
+        return false;
+    }
+}
+
+/** An action failed after creating folders that could not be removed again. */
+class ActionFailure extends Error {
+    constructor(
+        readonly original: unknown,
+        readonly leftoverDirs: string[]
+    ) {
+        super(original instanceof Error ? original.message : String(original));
+    }
 }
 
 /** Remove from a plan the actions whose paths fail {@link checkPathStatic}. */
@@ -298,6 +388,13 @@ function describeError(error: unknown): string {
     }
 }
 
+/*
+ * Paths are checked, then used. Between the check and the change another program could
+ * swap a folder for a symlink or create the destination (a time-of-check to time-of-use
+ * gap). This is accepted: the app runs as the user, so it cannot reach anything the user
+ * could not, and the checks protect against the agent's plan, not against other local
+ * programs. fs.cp is told not to overwrite; fs.rename cannot be told that on Linux.
+ */
 async function applyAction(action: FileAction, policy: PathPolicy, ops: FileOperations): Promise<UndoEntry> {
     const checks = [action.op !== 'mkdir' ? action.from : undefined, action.op !== 'trash' ? action.to : undefined];
     for (const candidate of checks) {
@@ -328,26 +425,39 @@ async function applyAction(action: FileAction, policy: PathPolicy, ops: FileOper
         case 'copy': {
             const from = path.resolve(action.from as string);
             const to = path.resolve(action.to as string);
-            if (from === to || isInsideOrEqual(from, to)) {
-                throw new Error('Cannot move or copy a folder into itself.');
-            }
             if (!(await exists(from))) {
                 throw new Error(`Not found: ${from}`);
             }
-            if (await exists(to)) {
-                throw new Error(`Already exists, not overwritten: ${to}`);
+            const caseOnly = action.op !== 'copy' && (await isCaseOnlyRename(from, to));
+            if (!caseOnly) {
+                // Compare where the paths really lead, so a symlinked folder cannot hide a
+                // destination inside the source.
+                const realFrom = (await resolveThroughParents(from)) ?? from;
+                const realTo = (await resolveThroughParents(to)) ?? to;
+                if (from === to || isInsideOrEqual(from, to) || isInsideOrEqual(realFrom, realTo)) {
+                    throw new Error('Cannot move or copy a folder into itself.');
+                }
+                if (await exists(to)) {
+                    throw new Error(`Already exists, not overwritten: ${to}`);
+                }
             }
             const createdDirs = await mkdirTracked(path.dirname(to));
-            if (action.op === 'copy') {
-                await fs.cp(from, to, {
-                    recursive: true,
-                    errorOnExist: true,
-                    force: false,
-                    preserveTimestamps: true,
-                    verbatimSymlinks: true,
-                });
-            } else {
-                await moveItem(from, to);
+            try {
+                if (action.op === 'copy') {
+                    await fs.cp(from, to, {
+                        recursive: true,
+                        errorOnExist: true,
+                        force: false,
+                        preserveTimestamps: true,
+                        verbatimSymlinks: true,
+                    });
+                } else {
+                    await moveItem(from, to);
+                }
+            } catch (error) {
+                // Remove the folders made for this action; keep a record of any that stay.
+                const removed = await removeCreatedDirs(createdDirs).catch(() => false);
+                throw removed ? error : new ActionFailure(error, createdDirs);
             }
             return { actionId: action.id, op: action.op, from, to, createdDirs };
         }
@@ -388,7 +498,13 @@ export async function applyPlan(
             undoLog.push(await applyAction(action, policy, ops));
             applied++;
         } catch (error) {
-            failed.push({ id: action.id, error: describeError(error) });
+            if (error instanceof ActionFailure) {
+                const outermost = error.leftoverDirs.at(-1);
+                undoLog.push({ actionId: action.id, op: 'mkdir', to: outermost, createdDirs: error.leftoverDirs });
+                failed.push({ id: action.id, error: describeError(error.original) });
+            } else {
+                failed.push({ id: action.id, error: describeError(error) });
+            }
         }
     }
 
@@ -449,7 +565,7 @@ export async function undoPlan(
                     if (!(await exists(to))) {
                         throw new Error(`Not found: ${to}`);
                     }
-                    if (await exists(from)) {
+                    if ((await exists(from)) && !(await isCaseOnlyRename(to, from))) {
                         throw new Error(`Already exists, not overwritten: ${from}`);
                     }
                     await mkdirTracked(path.dirname(from));

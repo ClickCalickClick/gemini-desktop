@@ -173,6 +173,36 @@ describe('promptContext', () => {
             expect(prompt.endsWith('User request:\nsummarise')).toBe(true);
         });
 
+        it('keeps the prompt under the byte limit by cutting the context, also for multi-byte names', () => {
+            const cjkName = '報告書'.repeat(30);
+            const context = Array.from({ length: 2000 }, (_, i) => `- /h/${cjkName}-${i}.pdf  (1 KB)`).join('\n');
+            expect(Buffer.byteLength(context, 'utf8')).toBeGreaterThan(100_000);
+            expect(context.length).toBeLessThan(400_000);
+            const prompt = buildAgentPrompt({
+                prompt: 'sort these ' + '写真'.repeat(100),
+                category: 'files',
+                engine: 'antigravity',
+                context,
+                homeDir: '/h',
+            });
+            expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThanOrEqual(100_000);
+            expect(Buffer.byteLength(prompt, 'utf8')).toBeGreaterThan(90_000);
+            expect(prompt).toContain('(cut short)');
+            expect(prompt.endsWith('写真'.repeat(100))).toBe(true);
+            expect(prompt).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+
+            const small = buildAgentPrompt({
+                prompt: 'q',
+                category: 'documents',
+                engine: 'antigravity',
+                context: '😀'.repeat(100),
+                homeDir: '/h',
+                maxBytes: 300,
+            });
+            expect(Buffer.byteLength(small, 'utf8')).toBeLessThanOrEqual(300);
+            expect(small).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+        });
+
         it('asks file tasks for a plan and forbids changing files', () => {
             const agy = buildAgentPrompt({
                 prompt: 'sort',

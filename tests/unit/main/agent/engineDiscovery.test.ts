@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
     discoverEngine,
     findEngineBinary,
+    findWindowsScriptLauncher,
     getSearchDirectories,
     readBinaryVersion,
 } from '../../../../src/main/agent/engineDiscovery';
@@ -136,6 +137,58 @@ describe('engineDiscovery', () => {
             });
             expect(status.path).toBe(agy);
             expect(status.version).toBe('agy 1.2.3');
+        });
+    });
+
+    describe('discoverEngine with a settings check', () => {
+        it('skips a refused engine and uses the next one', async () => {
+            installFakeCli(layout.bin, 'agy');
+            const gemini = installFakeCli(layout.bin, 'gemini');
+            const status = await discoverEngine('auto', {
+                ...environment(layout.bin),
+                readVersion: async () => undefined,
+                checkEngine: async (engine) => (engine === 'antigravity' ? 'agy settings allow too much' : null),
+            });
+            expect(status).toEqual({ engine: 'gemini-cli', available: true, path: gemini });
+        });
+
+        it("reports the first refused engine's reason when none is usable", async () => {
+            const agy = installFakeCli(layout.bin, 'agy');
+            const status = await discoverEngine('auto', {
+                ...environment(layout.bin),
+                readVersion: async () => '1.0',
+                checkEngine: async () => 'settings allow too much',
+            });
+            expect(status).toEqual({
+                engine: 'antigravity',
+                available: false,
+                path: agy,
+                version: '1.0',
+                error: 'settings allow too much',
+            });
+        });
+    });
+
+    describe('findWindowsScriptLauncher', () => {
+        it('finds a .cmd launcher on Windows only and explains it is not started', async () => {
+            const npmDir = path.join(layout.root, 'npm');
+            fs.mkdirSync(npmDir);
+            fs.writeFileSync(path.join(npmDir, 'gemini.cmd'), '@echo off');
+            const windows = {
+                env: { Path: npmDir },
+                homeDir: layout.home,
+                platform: 'win32' as NodeJS.Platform,
+                extraDirectories: [],
+            };
+            expect(await findWindowsScriptLauncher('gemini-cli', windows)).toContain('gemini.cmd');
+            expect(await findWindowsScriptLauncher('antigravity', windows)).toBeNull();
+            expect(await findWindowsScriptLauncher('gemini-cli', { ...windows, platform: 'linux' })).toBeNull();
+
+            const status = await discoverEngine('gemini-cli', { ...windows, readVersion: async () => undefined });
+            expect(status.available).toBe(false);
+            expect(status.error).toContain('was not found');
+            expect(status.error).toContain('gemini.cmd');
+            expect(status.error).toContain('command shell');
         });
     });
 

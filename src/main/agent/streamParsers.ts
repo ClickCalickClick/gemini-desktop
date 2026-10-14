@@ -8,6 +8,7 @@
  */
 
 import type { AgentEngineId } from '../../shared/types/agent';
+import { isObject, type JsonObject } from './json';
 
 /** Longest line kept in the buffer; longer lines are dropped. */
 export const MAX_LINE_LENGTH = 8 * 1024 * 1024;
@@ -70,7 +71,7 @@ export type ParsedResultStatus = 'SUCCESS' | 'ERROR' | 'CANCELED' | 'INTERRUPTED
 
 /** Engine-neutral events produced by the parsers. */
 export type ParsedAgentEvent =
-    | { kind: 'init'; conversationId?: string }
+    | { kind: 'init'; conversationId?: string; permissionMode?: string }
     | { kind: 'text'; delta: string }
     | { kind: 'tool'; name: string; summary: string; state: 'ACTIVE' | 'DONE'; error?: string }
     | { kind: 'warning'; message: string }
@@ -82,12 +83,6 @@ export type ParsedAgentEvent =
           conversationId?: string;
           structuredOutput?: unknown;
       };
-
-type JsonObject = Record<string, unknown>;
-
-function isObject(value: unknown): value is JsonObject {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function str(value: unknown): string | undefined {
     return typeof value === 'string' ? value : undefined;
@@ -191,7 +186,14 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
         case 'init': {
             const init = isObject(event.init) ? event.init : {};
             const conversationId = nonEmpty(event.conversation_id) ?? nonEmpty(init.conversation_id);
-            return [{ kind: 'init', ...(conversationId ? { conversationId } : {}) }];
+            const permissionMode = nonEmpty(init.permission_mode);
+            return [
+                {
+                    kind: 'init',
+                    ...(conversationId ? { conversationId } : {}),
+                    ...(permissionMode ? { permissionMode } : {}),
+                },
+            ];
         }
         case 'step_update': {
             const step = event.step_update;
