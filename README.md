@@ -124,12 +124,14 @@ For full details, read the [Transparency Report](docs/TRANSPARENCY.md), [Privacy
 
 > 💡 You can customize hotkeys in Settings.
 
+On Linux with Wayland, GNOME and KDE Plasma ask once whether to allow the global shortcuts. From then on the desktop's own settings decide their keys.
+
 ## 🗺️ What's Next
 
 The fork's plan, in order, is in [TODO.md](TODO.md):
 
 1. Linux installers built and tested by GitHub Actions.
-2. Bring back the features that are off on CachyOS and macOS, such as global hotkeys on Linux kernel 7 and text prediction in installed builds.
+2. Bring back the features that are off on CachyOS and macOS, such as text prediction in installed builds.
 3. macOS installers built by GitHub Actions.
 4. Simplify the code and tests while keeping every feature.
 

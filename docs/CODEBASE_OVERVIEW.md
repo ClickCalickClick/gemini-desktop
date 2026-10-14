@@ -65,7 +65,7 @@ Every feature below must keep working through the cleanup. The status is for pac
 | Smart Enter and scroll-to-bottom button                                                         | OK                                                | OK                                                                         | OK               | inline script in `mainWindow.ts`                                |
 | Linux sandbox fallback (`--no-sandbox` when user namespaces and SUID sandbox are unavailable)   | n/a                                               | OK                                                                         | n/a              | `sandboxDetector.ts`, `sandboxInit.ts`                          |
 
-Since then, the CachyOS test found that Gemini's own Sign in button cannot sign in on any platform (B14), and neither can a tab that a server redirect sends to Google's sign-in page while it loads. L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) opens both in the sign-in window.
+Since then, the CachyOS test found that Gemini's own Sign in button cannot sign in on any platform (B14), and neither can a tab that a server redirect sends to Google's sign-in page while it loads. L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) opens both in the sign-in window. P1 (same PR) turns the three global hotkeys back on for Wayland on kernel 7+ (B1).
 
 Persisted state lives in the user-data folder: `user-preferences.json`, `tabs-state.json`, `update-settings.json`, `notification-settings.json` and `models/*.gguf`.
 Google cookies live in Chromium's default session; there is no `persist:` partition.
@@ -128,6 +128,8 @@ Local packaging results (Linux x64 container, 2026-10-13):
 | pacman   | Built, about 120 MB, once a homepage was passed in and `bsdtar` was installed.                                     |
 | All      | The native `usocket` rebuild needs to download Electron headers; GitHub runners can, the test container could not. |
 
+Since then, P1 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) leaves `usocket` out of the package and turns off electron-builder's native module rebuild, so packaging no longer downloads Electron headers.
+
 ### 5.3 CI and release (GitHub Actions)
 
 | Workflow             | Lines | Trigger                       | What it does                                                                                           |
@@ -180,7 +182,7 @@ npm run dist:linux
 # To build only the pacman package: npm run dist:linux -- -c.linux.target=pacman
 ```
 
-macOS on Apple Silicon (needs the Xcode command line tools for the native `usocket` build):
+macOS on Apple Silicon (`npm ci` tries to build the optional `usocket` module with the Xcode command line tools and carries on without it; the app never uses it):
 
 ```bash
 npm ci
@@ -197,7 +199,7 @@ Upstream CI cross-built the Intel version on Apple Silicon. That will stop worki
 - **Wayland works natively.** Electron 38.2 and later use native Wayland by default, and Plasma's tray supports Electron's StatusNotifierItem.
 - **Kernel 7.x turns off global hotkeys and text prediction** (B1). Arch's `core/linux` was 7.2.9 on 2026-10-13.
 
-Since then, L15 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) builds the AppImage with electron-builder's type2 runtime (toolset `1.0.2`), which needs `fusermount3` from `fuse3` instead of `fuse2`. GNOME and KDE Plasma already install `fuse3` through `xdg-desktop-portal`.
+Since then, L15 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) builds the AppImage with electron-builder's type2 runtime (toolset `1.0.2`), which needs `fusermount3` from `fuse3` instead of `fuse2`. GNOME and KDE Plasma already install `fuse3` through `xdg-desktop-portal`. P1 (same PR) brings the global hotkeys back on kernel 7; text prediction waits on P3.
 The owner's CachyOS machine runs GNOME on Wayland, not KDE Plasma. GNOME shows tray icons only through the AppIndicator extension, which is enabled there.
 
 ## 6. Tests and current health
@@ -232,7 +234,7 @@ Since then, [TEST_COVERAGE.md](TEST_COVERAGE.md) maps every feature to the tests
 
 IDs are referenced from [TODO.md](../TODO.md).
 
-Since then, the CachyOS test found B14 and B15. L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) fixes B14 and the first part of B13: the native "Sign in" menu item reloads after the window closes. L20 (same PR) fixes B15.
+Since then, the CachyOS test found B14 and B15. L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) fixes B14 and the first part of B13: the native "Sign in" menu item reloads after the window closes. L20 (same PR) fixes B15. P1 (same PR) fixes B1 for the global hotkeys: dbus-next connects through Node's `net` module, `usocket` is left out of the package, and the kernel guard covers only node-llama-cpp.
 
 | ID  | Severity | Issue                                                                                                                                                                                                                                                                                                                                                        | Evidence                                                                               |
 | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |

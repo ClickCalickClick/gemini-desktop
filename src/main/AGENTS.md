@@ -24,6 +24,7 @@ For architecture details, see `docs/ARCHITECTURE.md` (Manager Architecture secti
 Handlers extend `BaseIpcHandler` and follow lifecycle: `register()` → optional `initialize()` → `unregister()`.
 Use `getWindowFromEvent()` for safe sender window lookup, `broadcastToAllWindows()` for sync, and `handleError()` for consistent error logging.
 See `src/main/managers/ipc/BaseIpcHandler.ts` and `docs/ARCHITECTURE.md` (IPC Handler Pattern section).
+A manager announces a change by emitting an event on `windowManager`, for example `platform-hotkey-status-changed` from `HotkeyManager`; the IPC handler subscribes with a bound listener in `register()`, broadcasts it to all windows and removes the listener in `unregister()` (see `HotkeyIpcHandler.ts` and `ZoomIpcHandler.ts`).
 
 ## Canonical Examples
 
@@ -37,6 +38,7 @@ See `src/main/managers/ipc/BaseIpcHandler.ts` and `docs/ARCHITECTURE.md` (IPC Ha
 - Using global mutable state for managers instead of DI via `ApplicationContext`
 - Forgetting `unregister()` cleanup for IPC handlers
 - Sending to destroyed windows without checking `isDestroyed()` first
+- Connecting dbus-next with its default address: for `unix:path=` and `unix:abstract=` addresses it loads the native `usocket` module, which crashes the app on Linux kernel 7+ (B1). Use `connectSessionBus()` in `utils/dbusFallback.ts`, which converts the address for Node's `net` module; the package leaves `usocket` out
 - Adding `process.on('SIGTERM' | 'SIGINT' | 'SIGHUP')` listeners while the app starts on Linux: Node.js installs a signal's handler only for its first listener, so they stop `utils/terminationSignals.ts` from taking these signals over from Electron once the app is ready (B15)
 
 ## When You Change Files Here
