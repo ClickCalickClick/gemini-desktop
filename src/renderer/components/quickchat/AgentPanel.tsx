@@ -1,20 +1,22 @@
 /**
  * Agent results panel under Quick Chat's input: progress and Stop, tool steps,
  * the streamed answer (Markdown, rendered safely), a file plan with Apply, Cancel
- * and Undo, errors with a setup hint, and the follow-up actions.
+ * and Undo, the approval card for commands the CLI blocked, errors with a setup
+ * hint, and the follow-up actions.
  *
  * @module AgentPanel
  */
 
-import React, { useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
 
 import { renderAgentMarkdown, tildify } from './agentMarkdown';
-import { isRunActive, needsSetupHint } from './agentRunState';
+import { isEmptyAnswer, isRunActive, needsSetupHint } from './agentRunState';
 import {
     CheckIcon,
     CopyIcon,
     ErrorIcon,
     FolderPlusIcon,
+    LockIcon,
     MoveIcon,
     RenameIcon,
     StopIcon,
@@ -23,7 +25,14 @@ import {
 } from './Icons';
 import { QUICK_CHAT_TEST_IDS } from '../../utils/testIds';
 import type { AgentRunState, ToolStep } from './agentRunState';
-import type { AgentEngineId, AgentRunStatus, FileAction, FileActionResult } from '../../../shared/types/agent';
+import type {
+    AgentEngineId,
+    AgentRunStatus,
+    BlockedCommand,
+    CommandApprovalDecision,
+    FileAction,
+    FileActionResult,
+} from '../../../shared/types/agent';
 
 const ENGINE_NAMES: Record<AgentEngineId, string> = {
     antigravity: 'Antigravity CLI',
@@ -90,23 +99,136 @@ function PlanActionRow({ action }: { action: FileAction }): React.ReactElement {
 
 function ToolStepRow({ step }: { step: ToolStep }): React.ReactElement {
     const failed = Boolean(step.error);
-    const stateLabel = failed ? 'failed' : step.state === 'ACTIVE' ? 'running' : 'done';
+    const blocked = !failed && Boolean(step.blocked);
+    const stateLabel = failed ? 'failed' : blocked ? 'blocked' : step.state === 'ACTIVE' ? 'running' : 'done';
+    const modifier = failed ? 'error' : blocked ? 'blocked' : step.state.toLowerCase();
     return (
         <li
-            className={`qc-tools__step qc-tools__step--${failed ? 'error' : step.state.toLowerCase()}`}
+            className={`qc-tools__step qc-tools__step--${modifier}`}
             data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_TOOL_STEP}
             data-state={stateLabel}
             aria-label={`${step.name} ${stateLabel}: ${step.summary}`}
         >
             <span className="qc-tools__icon" aria-hidden="true">
-                {failed ? <ErrorIcon /> : step.state === 'ACTIVE' ? <ToolIcon /> : <CheckIcon />}
+                {failed ? (
+                    <ErrorIcon />
+                ) : blocked ? (
+                    <LockIcon />
+                ) : step.state === 'ACTIVE' ? (
+                    <ToolIcon />
+                ) : (
+                    <CheckIcon />
+                )}
             </span>
             <span className="qc-tools__name">{step.name}</span>
             <span className="qc-tools__summary" title={step.summary}>
                 {step.summary}
             </span>
             {step.error && <span className="qc-tools__error">{step.error}</span>}
+            {blocked && <span className="qc-tools__blocked">Blocked</span>}
         </li>
+    );
+}
+
+/** The prefixes of the lasting rules "Always allow" would add, or null when any command can only be allowed once. */
+function lastingPrefixes(blocked: BlockedCommand[]): { rules: string[]; prefixes: string[] } | null {
+    const rules: string[] = [];
+    for (const entry of blocked) {
+        if (!entry.lastingRule) {
+            return null;
+        }
+        if (!rules.includes(entry.lastingRule)) {
+            rules.push(entry.lastingRule);
+        }
+    }
+    return { rules, prefixes: rules.map((rule) => rule.replace(/^command\((.*)\)$/s, '$1')) };
+}
+
+interface ApprovalCardProps {
+    blocked: BlockedCommand[];
+    answered: boolean;
+    busy: boolean;
+    error: string | null;
+    onApprove: (decision: CommandApprovalDecision) => void;
+    onDeny: () => void;
+}
+
+/** "The agent needs to run:" with Allow once, Always allow and Don't allow. */
+function ApprovalCard({ blocked, answered, busy, error, onApprove, onDeny }: ApprovalCardProps): React.ReactElement {
+    const titleId = useId();
+    const lasting = lastingPrefixes(blocked);
+    const one = blocked.length === 1;
+    const alwaysTitle = lasting
+        ? `Adds ${lasting.rules.join(' and ')} to Antigravity CLI's settings, so the agent can run ${
+              lasting.prefixes.length === 1 ? 'this command' : 'these commands'
+          } without asking. Remove it in Options → Quick Chat.`
+        : '';
+    return (
+        <div
+            className="qc-approval"
+            role="group"
+            aria-labelledby={titleId}
+            data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVAL}
+        >
+            <p className="qc-approval__title" id={titleId}>
+                {answered ? 'The agent was not allowed to run:' : 'The agent needs to run:'}
+            </p>
+            <ul className="qc-approval__commands" aria-label={one ? 'Blocked command' : 'Blocked commands'}>
+                {blocked.map((entry) => (
+                    <li key={entry.command}>
+                        <code className="qc-approval__command">{entry.command}</code>
+                    </li>
+                ))}
+            </ul>
+            <p className="qc-approval__note">
+                {lasting
+                    ? "Commands run inside the agent's sandbox, which can only change its own scratch folder."
+                    : `Allow once runs ${one ? 'it' : 'them'} a single time, inside the agent's sandbox. ${
+                          one ? 'This command' : 'One of these commands'
+                      } can change things or uses shell syntax, so it is not offered for good.`}
+            </p>
+            <div className="qc-approval__buttons">
+                <button
+                    type="button"
+                    className="qc-button qc-button--primary"
+                    onClick={() => onApprove('once')}
+                    disabled={busy}
+                    aria-label={`Allow ${one ? 'this command' : 'these commands'} once and let the agent finish`}
+                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_ONCE}
+                >
+                    {busy ? 'Allowing…' : 'Allow once'}
+                </button>
+                {lasting && (
+                    <button
+                        type="button"
+                        className="qc-button"
+                        onClick={() => onApprove('always')}
+                        disabled={busy}
+                        title={alwaysTitle}
+                        aria-label={`Always allow ${lasting.prefixes.join(', ')}. ${alwaysTitle}`}
+                        data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_ALWAYS}
+                    >
+                        <span>Always allow</span>
+                        <code className="qc-approval__prefix">{lasting.prefixes.join(', ')}</code>
+                    </button>
+                )}
+                <button
+                    type="button"
+                    className="qc-button qc-button--quiet"
+                    onClick={onDeny}
+                    disabled={busy}
+                    aria-label="Don't allow (Escape)"
+                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_APPROVE_DENY}
+                >
+                    Don&apos;t allow
+                </button>
+            </div>
+            {error && (
+                <p className="qc-agent-error" role="alert">
+                    {error}
+                </p>
+            )}
+        </div>
     );
 }
 
@@ -141,6 +263,27 @@ export interface AgentPanelProps {
     onUndoPlan: () => void;
     onNew: () => void;
     onContinueInGemini: () => void;
+    onApproveCommands: (decision: CommandApprovalDecision) => void;
+    onDenyCommands: () => void;
+}
+
+/** What the panel says about a run that ended without an answer, or null. */
+function emptyAnswerMessage(state: AgentRunState): string | null {
+    if (state.approval === 'pending' || state.approval === 'approving') {
+        return null;
+    }
+    if (state.approval === 'denied') {
+        return 'The agent could not finish without running these commands.';
+    }
+    if (!isEmptyAnswer(state)) {
+        return null;
+    }
+    if (state.blocked.length > 0) {
+        return 'The agent could not finish because the commands it needed were blocked.';
+    }
+    return state.deniedActions.length > 0
+        ? `The agent gave no answer. The CLI refused something it needed (${state.deniedActions.join(', ')}).`
+        : 'The agent gave no answer.';
 }
 
 export function AgentPanel({
@@ -151,6 +294,8 @@ export function AgentPanel({
     onUndoPlan,
     onNew,
     onContinueInGemini,
+    onApproveCommands,
+    onDenyCommands,
 }: AgentPanelProps): React.ReactElement {
     const active = isRunActive(state);
     const html = useMemo(() => renderAgentMarkdown(state.text), [state.text]);
@@ -160,13 +305,19 @@ export function AgentPanel({
             ? (state.error ?? STATUS_MESSAGES[state.status] ?? 'The agent failed.')
             : null;
     const showHint = state.phase === 'done' && needsSetupHint(state.error);
+    const showApproval =
+        state.phase === 'done' && state.canApprove && (state.approval === 'pending' || state.approval === 'approving');
+    const emptyMessage = state.phase === 'done' && !statusMessage ? emptyAnswerMessage(state) : null;
     // One short announcement per state change for screen readers, instead of a live region on the streaming text.
     const announcement = active
         ? state.phase === 'stopping'
             ? 'Stopping the agent'
             : 'The agent is working'
         : state.phase === 'done'
-          ? (statusMessage ?? (state.plan ? 'File plan ready' : 'Answer ready'))
+          ? (statusMessage ??
+            (showApproval
+                ? 'The agent needs your approval to run a command'
+                : (emptyMessage ?? (state.plan ? 'File plan ready' : 'Answer ready'))))
           : '';
     const planBusy = state.planState === 'applying' || state.planState === 'undoing';
 
@@ -308,6 +459,26 @@ export function AgentPanel({
                             </p>
                         )}
                     </div>
+                )}
+
+                {showApproval && (
+                    <ApprovalCard
+                        blocked={state.blocked}
+                        answered={Boolean(state.text.trim())}
+                        busy={state.approval === 'approving'}
+                        error={state.approvalError}
+                        onApprove={onApproveCommands}
+                        onDeny={onDenyCommands}
+                    />
+                )}
+
+                {emptyMessage && (
+                    <p
+                        className="qc-agent-error qc-agent-error--quiet"
+                        data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_EMPTY}
+                    >
+                        {emptyMessage}
+                    </p>
                 )}
 
                 {statusMessage && (

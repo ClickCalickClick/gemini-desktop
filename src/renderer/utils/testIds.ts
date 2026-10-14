@@ -107,6 +107,11 @@ export const QUICK_CHAT_TEST_IDS = {
     QUICK_CHAT_AGENT_SETUP_HINT: 'quick-chat-agent-setup-hint',
     QUICK_CHAT_AGENT_NEW: 'quick-chat-agent-new',
     QUICK_CHAT_AGENT_CONTINUE_WEB: 'quick-chat-agent-continue-web',
+    QUICK_CHAT_AGENT_APPROVAL: 'quick-chat-agent-approval',
+    QUICK_CHAT_AGENT_APPROVE_ONCE: 'quick-chat-agent-approve-once',
+    QUICK_CHAT_AGENT_APPROVE_ALWAYS: 'quick-chat-agent-approve-always',
+    QUICK_CHAT_AGENT_APPROVE_DENY: 'quick-chat-agent-approve-deny',
+    QUICK_CHAT_AGENT_EMPTY: 'quick-chat-agent-empty',
 } as const;
 
 export const QUICK_CHAT_SETTINGS_TEST_IDS = {
@@ -116,6 +121,12 @@ export const QUICK_CHAT_SETTINGS_TEST_IDS = {
     QUICK_CHAT_SETTINGS_MODEL: 'quick-chat-settings-model',
     QUICK_CHAT_SETTINGS_STATUS: 'quick-chat-settings-status',
     QUICK_CHAT_SETTINGS_RECHECK: 'quick-chat-settings-recheck',
+    QUICK_CHAT_SETTINGS_MODEL_REFRESH: 'quick-chat-settings-model-refresh',
+    QUICK_CHAT_SETTINGS_READ_ONLY: 'quick-chat-settings-read-only',
+    QUICK_CHAT_SETTINGS_READ_ONLY_LIST: 'quick-chat-settings-read-only-list',
+    QUICK_CHAT_SETTINGS_ALLOWED: 'quick-chat-settings-allowed',
+    QUICK_CHAT_SETTINGS_ALLOWED_REMOVE: 'quick-chat-settings-allowed-remove',
+    QUICK_CHAT_SETTINGS_PERMISSIONS_ERROR: 'quick-chat-settings-permissions-error',
 } as const;
 
 export const TAB_TEST_IDS = {

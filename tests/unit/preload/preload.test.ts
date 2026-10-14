@@ -268,6 +268,27 @@ describe('Preload Script', () => {
         });
     });
 
+    describe('Agent command approval, rules and models API', () => {
+        it('invokes the agent channels with their arguments', async () => {
+            (ipcRendererMock.invoke as any).mockResolvedValue({});
+            await exposedAPI.approveAgentCommands({ runId: 'r1', decision: 'once' });
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('agent:approve-commands', {
+                runId: 'r1',
+                decision: 'once',
+            });
+            await exposedAPI.getAgentPermissions();
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('agent:permissions-get');
+            await exposedAPI.setReadOnlyAgentCommands(true);
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('agent:read-only-commands-set', true);
+            await exposedAPI.removeAllowedAgentRule('command(df)');
+            expect(ipcRendererMock.invoke).toHaveBeenCalledWith('agent:allowed-rule-remove', 'command(df)');
+            await exposedAPI.listAgentModels();
+            expect(ipcRendererMock.invoke).toHaveBeenLastCalledWith('agent:models-list', false);
+            await exposedAPI.listAgentModels(true);
+            expect(ipcRendererMock.invoke).toHaveBeenLastCalledWith('agent:models-list', true);
+        });
+    });
+
     describe('Platform Hotkey Status API', () => {
         it('getPlatformHotkeyStatus should invoke IPC handler', async () => {
             const mockStatus = {

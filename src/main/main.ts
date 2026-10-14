@@ -197,6 +197,8 @@ function initializeManagers(): void {
 
     logger.debug('initializeManagers() - creating AgentManager');
     const agentManager = new AgentManager();
+    // Remove "Allow once" command rules a previous session could not remove.
+    agentManager.initialize();
     logger.debug('initializeManagers() - AgentManager created');
 
     logger.debug('initializeManagers() - creating IpcManager');

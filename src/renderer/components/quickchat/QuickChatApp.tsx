@@ -9,7 +9,7 @@
  *
  * Keys: Enter sends to the shown route, Ctrl+Enter (Cmd+Enter on macOS) to the
  * other one, Tab accepts a text prediction, Escape dismisses a prediction, stops
- * a running agent, or hides Quick Chat.
+ * a running agent, declines blocked commands waiting for approval, or hides Quick Chat.
  *
  * @module QuickChatApp
  */
@@ -27,6 +27,7 @@ import type {
     AgentEngineStatus,
     AgentRunEvent,
     AgentSettings,
+    CommandApprovalDecision,
     QuickChatRoute,
     QuickChatRoutingMode,
     RouteDecision,
@@ -255,7 +256,11 @@ function QuickChatApp(): React.ReactElement {
             wasHidden = false;
             const state = runStateRef.current;
             const planWaiting =
-                state.planState === 'pending' || state.planState === 'applying' || state.planState === 'undoing';
+                state.planState === 'pending' ||
+                state.planState === 'applying' ||
+                state.planState === 'undoing' ||
+                state.approval === 'pending' ||
+                state.approval === 'approving';
             if (state.phase === 'done' && !planWaiting && !inputValueRef.current.trim()) {
                 resetPanelRef.current();
             }
@@ -339,6 +344,29 @@ function QuickChatApp(): React.ReactElement {
         [clearInput, panelVisible, resetPanel]
     );
 
+    /** Follow a run whose id just arrived: replay the events buffered while it started. */
+    const attachRun = useCallback((runId: string, token: number) => {
+        const api = window.electronAPI;
+        if (token !== startTokenRef.current) {
+            // The panel was reset while the run was starting.
+            api?.cancelAgent(runId);
+            return;
+        }
+        runIdRef.current = runId;
+        startingRef.current = false;
+        dispatch({ type: 'assigned', runId });
+        const buffered = bufferedEventsRef.current;
+        bufferedEventsRef.current = [];
+        for (const event of buffered) {
+            if (event.runId === runId) {
+                dispatch({ type: 'event', event });
+            }
+        }
+        if (stopRequestedRef.current) {
+            api?.cancelAgent(runId);
+        }
+    }, []);
+
     const sendToAgent = useCallback(
         async (target: RouteDecision) => {
             const api = window.electronAPI;
@@ -372,24 +400,7 @@ function QuickChatApp(): React.ReactElement {
                     category,
                     conversationId: run.conversationId ?? undefined,
                 });
-                if (token !== startTokenRef.current) {
-                    // The panel was reset while the run was starting.
-                    api.cancelAgent(runId);
-                    return;
-                }
-                runIdRef.current = runId;
-                startingRef.current = false;
-                dispatch({ type: 'assigned', runId });
-                const buffered = bufferedEventsRef.current;
-                bufferedEventsRef.current = [];
-                for (const event of buffered) {
-                    if (event.runId === runId) {
-                        dispatch({ type: 'event', event });
-                    }
-                }
-                if (stopRequestedRef.current) {
-                    api.cancelAgent(runId);
-                }
+                attachRun(runId, token);
             } catch (error) {
                 if (token !== startTokenRef.current) {
                     return;
@@ -399,8 +410,66 @@ function QuickChatApp(): React.ReactElement {
                 dispatch({ type: 'startFailed', error: errorMessage(error) });
             }
         },
-        [agentStatus, clearInput, run.conversationId, runActive]
+        [agentStatus, attachRun, clearInput, run.conversationId, runActive]
     );
+
+    /**
+     * Approve the blocked commands: the main process writes the allow rules and resumes the
+     * conversation, and the resumed run streams into the panel like a follow-up.
+     */
+    const handleApproveCommands = useCallback(
+        async (decision: CommandApprovalDecision) => {
+            const api = window.electronAPI;
+            const approvedRunId = run.runId;
+            if (
+                !api ||
+                !approvedRunId ||
+                run.approval !== 'pending' ||
+                typeof api.approveAgentCommands !== 'function'
+            ) {
+                return;
+            }
+            const token = startTokenRef.current + 1;
+            startTokenRef.current = token;
+            // Events of the resumed run may arrive before its runId: buffer them.
+            startingRef.current = true;
+            bufferedEventsRef.current = [];
+            stopRequestedRef.current = false;
+            dispatch({ type: 'approvalStarted' });
+            try {
+                const result = await api.approveAgentCommands({ runId: approvedRunId, decision });
+                if (token !== startTokenRef.current) {
+                    if (result.runId) {
+                        api.cancelAgent(result.runId);
+                    }
+                    return;
+                }
+                if (!result.runId) {
+                    startingRef.current = false;
+                    bufferedEventsRef.current = [];
+                    dispatch({ type: 'approvalFailed', error: result.error ?? 'Could not approve the commands.' });
+                    return;
+                }
+                runIdRef.current = null;
+                dispatch({ type: 'start', prompt: run.prompt, category: run.category });
+                attachRun(result.runId, token);
+            } catch (error) {
+                if (token !== startTokenRef.current) {
+                    return;
+                }
+                startingRef.current = false;
+                bufferedEventsRef.current = [];
+                logger.error('Failed to approve agent commands:', error);
+                dispatch({ type: 'approvalFailed', error: errorMessage(error) });
+            }
+        },
+        [attachRun, run.approval, run.category, run.prompt, run.runId]
+    );
+
+    const handleDenyCommands = useCallback(() => {
+        dispatch({ type: 'approvalDenied' });
+        inputRef.current?.focus();
+    }, []);
 
     const send = useCallback(
         (target: RouteDecision) => {
@@ -520,6 +589,9 @@ function QuickChatApp(): React.ReactElement {
                 resetPanel();
             } else if (isRunActive(run)) {
                 stopRun();
+            } else if (run.approval === 'pending') {
+                // Escape declines blocked commands before it hides Quick Chat.
+                handleDenyCommands();
             } else {
                 window.electronAPI?.cancelQuickChat();
                 if (panelVisible) {
@@ -527,7 +599,7 @@ function QuickChatApp(): React.ReactElement {
                 }
             }
         },
-        [panelVisible, prediction, resetPanel, run, stopRun]
+        [handleDenyCommands, panelVisible, prediction, resetPanel, run, stopRun]
     );
 
     /**
@@ -643,6 +715,8 @@ function QuickChatApp(): React.ReactElement {
                     onUndoPlan={handleUndoPlan}
                     onNew={handleNew}
                     onContinueInGemini={handleContinueInGemini}
+                    onApproveCommands={(decision) => void handleApproveCommands(decision)}
+                    onDenyCommands={handleDenyCommands}
                 />
             )}
         </div>

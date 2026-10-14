@@ -3,8 +3,12 @@
  * temporary bin folder. The prompt picks its behaviour with `MODE:<name>`.
  *
  * Modes: text (default), partial, plan, badplan, auth, fail, hang, turbo (reports a permission
- * mode that runs tools without asking), noresult, apikey. It writes its arguments, working
- * directory, the workspace's entries and its input copies to `$FAKE_ARGS_FILE` when set.
+ * mode that runs tools without asking), noresult, apikey, blocked (a command headless mode
+ * refused, as agy 1.3.5 reports it; the command is `$FAKE_BLOCKED_COMMAND` or `df -h`). It
+ * writes its arguments, working directory, the workspace's entries, its input copies and
+ * the allow rules in `$FAKE_HOME/.gemini/antigravity-cli/settings.json` to `$FAKE_ARGS_FILE`
+ * when set. `agy models` and `agy -p /model` print a model list and the default model
+ * (`$FAKE_MODELS_HANG` makes them hang).
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -30,10 +34,32 @@ if (process.env.FAKE_ARGS_FILE) {
             return [];
         }
     };
+    const readAllow = () => {
+        try {
+            const file = path.join(process.env.FAKE_HOME || '/nonexistent', '.gemini', 'antigravity-cli', 'settings.json');
+            return JSON.parse(fs.readFileSync(file, 'utf8')).permissions.allow;
+        } catch {
+            return null;
+        }
+    };
     fs.writeFileSync(
         process.env.FAKE_ARGS_FILE,
-        JSON.stringify({ args, cwd: process.cwd(), files: fs.readdirSync(process.cwd()).sort(), inputs: listInputs() })
+        JSON.stringify({ args, cwd: process.cwd(), files: fs.readdirSync(process.cwd()).sort(), inputs: listInputs(), allow: readAllow() })
     );
+}
+if (args[0] === 'models' || (args[0] === '-p' && args[1] === '/model' && args.length === 2)) {
+    if (process.env.FAKE_MODELS_HANG) {
+        setInterval(() => {}, 1000);
+        return;
+    }
+    if (args[0] === 'models') {
+        process.stdout.write('Fetching available models...\n');
+        process.stdout.write('gemini-3.8-flash-high\tGemini 3.8 Flash (High)\n');
+        process.stdout.write('claude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\n');
+    } else {
+        process.stdout.write('gemini-3.8-flash-high\tGemini 3.8 Flash (High)\n');
+    }
+    process.exit(0);
 }
 const prompt = args[args.indexOf('-p') + 1] || '';
 const mode = (prompt.match(/MODE:(\w+)/) || [])[1] || 'text';
@@ -105,6 +131,15 @@ if (mode === 'partial') {
 }
 if (mode === 'plan' || mode === 'badplan') {
     out({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response: JSON.stringify(plan), structured_output: mode === 'plan' ? plan : { nope: true } } });
+    process.exit(0);
+}
+if (mode === 'blocked') {
+    const command = process.env.FAKE_BLOCKED_COMMAND || 'df -h';
+    const tool = (state) => ({ event: 'step_update', step_update: { conversation_id: 'c1', step_index: 2, state, step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: command } } } });
+    out(tool('ACTIVE'));
+    out(tool('DONE'));
+    process.stderr.write('jetski: no output produced - a tool required the "command" permission that headless mode cannot prompt for, so it was auto-denied.\n');
+    out({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response: '', duration_seconds: 4.4, num_turns: 1, usage: {}, denied_actions: [{ action: 'command', display_name: 'RunCommand' }] } });
     process.exit(0);
 }
 if (mode === 'noresult') {

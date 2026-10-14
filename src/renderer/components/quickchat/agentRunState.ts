@@ -12,6 +12,7 @@ import type {
     AgentRunEvent,
     AgentRunStatus,
     AgentTaskCategory,
+    BlockedCommand,
     FileActionPlan,
     FileActionResult,
 } from '../../../shared/types/agent';
@@ -22,7 +23,12 @@ export interface ToolStep {
     summary: string;
     state: 'ACTIVE' | 'DONE';
     error?: string;
+    /** The CLI refused to run this command (headless mode could not ask). */
+    blocked?: boolean;
 }
+
+/** The approval card for blocked commands: waiting, sending the decision, or declined. */
+export type ApprovalState = 'pending' | 'approving' | 'denied';
 
 export type AgentRunPhase = 'idle' | 'starting' | 'running' | 'stopping' | 'done';
 
@@ -48,6 +54,14 @@ export interface AgentRunState {
     /** Conversation to continue with the next agent prompt. */
     conversationId: string | null;
     nextToolKey: number;
+    /** Commands the CLI refused to run in this turn. */
+    blocked: BlockedCommand[];
+    /** Actions the CLI reported as denied (`command`, ...). */
+    deniedActions: string[];
+    /** True when the blocked commands can be approved and the run resumed. */
+    canApprove: boolean;
+    approval: ApprovalState | null;
+    approvalError: string | null;
 }
 
 export type AgentRunAction =
@@ -64,6 +78,9 @@ export type AgentRunAction =
     | { type: 'planUndoing' }
     | { type: 'planUndone'; result: FileActionResult }
     | { type: 'planFailed'; error: string }
+    | { type: 'approvalStarted' }
+    | { type: 'approvalFailed'; error: string }
+    | { type: 'approvalDenied' }
     | { type: 'reset' };
 
 export const INITIAL_AGENT_RUN_STATE: AgentRunState = {
@@ -83,11 +100,21 @@ export const INITIAL_AGENT_RUN_STATE: AgentRunState = {
     error: null,
     conversationId: null,
     nextToolKey: 0,
+    blocked: [],
+    deniedActions: [],
+    canApprove: false,
+    approval: null,
+    approvalError: null,
 };
 
 /** True while a run is starting, running or stopping. */
 export function isRunActive(state: AgentRunState): boolean {
     return state.phase === 'starting' || state.phase === 'running' || state.phase === 'stopping';
+}
+
+/** True when a successful run ended without an answer or a plan. */
+export function isEmptyAnswer(state: AgentRunState): boolean {
+    return state.phase === 'done' && state.status === 'SUCCESS' && !state.text.trim() && !state.plan;
 }
 
 /** Whether an error means no agent CLI is installed or it is not signed in. */
@@ -149,7 +176,11 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 undoResult: null,
                 planError: null,
             };
-        case 'done':
+        case 'done': {
+            const blocked = event.blocked ?? [];
+            const isBlocked = (step: ToolStep): boolean =>
+                !step.error && blocked.some((entry) => entry.tool === step.name && entry.summary === step.summary);
+            const canApprove = Boolean(event.canApprove) && blocked.length > 0;
             return {
                 ...state,
                 phase: 'done',
@@ -158,8 +189,17 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 // For file runs the response is the plan summary, which the plan box already shows.
                 text: state.text || (state.plan ? '' : event.response),
                 conversationId: event.conversationId ?? state.conversationId,
-                tools: state.tools.map((step) => (step.state === 'ACTIVE' ? { ...step, state: 'DONE' } : step)),
+                tools: state.tools.map((step) => {
+                    const finished: ToolStep = step.state === 'ACTIVE' ? { ...step, state: 'DONE' } : step;
+                    return isBlocked(finished) ? { ...finished, blocked: true } : finished;
+                }),
+                blocked,
+                deniedActions: event.deniedActions ?? [],
+                canApprove,
+                approval: canApprove ? 'pending' : null,
+                approvalError: null,
             };
+        }
         default:
             return state;
     }
@@ -211,6 +251,12 @@ export function agentRunReducer(state: AgentRunState, action: AgentRunAction): A
                 planState: state.planState === 'undoing' ? 'applied' : 'pending',
                 planError: action.error,
             };
+        case 'approvalStarted':
+            return state.approval === 'pending' ? { ...state, approval: 'approving', approvalError: null } : state;
+        case 'approvalFailed':
+            return state.approval ? { ...state, approval: 'pending', approvalError: action.error } : state;
+        case 'approvalDenied':
+            return state.approval === 'pending' ? { ...state, approval: 'denied', approvalError: null } : state;
         case 'reset':
             return INITIAL_AGENT_RUN_STATE;
         default:

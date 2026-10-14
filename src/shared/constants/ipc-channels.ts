@@ -55,6 +55,11 @@ export const IPC_CHANNELS = {
     AGENT_EVENT: 'agent:event',
     AGENT_APPLY_PLAN: 'agent:apply-plan',
     AGENT_UNDO_LAST: 'agent:undo-last',
+    AGENT_APPROVE_COMMANDS: 'agent:approve-commands',
+    AGENT_PERMISSIONS_GET: 'agent:permissions-get',
+    AGENT_READ_ONLY_COMMANDS_SET: 'agent:read-only-commands-set',
+    AGENT_ALLOWED_RULE_REMOVE: 'agent:allowed-rule-remove',
+    AGENT_MODELS_LIST: 'agent:models-list',
 
     // Gemini Iframe Navigation (for Quick Chat integration)
     GEMINI_NAVIGATE: 'gemini:navigate',

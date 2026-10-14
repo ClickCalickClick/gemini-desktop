@@ -88,6 +88,67 @@ export interface FileActionResult {
     undoAvailable: boolean;
 }
 
+/**
+ * A terminal command the CLI refused to run because headless mode cannot ask for
+ * approval (Antigravity soft-denies it and reports it in `denied_actions`).
+ */
+export interface BlockedCommand {
+    /** Tool that asked to run it, e.g. `run_command`. */
+    tool: string;
+    /** The full command line. */
+    command: string;
+    /** The tool step's one-line summary, to find its row in the panel. */
+    summary: string;
+    /**
+     * The lasting allow rule offered by "Always allow", e.g. `command(df)`. Missing when
+     * the command changes things, uses shell syntax or is otherwise not safe to allow for good.
+     */
+    lastingRule?: string;
+}
+
+/** What the user decided about a run's blocked commands. */
+export type CommandApprovalDecision = 'once' | 'always';
+
+/** Request to approve a finished run's blocked commands and resume its conversation. */
+export interface CommandApprovalRequest {
+    runId: string;
+    decision: CommandApprovalDecision;
+}
+
+/** A model offered by the CLI (`agy models`). */
+export interface AgentModel {
+    id: string;
+    name: string;
+}
+
+/** The CLI's models, or why they could not be listed. */
+export interface AgentModelList {
+    models: AgentModel[];
+    /** The CLI's default model, when it could be read. */
+    defaultModel?: AgentModel;
+    error?: string;
+}
+
+/** A group of read-only command rules, for the Options list. */
+export interface ReadOnlyCommandGroup {
+    name: string;
+    prefixes: readonly string[];
+}
+
+/** Command allow rules the app manages in Antigravity CLI's settings. */
+export interface AgentPermissionsInfo {
+    /** False when the engine in use is not Antigravity CLI; the rest is then empty. */
+    supported: boolean;
+    /** Antigravity CLI's settings file. */
+    settingsFile: string;
+    /** Set when the settings file cannot be read or changed (for example invalid JSON). */
+    error?: string;
+    /** True when the read-only command list is turned on. */
+    readOnlyCommandsEnabled: boolean;
+    /** Lasting rules the user added with "Always allow" that are still in the file. */
+    allowedRules: string[];
+}
+
 /** Final status of a run, mirroring the CLI's result status. */
 export type AgentRunStatus = 'SUCCESS' | 'ERROR' | 'CANCELED' | 'INTERRUPTED' | 'TIMEOUT';
 
@@ -112,4 +173,10 @@ export type AgentRunEvent =
           response: string;
           conversationId?: string;
           error?: string;
+          /** Commands the CLI refused to run (Antigravity only). */
+          blocked?: BlockedCommand[];
+          /** Actions the CLI reports it denied (`command`, ...), when it says so. */
+          deniedActions?: string[];
+          /** True when the blocked commands can be approved and the run resumed. */
+          canApprove?: boolean;
       };

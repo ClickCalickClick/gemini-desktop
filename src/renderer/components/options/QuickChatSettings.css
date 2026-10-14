@@ -121,3 +121,93 @@
 .quick-chat-settings__recheck:hover {
     background-color: var(--hover-bg);
 }
+
+.quick-chat-settings__model {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.quick-chat-settings__recheck:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Antigravity CLI command rules */
+.quick-chat-settings__permissions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 12px;
+}
+
+.quick-chat-settings__disclosure {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.quick-chat-settings__disclosure > summary {
+    cursor: pointer;
+    color: var(--text-primary);
+}
+
+.quick-chat-settings__disclosure > summary:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 1px;
+}
+
+.quick-chat-settings__group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.quick-chat-settings__group-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.quick-chat-settings__rules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.quick-chat-settings__rules code,
+.quick-chat-settings__allowed-list code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.quick-chat-settings__allowed {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.quick-chat-settings__allowed-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.quick-chat-settings__allowed-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.quick-chat-settings__permissions-error {
+    margin: 0;
+    font-size: 12px;
+    color: var(--error-color);
+}

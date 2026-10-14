@@ -16,7 +16,16 @@ import type {
 import type { UpdateInfo, DownloadProgress } from './updates';
 import type { ToastPayload } from './toast';
 import type { TextPredictionSettings } from './text-prediction';
-import type { AgentEngineStatus, AgentRunEvent, AgentRunRequest, AgentSettings, FileActionResult } from './agent';
+import type {
+    AgentEngineStatus,
+    AgentModelList,
+    AgentPermissionsInfo,
+    AgentRunEvent,
+    AgentRunRequest,
+    AgentSettings,
+    CommandApprovalRequest,
+    FileActionResult,
+} from './agent';
 import type { DesktopLookPreference, LookData } from './look';
 import type { GeminiNavigatePayload, GeminiReadyPayload, TabsState, TabShortcutPayload } from './tabs';
 
@@ -510,4 +519,22 @@ export interface ElectronAPI {
 
     /** Undo the last applied file plan */
     undoLastFilePlan: () => Promise<FileActionResult>;
+
+    /**
+     * Approve a finished run's blocked commands (Antigravity CLI) and resume its
+     * conversation; resolves with the resumed run's id, or an error for the UI
+     */
+    approveAgentCommands: (request: CommandApprovalRequest) => Promise<{ runId?: string; error?: string }>;
+
+    /** The command allow rules the app manages in Antigravity CLI's settings */
+    getAgentPermissions: () => Promise<AgentPermissionsInfo>;
+
+    /** Turn the read-only command list on or off */
+    setReadOnlyAgentCommands: (enabled: boolean) => Promise<AgentPermissionsInfo>;
+
+    /** Remove a lasting rule added with "Always allow" */
+    removeAllowedAgentRule: (rule: string) => Promise<AgentPermissionsInfo>;
+
+    /** The models the agent CLI offers (Antigravity CLI only); `refresh` skips the 5-minute cache */
+    listAgentModels: (refresh?: boolean) => Promise<AgentModelList>;
 }

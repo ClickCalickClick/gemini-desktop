@@ -2,11 +2,13 @@
  * Unit tests for AgentManager, driving a fake agent CLI (a Node script in a temporary
  * bin folder) through real child processes.
  */
+import { spawn, type SpawnOptions } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentManager, { describeFailure, validateRunRequest } from '../../../../src/main/managers/agentManager';
+import { READ_ONLY_COMMAND_RULES } from '../../../../src/shared/constants/agentReadOnlyCommands';
 import type { AgentEnginePreference, AgentRunEvent } from '../../../../src/shared/types/agent';
 import { createMockLogger } from '../../../helpers/mocks';
 import { createTempLayout, fakePath, installFakeCli, type TempLayout } from '../agent/fakeCli';
@@ -87,7 +89,7 @@ describe('AgentManager', () => {
         return events.find((event): event is DoneEvent => event.type === 'done') as DoneEvent;
     };
 
-    const readArgs = (): { args: string[]; cwd: string; files: string[]; inputs: string[] } =>
+    const readArgs = (): { args: string[]; cwd: string; files: string[]; inputs: string[]; allow: string[] | null } =>
         JSON.parse(fs.readFileSync(argsFile, 'utf8'));
     const agySettingsFile = () => path.join(layout.home, '.gemini', 'antigravity-cli', 'settings.json');
     const geminiSettingsFile = () => path.join(layout.home, '.gemini', 'settings.json');
@@ -579,6 +581,352 @@ describe('AgentManager', () => {
             const { events } = await startRun(manager, 'MODE:apikey');
             const done = await waitForDone(events);
             expect(done.error).toContain('GEMINI_API_KEY');
+        });
+    });
+
+    describe('blocked commands and allow rules (Antigravity CLI)', () => {
+        const recordFile = () => path.join(layout.userData, 'agent-permissions.json');
+        const readRecord = () => JSON.parse(fs.readFileSync(recordFile(), 'utf8'));
+        const readAllow = (): string[] => JSON.parse(fs.readFileSync(agySettingsFile(), 'utf8')).permissions.allow;
+
+        const startBlocked = async (manager: AgentManager, category: 'general' | 'files' = 'general') => {
+            const first = await startRun(manager, 'MODE:blocked how much disk space is left', category);
+            const done = await waitForDone(first.events);
+            return { ...first, done };
+        };
+
+        const approve = async (manager: AgentManager, runId: string, decision: 'once' | 'always') => {
+            const events: AgentRunEvent[] = [];
+            const result = await manager.approveBlockedCommands(
+                { runId, decision },
+                { enginePreference: 'auto', model: '', emit: (event) => events.push(event) }
+            );
+            return { result, events };
+        };
+
+        beforeEach(() => {
+            installFakeCli(layout.bin, 'agy');
+        });
+
+        it('reports the refused command instead of an empty answer', async () => {
+            const manager = createManager();
+            const { runId, events, done } = await startBlocked(manager);
+            expect(
+                events.filter((event) => event.type === 'tool').map((event) => event.type === 'tool' && event.state)
+            ).toEqual(['ACTIVE', 'DONE']);
+            expect(done).toEqual({
+                type: 'done',
+                runId,
+                status: 'SUCCESS',
+                response: '',
+                conversationId: 'c1',
+                blocked: [{ tool: 'run_command', command: 'df -h', summary: 'df -h', lastingRule: 'command(df)' }],
+                deniedActions: ['command'],
+                canApprove: true,
+            });
+        });
+
+        it('offers only Allow once for a state-changing command, and no approval for file tasks', async () => {
+            const manager = createManager({
+                env: {
+                    PATH: fakePath(layout.bin),
+                    FAKE_HOME: layout.home,
+                    FAKE_ARGS_FILE: argsFile,
+                    FAKE_BLOCKED_COMMAND: 'rm -rf ~/old',
+                },
+            });
+            const { done } = await startBlocked(manager);
+            expect(done.blocked).toEqual([{ tool: 'run_command', command: 'rm -rf ~/old', summary: 'rm -rf ~/old' }]);
+            expect(done.canApprove).toBe(true);
+
+            const files = await startBlocked(manager, 'files');
+            expect(files.done.canApprove).toBeUndefined();
+            expect((await approve(manager, files.runId, 'once')).result.error).toContain('no longer be approved');
+        });
+
+        it('Allow once adds a full-line rule for the resumed run only and removes it afterwards', async () => {
+            fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
+            fs.writeFileSync(
+                agySettingsFile(),
+                JSON.stringify({ model: 'x', permissions: { allow: ['command(ls)'], deny: ['command(rm)'] } })
+            );
+            const manager = createManager();
+            const { runId } = await startBlocked(manager);
+
+            const { result, events } = await approve(manager, runId, 'once');
+            expect(result.runId).toEqual(expect.any(String));
+            expect(result.runId).not.toBe(runId);
+            const done = await waitForDone(events);
+            expect(done).toMatchObject({ runId: result.runId, status: 'SUCCESS', response: 'Hello world' });
+
+            // While the resumed run ran, the CLI saw the full-line rule next to the user's own.
+            const seen = readArgs();
+            expect(seen.allow).toEqual(['command(ls)', 'command(df -h)']);
+            expect(seen.args).toEqual(expect.arrayContaining(['--conversation', 'c1', '--sandbox']));
+            expect(seen.args[1]).toContain('The user approved this command: `df -h`.');
+            expect(seen.args).not.toContain('--dangerously-skip-permissions');
+
+            // Afterwards only the user's settings are left, and nothing is pending.
+            expect(JSON.parse(fs.readFileSync(agySettingsFile(), 'utf8'))).toEqual({
+                model: 'x',
+                permissions: { allow: ['command(ls)'], deny: ['command(rm)'] },
+            });
+            expect(readRecord().pending).toEqual([]);
+
+            // A run's commands are approved once.
+            expect((await approve(manager, runId, 'once')).result.error).toContain('no longer be approved');
+        });
+
+        it('removes the temporary rule when the resumed run is cancelled', async () => {
+            const manager = createManager({
+                env: {
+                    PATH: fakePath(layout.bin),
+                    FAKE_HOME: layout.home,
+                    FAKE_ARGS_FILE: argsFile,
+                    // The resumed prompt names the command, so this one makes the fake CLI hang.
+                    FAKE_BLOCKED_COMMAND: 'du -sh MODE:hang',
+                },
+            });
+            const { runId } = await startBlocked(manager);
+            const { result, events } = await approve(manager, runId, 'once');
+            await vi.waitFor(() => expect(events.some((event) => event.type === 'started')).toBe(true));
+            expect(readAllow()).toEqual(['command(du -sh MODE:hang)']);
+            expect(readRecord().pending).toEqual(['command(du -sh MODE:hang)']);
+
+            manager.cancel(result.runId);
+            expect((await waitForDone(events)).status).toBe('CANCELED');
+            expect(readAllow()).toEqual([]);
+            expect(readRecord().pending).toEqual([]);
+        });
+
+        it('removes leftover temporary rules at startup, and only those', () => {
+            fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
+            fs.writeFileSync(
+                agySettingsFile(),
+                JSON.stringify({ permissions: { allow: ['command(ls)', 'command(df -h)', 'command(free)'] } })
+            );
+            fs.writeFileSync(
+                recordFile(),
+                JSON.stringify({
+                    lasting: ['command(free)'],
+                    readOnly: [],
+                    pending: ['command(df -h)', 'command(free)'],
+                })
+            );
+            createManager().initialize();
+            expect(readAllow()).toEqual(['command(ls)', 'command(free)']);
+            expect(readRecord()).toMatchObject({ pending: [], lasting: ['command(free)'] });
+        });
+
+        it('keeps pending rules when the settings file is not valid JSON at startup', () => {
+            fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
+            fs.writeFileSync(agySettingsFile(), '{ broken');
+            fs.writeFileSync(recordFile(), JSON.stringify({ pending: ['command(df -h)'] }));
+            createManager().initialize();
+            expect(fs.readFileSync(agySettingsFile(), 'utf8')).toBe('{ broken');
+            expect(readRecord().pending).toEqual(['command(df -h)']);
+        });
+
+        it('Always allow adds the lasting prefix rule, which Options lists and can remove', async () => {
+            const manager = createManager();
+            const { runId } = await startBlocked(manager);
+            const { result, events } = await approve(manager, runId, 'always');
+            expect(result.runId).toEqual(expect.any(String));
+            await waitForDone(events);
+            expect(readArgs().allow).toEqual(['command(df)']);
+            expect(readAllow()).toEqual(['command(df)']);
+            expect(readRecord()).toMatchObject({ lasting: ['command(df)'], pending: [] });
+            // The engine stays usable with the rule.
+            expect(await manager.getStatus('antigravity', true)).toMatchObject({ available: true });
+
+            const info = await manager.getPermissions('antigravity');
+            expect(info).toEqual({
+                supported: true,
+                settingsFile: agySettingsFile(),
+                readOnlyCommandsEnabled: false,
+                allowedRules: ['command(df)'],
+            });
+            const removed = await manager.removeAllowedRule('command(df)', 'antigravity');
+            expect(removed.allowedRules).toEqual([]);
+            expect(readAllow()).toEqual([]);
+        });
+
+        it('refuses Always allow for a command offered only once', async () => {
+            const manager = createManager({
+                env: {
+                    PATH: fakePath(layout.bin),
+                    FAKE_HOME: layout.home,
+                    FAKE_ARGS_FILE: argsFile,
+                    FAKE_BLOCKED_COMMAND: 'df -h | sort',
+                },
+            });
+            const { runId, done } = await startBlocked(manager);
+            expect(done.blocked?.[0]?.lastingRule).toBeUndefined();
+            expect((await approve(manager, runId, 'always')).result.error).toContain('only be allowed once');
+            expect(fs.existsSync(agySettingsFile())).toBe(false);
+            // Allow once still works.
+            const once = await approve(manager, runId, 'once');
+            await waitForDone(once.events);
+            expect(readArgs().allow).toEqual(['command(df -h | sort)']);
+        });
+
+        it('does not remove rules the user had, nor rules it did not add', async () => {
+            fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
+            fs.writeFileSync(agySettingsFile(), JSON.stringify({ permissions: { allow: ['command(df)'] } }));
+            const manager = createManager();
+            const { runId } = await startBlocked(manager);
+            const { events } = await approve(manager, runId, 'always');
+            await waitForDone(events);
+            // command(df) was already there, so the app did not record it as its own.
+            expect(fs.existsSync(recordFile()) ? readRecord().lasting : []).toEqual([]);
+            expect((await manager.removeAllowedRule('command(df)', 'antigravity')).error).toContain('did not add');
+            expect((await manager.removeAllowedRule(42, 'antigravity')).error).toContain('did not add');
+            expect(readAllow()).toEqual(['command(df)']);
+        });
+
+        it('refuses to approve when the settings file is not valid JSON, and keeps the approval open', async () => {
+            const manager = createManager();
+            const { runId } = await startBlocked(manager);
+            fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
+            fs.writeFileSync(agySettingsFile(), '{ "permissions": // no\n }');
+            for (const decision of ['once', 'always'] as const) {
+                const { result } = await approve(manager, runId, decision);
+                expect(result.error).toContain('not valid JSON');
+            }
+            expect(fs.readFileSync(agySettingsFile(), 'utf8')).toBe('{ "permissions": // no\n }');
+
+            fs.writeFileSync(agySettingsFile(), '{}');
+            const { result, events } = await approve(manager, runId, 'once');
+            expect(result.runId).toEqual(expect.any(String));
+            await waitForDone(events);
+        });
+
+        it('rejects invalid approvals', async () => {
+            const manager = createManager();
+            const options = { enginePreference: 'auto' as const, model: '', emit: () => undefined };
+            expect((await manager.approveBlockedCommands(null, options)).error).toBe('Invalid approval.');
+            expect((await manager.approveBlockedCommands({ runId: 'x', decision: 'yes' }, options)).error).toBe(
+                'Invalid approval.'
+            );
+            expect((await manager.approveBlockedCommands({ runId: 'x', decision: 'once' }, options)).error).toContain(
+                'no longer be approved'
+            );
+        });
+
+        it("turns the read-only command list on and off, keeping the user's own rules", async () => {
+            fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
+            fs.writeFileSync(
+                agySettingsFile(),
+                JSON.stringify({ theme: 'x', permissions: { allow: ['command(df)', 'command(npm)'] } })
+            );
+            const manager = createManager();
+
+            const on = await manager.setReadOnlyCommands(true, 'antigravity');
+            expect(on).toMatchObject({ supported: true, readOnlyCommandsEnabled: true });
+            expect(on.error).toBeUndefined();
+            const allow = readAllow();
+            for (const rule of READ_ONLY_COMMAND_RULES) {
+                expect(allow).toContain(rule);
+            }
+            expect(allow.filter((rule) => rule === 'command(df)')).toHaveLength(1);
+            expect(readRecord().readOnly).not.toContain('command(df)');
+            expect(await manager.getStatus('antigravity', true)).toMatchObject({ available: true });
+
+            const off = await manager.setReadOnlyCommands(false, 'antigravity');
+            expect(off.readOnlyCommandsEnabled).toBe(false);
+            expect(JSON.parse(fs.readFileSync(agySettingsFile(), 'utf8'))).toEqual({
+                theme: 'x',
+                permissions: { allow: ['command(df)', 'command(npm)'] },
+            });
+            await expect(manager.setReadOnlyCommands('yes', 'antigravity')).rejects.toThrow('Invalid value');
+        });
+
+        it('reports an invalid settings file in Options and changes nothing', async () => {
+            fs.mkdirSync(path.dirname(agySettingsFile()), { recursive: true });
+            fs.writeFileSync(agySettingsFile(), 'nope');
+            const manager = createManager();
+            expect((await manager.getPermissions('antigravity')).error).toContain('not valid JSON');
+            const result = await manager.setReadOnlyCommands(true, 'antigravity');
+            expect(result.error).toContain('not valid JSON');
+            expect(result.readOnlyCommandsEnabled).toBe(false);
+            expect(fs.readFileSync(agySettingsFile(), 'utf8')).toBe('nope');
+        });
+
+        it('says permissions are not supported for Gemini CLI', async () => {
+            installFakeCli(layout.bin, 'gemini');
+            const manager = createManager();
+            expect(await manager.getPermissions('gemini-cli')).toMatchObject({ supported: false, allowedRules: [] });
+            expect((await manager.setReadOnlyCommands(true, 'gemini-cli')).supported).toBe(false);
+            expect(fs.existsSync(agySettingsFile())).toBe(false);
+        });
+
+        it('removes the temporary rules when the app quits during the resumed run', async () => {
+            const manager = createManager({
+                env: {
+                    PATH: fakePath(layout.bin),
+                    FAKE_HOME: layout.home,
+                    FAKE_ARGS_FILE: argsFile,
+                    FAKE_BLOCKED_COMMAND: 'du -sh MODE:hang',
+                },
+            });
+            const { runId } = await startBlocked(manager);
+            const { events } = await approve(manager, runId, 'once');
+            await vi.waitFor(() => expect(events.some((event) => event.type === 'started')).toBe(true));
+            expect(readAllow()).toHaveLength(1);
+            manager.dispose();
+            expect(readAllow()).toEqual([]);
+            expect(readRecord().pending).toEqual([]);
+        });
+    });
+
+    describe('listModels', () => {
+        it('lists the models and the default, and caches them for 5 minutes', async () => {
+            installFakeCli(layout.bin, 'agy');
+            let now = 0;
+            const spawned: string[][] = [];
+            const manager = createManager({
+                now: () => now,
+                spawnProcess: ((command: string, args: string[], options: SpawnOptions) => {
+                    spawned.push(args);
+                    return spawn(command, args, options);
+                }) as typeof spawn,
+            });
+            const list = await manager.listModels('auto');
+            expect(list).toEqual({
+                models: [
+                    { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash (High)' },
+                    { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)' },
+                ],
+                defaultModel: { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash (High)' },
+            });
+            expect(spawned).toEqual([['models'], ['-p', '/model']]);
+            expect(readArgs().cwd).toBe(path.join(layout.userData, 'agent-cli'));
+
+            expect(await manager.listModels('auto')).toBe(list);
+            expect(spawned).toHaveLength(2);
+            await manager.listModels('auto', true);
+            expect(spawned).toHaveLength(4);
+            now += 5 * 60 * 1000 + 1;
+            await manager.listModels('auto');
+            expect(spawned).toHaveLength(6);
+        });
+
+        it('gives up after the timeout and reports Gemini CLI and a missing engine', async () => {
+            installFakeCli(layout.bin, 'agy');
+            const manager = createManager({
+                modelListTimeoutMs: 300,
+                env: { PATH: fakePath(layout.bin), FAKE_HOME: layout.home, FAKE_MODELS_HANG: '1' },
+            });
+            expect(await manager.listModels('antigravity')).toEqual({
+                models: [],
+                error: 'Could not list the models of Antigravity CLI.',
+            });
+
+            installFakeCli(layout.bin, 'gemini');
+            expect((await manager.listModels('gemini-cli')).error).toContain('does not list');
+            fs.rmSync(path.join(layout.bin, 'agy'));
+            manager.invalidateStatus();
+            expect((await manager.listModels('antigravity')).models).toEqual([]);
         });
     });
 });

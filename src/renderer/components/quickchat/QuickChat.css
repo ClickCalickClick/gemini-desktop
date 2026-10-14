@@ -417,6 +417,16 @@ body {
     flex-shrink: 0;
 }
 
+.qc-tools__step--blocked .qc-tools__icon,
+.qc-tools__blocked {
+    color: var(--qc-danger);
+}
+
+.qc-tools__blocked {
+    flex-shrink: 0;
+    font-weight: 500;
+}
+
 /* Agent answer (Markdown) */
 .qc-markdown {
     color: var(--qc-text);
@@ -584,6 +594,54 @@ body {
     padding-left: 18px;
     color: var(--qc-danger);
     font-size: 12px;
+}
+
+/* Approval card for commands the CLI blocked */
+.qc-approval {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--qc-border);
+    border-radius: var(--qc-control-radius);
+    background: var(--qc-surface-subtle);
+}
+
+.qc-approval__title {
+    margin: 0;
+    font-weight: 500;
+}
+
+.qc-approval__commands {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.qc-approval__command,
+.qc-approval__prefix {
+    font-family: var(--qc-mono-font-family);
+    font-size: 12.5px;
+    background: var(--qc-code-bg);
+    border-radius: 4px;
+    padding: 1px 4px;
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
+.qc-approval__note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--qc-text-secondary);
+}
+
+.qc-approval__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 /* Errors and hints */

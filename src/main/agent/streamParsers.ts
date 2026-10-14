@@ -73,7 +73,17 @@ export type ParsedResultStatus = 'SUCCESS' | 'ERROR' | 'CANCELED' | 'INTERRUPTED
 export type ParsedAgentEvent =
     | { kind: 'init'; conversationId?: string; permissionMode?: string }
     | { kind: 'text'; delta: string }
-    | { kind: 'tool'; name: string; summary: string; state: 'ACTIVE' | 'DONE'; error?: string }
+    | {
+          kind: 'tool';
+          name: string;
+          summary: string;
+          state: 'ACTIVE' | 'DONE';
+          error?: string;
+          /** The full command line, for tools that run a terminal command. */
+          command?: string;
+          /** Antigravity, DONE steps: whether the step carries output. A refused command has none. */
+          hasOutput?: boolean;
+      }
     | { kind: 'warning'; message: string }
     | {
           kind: 'result';
@@ -82,6 +92,8 @@ export type ParsedAgentEvent =
           error?: string;
           conversationId?: string;
           structuredOutput?: unknown;
+          /** Antigravity: the actions headless mode denied (`command`, ...). */
+          deniedActions?: string[];
       };
 
 function str(value: unknown): string | undefined {
@@ -136,6 +148,34 @@ const SUMMARY_KEYS = [
 ];
 
 const MAX_SUMMARY_LENGTH = 120;
+
+/** Parameter names that hold a terminal command line. */
+const COMMAND_KEYS = ['CommandLine', 'command', 'command_line', 'cmd'];
+
+/** The command line of a tool call that runs a terminal command, if it is one. */
+export function commandLineOf(parameters: unknown): string | undefined {
+    if (!isObject(parameters)) {
+        return undefined;
+    }
+    for (const key of COMMAND_KEYS) {
+        const candidate = nonEmpty(parameters[key]);
+        if (candidate) {
+            return candidate.trim();
+        }
+    }
+    return undefined;
+}
+
+/** The actions in Antigravity's `result.denied_actions`, e.g. `command`. */
+function deniedActionsOf(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) {
+        return undefined;
+    }
+    const actions = value
+        .map((entry) => (isObject(entry) ? (nonEmpty(entry.action) ?? nonEmpty(entry.display_name)) : nonEmpty(entry)))
+        .filter((entry): entry is string => entry !== undefined);
+    return [...new Set(actions)];
+}
 
 /** A short one-line description of a tool call, from its parameters. */
 export function summarizeToolParameters(parameters: unknown): string {
@@ -207,6 +247,7 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
                 const toolInfo = isObject(step.tool_info) ? step.tool_info : {};
                 const name = nonEmpty(toolInfo.name) ?? nonEmpty(step.tool_name) ?? 'tool';
                 const error = errorMessage(toolInfo.error);
+                const command = commandLineOf(toolInfo.parameters);
                 return [
                     {
                         kind: 'tool',
@@ -214,6 +255,11 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
                         summary: summarizeToolParameters(toolInfo.parameters),
                         state,
                         ...(error ? { error } : {}),
+                        ...(command ? { command } : {}),
+                        // A command that headless mode refused ends DONE without output or error.
+                        ...(state === 'DONE'
+                            ? { hasOutput: toolInfo.output !== undefined && toolInfo.output !== null }
+                            : {}),
                     },
                 ];
             }
@@ -232,6 +278,7 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
             }
             const conversationId = nonEmpty(result.conversation_id);
             const error = errorMessage(result.error);
+            const deniedActions = deniedActionsOf(result.denied_actions);
             return [
                 {
                     kind: 'result',
@@ -240,6 +287,7 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
                     ...(error ? { error } : {}),
                     ...(conversationId ? { conversationId } : {}),
                     ...(result.structured_output !== undefined ? { structuredOutput: result.structured_output } : {}),
+                    ...(deniedActions && deniedActions.length > 0 ? { deniedActions } : {}),
                 },
             ];
         }

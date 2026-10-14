@@ -866,4 +866,171 @@ describe('QuickChatApp hybrid routing and agent panel', () => {
             expect(screen.getByTestId('quick-chat-agent-progress')).toBeInTheDocument();
         });
     });
+
+    describe('blocked commands', () => {
+        const DISK_PROMPT = 'how much disk space is left on my laptop';
+
+        /** A run whose `df -h` headless mode refused, as Antigravity CLI reports it. */
+        const blockedRun = async (overrides: Partial<Extract<AgentRunEvent, { type: 'done' }>> = {}) => {
+            await renderApp();
+            await startAgentRun(`@agent ${DISK_PROMPT}`);
+            await send({ type: 'started', runId: 'run-1', engine: 'antigravity' });
+            await send({ type: 'tool', runId: 'run-1', name: 'run_command', summary: 'df -h', state: 'ACTIVE' });
+            await send({ type: 'tool', runId: 'run-1', name: 'run_command', summary: 'df -h', state: 'DONE' });
+            await send({
+                type: 'done',
+                runId: 'run-1',
+                status: 'SUCCESS',
+                response: '',
+                conversationId: 'c1',
+                blocked: [{ tool: 'run_command', command: 'df -h', summary: 'df -h', lastingRule: 'command(df)' }],
+                deniedActions: ['command'],
+                canApprove: true,
+                ...overrides,
+            });
+        };
+
+        it('marks the step as blocked and asks for approval instead of saying "Answer ready"', async () => {
+            await blockedRun();
+            const [step] = screen.getAllByTestId('quick-chat-agent-tool-step');
+            expect(step).toHaveAttribute('data-state', 'blocked');
+            expect(step).toHaveTextContent('Blocked');
+            expect(step?.querySelector('.qc-tools__step--blocked, .qc-tools__icon')).not.toBeNull();
+            expect(step).toHaveClass('qc-tools__step--blocked');
+
+            const card = screen.getByTestId('quick-chat-agent-approval');
+            expect(card).toHaveTextContent('The agent needs to run:');
+            expect(card.querySelector('code')).toHaveTextContent('df -h');
+            expect(screen.getByTestId('quick-chat-agent-announcer')).toHaveTextContent(
+                'The agent needs your approval to run a command'
+            );
+            expect(screen.getByTestId('quick-chat-agent-announcer')).not.toHaveTextContent('Answer ready');
+            expect(screen.queryByTestId('quick-chat-agent-output')).not.toBeInTheDocument();
+
+            const always = screen.getByTestId('quick-chat-agent-approve-always');
+            expect(always).toHaveTextContent('Always allow');
+            expect(always).toHaveTextContent('df');
+            expect(always).toHaveAttribute('title', expect.stringContaining('command(df)'));
+            // Buttons are plain, focusable buttons; nothing is focused for the user.
+            expect(screen.getByTestId('quick-chat-agent-approve-once').tagName).toBe('BUTTON');
+            expect(document.activeElement).toBe(screen.getByTestId('quick-chat-input'));
+        });
+
+        it('Allow once resumes the conversation and streams the answer into the same panel', async () => {
+            await blockedRun();
+            await act(async () => {
+                fireEvent.click(screen.getByTestId('quick-chat-agent-approve-once'));
+            });
+            expect(api.approveAgentCommands).toHaveBeenCalledWith({ runId: 'run-1', decision: 'once' });
+            expect(screen.queryByTestId('quick-chat-agent-approval')).not.toBeInTheDocument();
+            expect(screen.getByTestId('quick-chat-agent-progress')).toBeInTheDocument();
+
+            await send({ type: 'text', runId: 'run-1', delta: 'ignored, the old run' });
+            await send({ type: 'tool', runId: 'run-2', name: 'run_command', summary: 'df -h', state: 'ACTIVE' });
+            await send({ type: 'text', runId: 'run-2', delta: 'You have 120 GB free.' });
+            await send({ type: 'done', runId: 'run-2', status: 'SUCCESS', response: 'x', conversationId: 'c1' });
+            expect(screen.getByTestId('quick-chat-agent-output')).toHaveTextContent('You have 120 GB free.');
+            expect(screen.getByTestId('quick-chat-agent-output')).not.toHaveTextContent('ignored');
+            expect(screen.getAllByTestId('quick-chat-agent-tool-step')[0]).toHaveAttribute('data-state', 'done');
+            expect(screen.getByTestId('quick-chat-agent-announcer')).toHaveTextContent('Answer ready');
+        });
+
+        it('replays events of the resumed run that arrive before its id', async () => {
+            let resolveApproval: (value: { runId: string }) => void = () => {};
+            setup({
+                approveAgentCommands: vi.fn(
+                    () =>
+                        new Promise<{ runId: string }>((resolve) => {
+                            resolveApproval = resolve;
+                        })
+                ),
+            });
+            await blockedRun();
+            await act(async () => {
+                fireEvent.click(screen.getByTestId('quick-chat-agent-approve-always'));
+            });
+            expect(api.approveAgentCommands).toHaveBeenCalledWith({ runId: 'run-1', decision: 'always' });
+            expect(screen.getByTestId('quick-chat-agent-approve-once')).toBeDisabled();
+            await send({ type: 'text', runId: 'run-2', delta: 'Early text' });
+            await act(async () => {
+                resolveApproval({ runId: 'run-2' });
+            });
+            expect(screen.getByTestId('quick-chat-agent-output')).toHaveTextContent('Early text');
+        });
+
+        it('keeps the card and shows the error when the approval fails', async () => {
+            setup({
+                approveAgentCommands: vi.fn().mockResolvedValue({ error: 'settings.json is not valid JSON' }),
+            });
+            await blockedRun();
+            await act(async () => {
+                fireEvent.click(screen.getByTestId('quick-chat-agent-approve-once'));
+            });
+            expect(screen.getByTestId('quick-chat-agent-approval')).toHaveTextContent('not valid JSON');
+            expect(screen.getByTestId('quick-chat-agent-approve-once')).not.toBeDisabled();
+        });
+
+        it("Don't allow closes the card and says the agent could not finish", async () => {
+            await blockedRun();
+            await act(async () => {
+                fireEvent.click(screen.getByTestId('quick-chat-agent-approve-deny'));
+            });
+            expect(screen.queryByTestId('quick-chat-agent-approval')).not.toBeInTheDocument();
+            expect(screen.getByTestId('quick-chat-agent-empty')).toHaveTextContent(
+                'could not finish without running these commands'
+            );
+            expect(api.approveAgentCommands).not.toHaveBeenCalled();
+        });
+
+        it('Escape declines the commands first, then hides Quick Chat', async () => {
+            await blockedRun();
+            await press('Escape');
+            expect(screen.queryByTestId('quick-chat-agent-approval')).not.toBeInTheDocument();
+            expect(api.cancelQuickChat).not.toHaveBeenCalled();
+            await press('Escape');
+            expect(api.cancelQuickChat).toHaveBeenCalled();
+        });
+
+        it('offers only Allow once for a command that is not safe to allow for good', async () => {
+            await blockedRun({
+                blocked: [{ tool: 'run_command', command: 'df -h | sort', summary: 'df -h | sort' }],
+            });
+            expect(screen.queryByTestId('quick-chat-agent-approve-always')).not.toBeInTheDocument();
+            expect(screen.getByTestId('quick-chat-agent-approval')).toHaveTextContent("inside the agent's sandbox");
+        });
+
+        it('shows the blocked step without a card when the run cannot be resumed', async () => {
+            await blockedRun({ canApprove: undefined });
+            expect(screen.queryByTestId('quick-chat-agent-approval')).not.toBeInTheDocument();
+            expect(screen.getAllByTestId('quick-chat-agent-tool-step')[0]).toHaveAttribute('data-state', 'blocked');
+            expect(screen.getByTestId('quick-chat-agent-empty')).toHaveTextContent('commands it needed were blocked');
+        });
+
+        it('keeps a card that waits for a decision when shown again', async () => {
+            await blockedRun();
+            await act(async () => {
+                window.dispatchEvent(new Event('blur'));
+            });
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            expect(screen.getByTestId('quick-chat-agent-approval')).toBeInTheDocument();
+        });
+
+        it('says the agent gave no answer instead of "Answer ready" for an empty answer', async () => {
+            await renderApp();
+            await startAgentRun();
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: '' });
+            expect(screen.getByTestId('quick-chat-agent-empty')).toHaveTextContent('The agent gave no answer.');
+            expect(screen.getByTestId('quick-chat-agent-announcer')).toHaveTextContent('The agent gave no answer.');
+            expect(screen.getByTestId('quick-chat-agent-announcer')).not.toHaveTextContent('Answer ready');
+        });
+
+        it('names the denied actions when nothing else explains an empty answer', async () => {
+            await renderApp();
+            await startAgentRun();
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: '', deniedActions: ['read_file'] });
+            expect(screen.getByTestId('quick-chat-agent-empty')).toHaveTextContent('read_file');
+        });
+    });
 });
