@@ -12,6 +12,7 @@ import type {
     AgentRunEvent,
     AgentRunStatus,
     AgentTaskCategory,
+    BlockedCommand,
     FileActionPlan,
     FileActionResult,
 } from '../../../shared/types/agent';
@@ -22,7 +23,21 @@ export interface ToolStep {
     summary: string;
     state: 'ACTIVE' | 'DONE';
     error?: string;
+    /** The full command line, for terminal commands. */
+    command?: string;
+    /** The CLI's step index, when it reports one. */
+    stepIndex?: number;
+    /** The CLI refused to run this command (headless mode could not ask). */
+    blocked?: boolean;
+    /** What the command printed, when the CLI reported it. */
+    output?: string;
 }
+
+/** The approval card for blocked commands: waiting, sending the decision, or dismissed. */
+export type ApprovalState = 'pending' | 'approving' | 'dismissed';
+
+/** How the turn on screen resumed a conversation after blocked commands. */
+export type ResumeKind = 'approved' | 'declined';
 
 export type AgentRunPhase = 'idle' | 'starting' | 'running' | 'stopping' | 'done';
 
@@ -48,10 +63,22 @@ export interface AgentRunState {
     /** Conversation to continue with the next agent prompt. */
     conversationId: string | null;
     nextToolKey: number;
+    /** Commands the CLI refused to run in this turn. */
+    blocked: BlockedCommand[];
+    /** Actions the CLI reported as denied (`command`, ...). */
+    deniedActions: string[];
+    /** True when the conversation can be resumed after a decision (the card shows). */
+    canResume: boolean;
+    /** Why the commands cannot be allowed; the card then only offers to answer without them. */
+    approvalUnavailable: string | null;
+    approval: ApprovalState | null;
+    approvalError: string | null;
+    /** Set when this turn resumed a conversation after blocked commands. */
+    resume: ResumeKind | null;
 }
 
 export type AgentRunAction =
-    | { type: 'start'; prompt: string; category: AgentTaskCategory }
+    | { type: 'start'; prompt: string; category: AgentTaskCategory; resume?: ResumeKind }
     | { type: 'assigned'; runId: string }
     | { type: 'event'; event: AgentRunEvent }
     | { type: 'stopRequested' }
@@ -64,6 +91,9 @@ export type AgentRunAction =
     | { type: 'planUndoing' }
     | { type: 'planUndone'; result: FileActionResult }
     | { type: 'planFailed'; error: string }
+    | { type: 'approvalStarted' }
+    | { type: 'approvalFailed'; error: string }
+    | { type: 'approvalDismissed' }
     | { type: 'reset' };
 
 export const INITIAL_AGENT_RUN_STATE: AgentRunState = {
@@ -83,11 +113,23 @@ export const INITIAL_AGENT_RUN_STATE: AgentRunState = {
     error: null,
     conversationId: null,
     nextToolKey: 0,
+    blocked: [],
+    deniedActions: [],
+    canResume: false,
+    approvalUnavailable: null,
+    approval: null,
+    approvalError: null,
+    resume: null,
 };
 
 /** True while a run is starting, running or stopping. */
 export function isRunActive(state: AgentRunState): boolean {
     return state.phase === 'starting' || state.phase === 'running' || state.phase === 'stopping';
+}
+
+/** True when a successful run ended without an answer or a plan. */
+export function isEmptyAnswer(state: AgentRunState): boolean {
+    return state.phase === 'done' && state.status === 'SUCCESS' && !state.text.trim() && !state.plan;
 }
 
 /** Whether an error means no agent CLI is installed or it is not signed in. */
@@ -115,11 +157,23 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 text: state.text + event.delta,
             };
         case 'tool': {
+            // agy can report the same step ACTIVE more than once; keep one row for it.
+            if (
+                event.state === 'ACTIVE' &&
+                event.stepIndex !== undefined &&
+                state.tools.some((step) => step.stepIndex === event.stepIndex)
+            ) {
+                return state;
+            }
             if (event.state === 'DONE') {
                 let index = -1;
+                const sameStep = (step: ToolStep): boolean =>
+                    event.stepIndex !== undefined && step.stepIndex !== undefined
+                        ? step.stepIndex === event.stepIndex
+                        : step.name === event.name && step.summary === event.summary;
                 for (let i = state.tools.length - 1; i >= 0; i--) {
                     const step = state.tools[i];
-                    if (step && step.state === 'ACTIVE' && step.name === event.name && step.summary === event.summary) {
+                    if (step && step.state === 'ACTIVE' && sameStep(step)) {
                         index = i;
                         break;
                     }
@@ -127,7 +181,13 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 const existing = state.tools[index];
                 if (existing) {
                     const tools = state.tools.slice();
-                    tools[index] = { ...existing, state: 'DONE', error: event.error };
+                    tools[index] = {
+                        ...existing,
+                        state: 'DONE',
+                        error: event.error,
+                        command: event.command ?? existing.command,
+                        ...(event.output ? { output: event.output } : {}),
+                    };
                     return { ...state, tools };
                 }
             }
@@ -137,6 +197,9 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 summary: event.summary,
                 state: event.state,
                 error: event.error,
+                ...(event.command ? { command: event.command } : {}),
+                ...(event.stepIndex !== undefined ? { stepIndex: event.stepIndex } : {}),
+                ...(event.output ? { output: event.output } : {}),
             };
             return { ...state, tools: [...state.tools, step], nextToolKey: state.nextToolKey + 1 };
         }
@@ -149,7 +212,20 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 undoResult: null,
                 planError: null,
             };
-        case 'done':
+        case 'done': {
+            const blocked = event.blocked ?? [];
+            // Match on the step index, else the full command line, else name and summary.
+            const matches = (step: ToolStep, entry: BlockedCommand): boolean => {
+                if (entry.stepIndex !== undefined && step.stepIndex !== undefined) {
+                    return entry.stepIndex === step.stepIndex;
+                }
+                if (step.command !== undefined) {
+                    return step.name === entry.tool && step.command === entry.command;
+                }
+                return step.name === entry.tool && step.summary === entry.summary;
+            };
+            const isBlocked = (step: ToolStep): boolean => !step.error && blocked.some((entry) => matches(step, entry));
+            const canResume = Boolean(event.canResume) && blocked.length > 0;
             return {
                 ...state,
                 phase: 'done',
@@ -158,8 +234,18 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 // For file runs the response is the plan summary, which the plan box already shows.
                 text: state.text || (state.plan ? '' : event.response),
                 conversationId: event.conversationId ?? state.conversationId,
-                tools: state.tools.map((step) => (step.state === 'ACTIVE' ? { ...step, state: 'DONE' } : step)),
+                tools: state.tools.map((step) => {
+                    const finished: ToolStep = step.state === 'ACTIVE' ? { ...step, state: 'DONE' } : step;
+                    return isBlocked(finished) ? { ...finished, blocked: true } : finished;
+                }),
+                blocked,
+                deniedActions: event.deniedActions ?? [],
+                canResume,
+                approvalUnavailable: event.approvalUnavailable ?? null,
+                approval: canResume ? 'pending' : null,
+                approvalError: null,
             };
+        }
         default:
             return state;
     }
@@ -174,6 +260,7 @@ export function agentRunReducer(state: AgentRunState, action: AgentRunAction): A
                 prompt: action.prompt,
                 category: action.category,
                 conversationId: state.conversationId,
+                resume: action.resume ?? null,
             };
         case 'assigned':
             return { ...state, runId: action.runId };
@@ -211,6 +298,12 @@ export function agentRunReducer(state: AgentRunState, action: AgentRunAction): A
                 planState: state.planState === 'undoing' ? 'applied' : 'pending',
                 planError: action.error,
             };
+        case 'approvalStarted':
+            return state.approval === 'pending' ? { ...state, approval: 'approving', approvalError: null } : state;
+        case 'approvalFailed':
+            return state.approval ? { ...state, approval: 'pending', approvalError: action.error } : state;
+        case 'approvalDismissed':
+            return state.approval === 'pending' ? { ...state, approval: 'dismissed', approvalError: null } : state;
         case 'reset':
             return INITIAL_AGENT_RUN_STATE;
         default:

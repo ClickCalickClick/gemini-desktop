@@ -97,6 +97,7 @@ export const QUICK_CHAT_TEST_IDS = {
     QUICK_CHAT_AGENT_OUTPUT: 'quick-chat-agent-output',
     QUICK_CHAT_AGENT_TOOLS: 'quick-chat-agent-tools',
     QUICK_CHAT_AGENT_TOOL_STEP: 'quick-chat-agent-tool-step',
+    QUICK_CHAT_AGENT_TOOL_OUTPUT: 'quick-chat-agent-tool-output',
     QUICK_CHAT_AGENT_PLAN: 'quick-chat-agent-plan',
     QUICK_CHAT_AGENT_PLAN_ACTION: 'quick-chat-agent-plan-action',
     QUICK_CHAT_AGENT_PLAN_APPLY: 'quick-chat-agent-plan-apply',
@@ -107,6 +108,13 @@ export const QUICK_CHAT_TEST_IDS = {
     QUICK_CHAT_AGENT_SETUP_HINT: 'quick-chat-agent-setup-hint',
     QUICK_CHAT_AGENT_NEW: 'quick-chat-agent-new',
     QUICK_CHAT_AGENT_CONTINUE_WEB: 'quick-chat-agent-continue-web',
+    QUICK_CHAT_AGENT_APPROVAL: 'quick-chat-agent-approval',
+    QUICK_CHAT_AGENT_APPROVE_ONCE: 'quick-chat-agent-approve-once',
+    QUICK_CHAT_AGENT_APPROVE_ALWAYS: 'quick-chat-agent-approve-always',
+    QUICK_CHAT_AGENT_APPROVE_WITHOUT: 'quick-chat-agent-approve-without',
+    QUICK_CHAT_AGENT_APPROVE_DISMISS: 'quick-chat-agent-approve-dismiss',
+    QUICK_CHAT_AGENT_APPROVE_CAUTION: 'quick-chat-agent-approve-caution',
+    QUICK_CHAT_AGENT_EMPTY: 'quick-chat-agent-empty',
 } as const;
 
 export const QUICK_CHAT_SETTINGS_TEST_IDS = {
@@ -116,6 +124,12 @@ export const QUICK_CHAT_SETTINGS_TEST_IDS = {
     QUICK_CHAT_SETTINGS_MODEL: 'quick-chat-settings-model',
     QUICK_CHAT_SETTINGS_STATUS: 'quick-chat-settings-status',
     QUICK_CHAT_SETTINGS_RECHECK: 'quick-chat-settings-recheck',
+    QUICK_CHAT_SETTINGS_MODEL_REFRESH: 'quick-chat-settings-model-refresh',
+    QUICK_CHAT_SETTINGS_LOOKUP: 'quick-chat-settings-lookup',
+    QUICK_CHAT_SETTINGS_LOOKUP_LIST: 'quick-chat-settings-lookup-list',
+    QUICK_CHAT_SETTINGS_ALLOWED: 'quick-chat-settings-allowed',
+    QUICK_CHAT_SETTINGS_ALLOWED_REMOVE: 'quick-chat-settings-allowed-remove',
+    QUICK_CHAT_SETTINGS_PERMISSIONS_ERROR: 'quick-chat-settings-permissions-error',
 } as const;
 
 export const TRAY_ICON_SETTINGS_TEST_IDS = {

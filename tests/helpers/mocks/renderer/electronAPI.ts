@@ -263,6 +263,26 @@ export function createMockElectronAPI(overrides: MockElectronAPIOverrides = {}):
         onAgentEvent: vi.fn().mockReturnValue(defaultUnsubscribe),
         applyFilePlan: vi.fn().mockResolvedValue({ applied: 0, failed: [], undoAvailable: false }),
         undoLastFilePlan: vi.fn().mockResolvedValue({ applied: 0, failed: [], undoAvailable: false }),
+        approveAgentCommands: vi.fn().mockResolvedValue({ runId: 'run-2' }),
+        getAgentPermissions: vi.fn().mockResolvedValue({
+            supported: false,
+            settingsFile: '',
+            lookupCommandsEnabled: false,
+            allowedRules: [],
+        }),
+        setLookupAgentCommands: vi.fn().mockImplementation(async (enabled: boolean) => ({
+            supported: true,
+            settingsFile: '',
+            lookupCommandsEnabled: enabled,
+            allowedRules: [],
+        })),
+        removeAllowedAgentRule: vi.fn().mockResolvedValue({
+            supported: true,
+            settingsFile: '',
+            lookupCommandsEnabled: false,
+            allowedRules: [],
+        }),
+        listAgentModels: vi.fn().mockResolvedValue({ models: [], error: 'No agent CLI is available.' }),
 
         // Apply overrides last to allow customization
         ...overrides,
