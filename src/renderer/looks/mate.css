@@ -1,0 +1,84 @@
+/**
+ * MATE look (Menta, MATE's default theme).
+ *
+ * Traditional gradient titlebar, compact 26px height, small rectangular window controls on the
+ * right, 3px radii, Ubuntu / DejaVu Sans and Menta's green, darkened for readable white text.
+ */
+
+:root[data-look='mate'] {
+    --look-font: 'Ubuntu', 'DejaVu Sans', 'Noto Sans', 'Segoe UI', sans-serif;
+    --look-accent: #6f9a45;
+    --look-accent-fg: #ffffff;
+    --look-radius-card: 3px;
+    --look-radius-button: 3px;
+    --look-title-size: 13px;
+    --look-title-weight: 700;
+    --look-heading-transform: none;
+    --look-heading-size: 13px;
+    --look-heading-weight: 700;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 24px;
+    --look-control-height: 18px;
+    --look-control-radius: 2px;
+    --look-control-gap: 2px;
+    --look-controls-padding: 4px;
+    --look-control-bg: rgba(255, 255, 255, 0.06);
+    --look-control-hover-bg: rgba(255, 255, 255, 0.16);
+    --look-close-hover-bg: #c34848;
+    --look-close-hover-fg: #ffffff;
+
+    /* Menta with a dark window */
+    --bg-primary: #2f2f2f;
+    --bg-secondary: #262626;
+    --bg-tertiary: #4a4a4a;
+    --text-primary: #e6e6e6;
+    --text-secondary: #a8a8a8;
+    --border-color: #474747;
+    --hover-bg: rgba(255, 255, 255, 0.07);
+    --titlebar-bg: #353535;
+    --titlebar-text: #e6e6e6;
+    --titlebar-height: 26px;
+    --look-titlebar-border: #1f1f1f;
+    --look-tabbar-bg: #2b2b2b;
+    --look-switch-off-bg: #4a4a4a;
+    --look-titlebar-gradient: linear-gradient(to bottom, #3e3e3e, #303030);
+
+    --look-qc-bg: #2f2f2f;
+    --look-qc-border: #1f1f1f;
+    --look-qc-radius: 3px;
+    --look-qc-backdrop: none;
+    --look-qc-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-look='mate'][data-theme='light'] {
+    /* Menta */
+    --bg-primary: #f0efee;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #c2c0bd;
+    --text-primary: #3c3c3c;
+    --text-secondary: #5f5d59;
+    --border-color: #c2c0bd;
+    --hover-bg: rgba(0, 0, 0, 0.06);
+    --titlebar-bg: #d4d4d4;
+    --titlebar-text: #3c3c3c;
+    --look-titlebar-border: #aaaaaa;
+    --look-tabbar-bg: #e4e3e1;
+    --look-switch-off-bg: #c2c0bd;
+    --look-titlebar-gradient: linear-gradient(to bottom, #e4e4e4, #c8c8c8);
+    --look-control-bg: rgba(0, 0, 0, 0.05);
+    --look-control-hover-bg: rgba(0, 0, 0, 0.12);
+
+    --look-qc-bg: #f0efee;
+    --look-qc-border: #aaaaaa;
+    --look-qc-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+:root[data-look='mate'] .titlebar,
+:root[data-look='mate'] .options-titlebar {
+    background: var(--look-titlebar-gradient);
+}
+
+:root[data-look='mate'] .tab--active {
+    background: var(--bg-primary);
+}

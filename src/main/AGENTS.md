@@ -26,6 +26,12 @@ Use `getWindowFromEvent()` for safe sender window lookup, `broadcastToAllWindows
 See `src/main/managers/ipc/BaseIpcHandler.ts` and `docs/ARCHITECTURE.md` (IPC Handler Pattern section).
 A manager announces a change by emitting an event on `windowManager`, for example `platform-hotkey-status-changed` from `HotkeyManager`; the IPC handler subscribes with a bound listener in `register()`, broadcasts it to all windows and removes the listener in `unregister()` (see `HotkeyIpcHandler.ts` and `ZoomIpcHandler.ts`).
 
+## Desktop Look
+
+- `src/main/managers/ipc/LookIpcHandler.ts` handles `look:get` and `look:set` (validated against `DesktopLookPreference`, saved as `desktopLook`, default `'default'`) and broadcasts `look:changed` with `LookData` to every window.
+- `src/main/utils/desktopLook.ts` holds the pure detection: macOS → `macos`, Windows → `windows`, Linux from `XDG_CURRENT_DESKTOP` (colon list, in order), then `XDG_SESSION_DESKTOP` and `DESKTOP_SESSION`; unknown desktops resolve 'auto' to `default`.
+- `src/main/utils/desktopAccent.ts` (`DesktopAccentWatcher`) reads `org.freedesktop.appearance` `accent-color` from the XDG Settings portal (`ReadOne`, falling back to `Read`), follows `SettingChanged`, and on KDE falls back to `~/.config/kdeglobals`. It only starts on Linux once a look other than `default` applies, connects dbus-next with `getSessionBusAddress()` (never the native `usocket` module), uses 1.5 s timeouts and fails soft to a null accent.
+
 ## Canonical Examples
 
 - IPC handler: `src/main/managers/ipc/ThemeIpcHandler.ts` — `class ThemeIpcHandler extends BaseIpcHandler` (lines 25-120)

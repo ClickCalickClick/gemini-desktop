@@ -33,6 +33,13 @@ For async initialization and subscriptions, use `AbortController` to prevent sta
     - Shows typed context API, `AbortController` guard, IPC subscription cleanup in `useEffect`, `useCallback` setter, and robust fallback/error handling.
     - Pattern aligns to preload `get → set → onChange` APIs.
 
+## Desktop Looks
+
+- `src/renderer/context/LookContext.tsx` (`LookProvider`, `useLook`) loads the look with `getLook`, follows `onLookChanged`, and sets `data-look="<effectiveLook>"` and `--desktop-accent` on `<html>`. The main window (`App.tsx`), Options (`windows/options/main.tsx`) and Quick Chat (`windows/quickchat/main.tsx`) each wrap their root in it, inside `ThemeProvider`. `useLook()` returns the default look outside a provider, so components stay usable alone.
+- Styles live in `src/renderer/looks/`: `index.css` (imported once from `theme.css`), `base.css` with the shared rules under `[data-look]:not([data-look='default'])`, and one file per look that sets `--look-*` and theme variables under `:root[data-look='<look>']` for dark and `[data-theme='light']`. The `default` look matches no rule, so it is the app as before. Quick Chat is styled through its class names (`.quick-chat-container`, `.quick-chat-input`, ...), not by editing `QuickChat.css`.
+- Window controls follow the look through `utils/windowControlsLayout.ts` (`WindowControls`, `OptionsWindowTitlebar`): GNOME shows only close, elementary OS puts close left and maximize right, the macOS look puts traffic lights on the left; macOS itself keeps its native controls. A left group renders as `.window-controls--left` (moved first with CSS `order`).
+- When adding a look: add it to `DesktopLook` (shared contract), `DESKTOP_LOOKS`/`DESKTOP_NAMES` in `src/main/utils/desktopLook.ts`, `KNOWN_LOOKS` in `context/LookContext.tsx`, `LOOK_OPTIONS` in `components/options/LookSelector.tsx`, a CSS file in `looks/`, and a layout entry if its controls differ.
+
 ## Common Mistakes
 
 - Importing Node.js APIs directly in renderer code

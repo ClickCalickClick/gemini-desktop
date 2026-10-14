@@ -1,0 +1,105 @@
+/**
+ * KDE Plasma look (Breeze, Plasma 6).
+ *
+ * Breeze window and header colors, Noto Sans, small 5px radii, accent-tinted hover, round
+ * minimize/maximize/close on the right with Breeze's red close circle, and the desktop accent
+ * (default #3daee9). Quick Chat is a slightly translucent Plasma dialog.
+ */
+
+:root[data-look='kde'] {
+    --look-font: 'Noto Sans', 'Noto Sans UI', 'Oxygen', 'DejaVu Sans', 'Segoe UI', sans-serif;
+    --look-accent: #3daee9;
+    --look-accent-fg: #ffffff;
+    --look-radius-card: 5px;
+    --look-radius-button: 5px;
+    --look-focus-ring: var(--accent-color);
+    --look-title-size: 13px;
+    --look-title-weight: 400;
+    --look-heading-transform: none;
+    --look-heading-size: 13px;
+    --look-heading-weight: 600;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 18px;
+    --look-control-height: 18px;
+    --look-control-radius: 50%;
+    --look-control-gap: 7px;
+    --look-controls-padding: 8px;
+    --look-control-bg: transparent;
+    --look-control-hover-bg: rgba(252, 252, 252, 0.2);
+    --look-close-hover-bg: #da4453;
+    --look-close-hover-fg: #ffffff;
+
+    /* Breeze Dark */
+    --bg-primary: #202326;
+    --bg-secondary: #292c30;
+    --bg-tertiary: #4d5257;
+    --text-primary: #fcfcfc;
+    --text-secondary: #a1a9b1;
+    --border-color: #43474b;
+    --hover-bg: color-mix(in srgb, var(--accent-color) 20%, transparent);
+    --titlebar-bg: #2a2e32;
+    --titlebar-text: #fcfcfc;
+    --titlebar-height: 30px;
+    --look-titlebar-border: rgba(0, 0, 0, 0.35);
+    --look-tabbar-bg: #2a2e32;
+    --look-switch-off-bg: #4d5257;
+
+    --look-qc-bg: rgba(32, 35, 38, 0.95);
+    --look-qc-border: rgba(252, 252, 252, 0.14);
+    --look-qc-radius: 6px;
+    --look-qc-backdrop: blur(16px);
+    --look-qc-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-look='kde'][data-theme='light'] {
+    /* Breeze Light */
+    --bg-primary: #eff0f1;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #c3c7cb;
+    --text-primary: #232629;
+    --text-secondary: #5c6670;
+    --border-color: #c3c7cb;
+    --titlebar-bg: #dee0e2;
+    --titlebar-text: #232629;
+    --look-titlebar-border: #c3c7cb;
+    --look-tabbar-bg: #dee0e2;
+    --look-switch-off-bg: #c3c7cb;
+    --look-control-hover-bg: rgba(35, 38, 41, 0.15);
+
+    --look-qc-bg: rgba(239, 240, 241, 0.96);
+    --look-qc-border: rgba(35, 38, 41, 0.18);
+    --look-qc-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+}
+
+/* Breeze draws window control glyphs a little bolder */
+:root[data-look='kde'] .window-control-button svg,
+:root[data-look='kde'] .options-window-control-button svg {
+    width: 8px;
+    height: 8px;
+}
+
+/* Breeze tabs: the active tab has an accent line on top */
+:root[data-look='kde'] .tab--active {
+    background: var(--bg-primary);
+    border-bottom-color: transparent;
+    box-shadow: inset 0 2px 0 var(--accent-color);
+}
+
+/* Breeze switch: smaller track */
+:root[data-look='kde'] .capsule-toggle__switch {
+    width: 36px;
+    height: 18px;
+    border-radius: 9px;
+}
+
+:root[data-look='kde'] .capsule-toggle__thumb {
+    top: 1px;
+    left: 1px;
+    width: 16px;
+    height: 16px;
+}
+
+:root[data-look='kde'] .capsule-toggle__switch--checked .capsule-toggle__thumb {
+    transform: translateX(18px);
+}

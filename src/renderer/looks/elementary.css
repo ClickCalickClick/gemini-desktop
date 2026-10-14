@@ -1,0 +1,91 @@
+/**
+ * elementary OS look (Pantheon, Granite).
+ *
+ * Soft gradient headerbar with a bold title, close on the left and maximize on the right
+ * (elementary's layout), Inter, 6px radii and the Blueberry accent (#3689e6).
+ */
+
+:root[data-look='elementary'] {
+    --look-font: 'Inter', 'Open Sans', 'Noto Sans', 'Segoe UI', sans-serif;
+    --look-accent: #3689e6;
+    --look-accent-fg: #ffffff;
+    --look-radius-card: 6px;
+    --look-radius-button: 6px;
+    --look-title-size: 13px;
+    --look-title-weight: 700;
+    --look-heading-transform: none;
+    --look-heading-size: 13px;
+    --look-heading-weight: 700;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 24px;
+    --look-control-height: 24px;
+    --look-control-radius: 50%;
+    --look-control-gap: 0;
+    --look-controls-padding: 9px;
+    --look-control-bg: transparent;
+    --look-control-hover-bg: rgba(255, 255, 255, 0.12);
+    --look-close-hover-bg: rgba(255, 255, 255, 0.12);
+    --look-close-hover-fg: #fafafa;
+
+    /* elementary dark */
+    --bg-primary: #333333;
+    --bg-secondary: #3a3a3a;
+    --bg-tertiary: #555555;
+    --text-primary: #fafafa;
+    --text-secondary: #b3b3b3;
+    --border-color: #4d4d4d;
+    --hover-bg: rgba(255, 255, 255, 0.07);
+    --titlebar-bg: #2b2b2b;
+    --titlebar-text: #fafafa;
+    --titlebar-height: 38px;
+    --look-titlebar-border: rgba(0, 0, 0, 0.45);
+    --look-tabbar-bg: #2f2f2f;
+    --look-switch-off-bg: #555555;
+    --look-titlebar-gradient: linear-gradient(to bottom, #333333, #2b2b2b);
+
+    --look-qc-bg: #333333;
+    --look-qc-border: rgba(0, 0, 0, 0.5);
+    --look-qc-radius: 9px;
+    --look-qc-backdrop: none;
+    --look-qc-shadow: 0 3px 12px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:root[data-look='elementary'][data-theme='light'] {
+    /* elementary light */
+    --bg-primary: #fafafa;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #cccccc;
+    --text-primary: #333333;
+    --text-secondary: #666666;
+    --border-color: #d4d4d4;
+    --hover-bg: rgba(0, 0, 0, 0.05);
+    --titlebar-bg: #ebebeb;
+    --titlebar-text: #333333;
+    --look-titlebar-border: rgba(0, 0, 0, 0.15);
+    --look-tabbar-bg: #f0f0f0;
+    --look-switch-off-bg: #cccccc;
+    --look-titlebar-gradient: linear-gradient(to bottom, #f8f8f8, #e8e8e8);
+    --look-control-hover-bg: rgba(0, 0, 0, 0.08);
+    --look-close-hover-bg: rgba(0, 0, 0, 0.08);
+    --look-close-hover-fg: #333333;
+
+    --look-qc-bg: #fafafa;
+    --look-qc-border: rgba(0, 0, 0, 0.18);
+    --look-qc-shadow: 0 3px 12px rgba(0, 0, 0, 0.18), inset 0 1px 0 #ffffff;
+}
+
+:root[data-look='elementary'] .titlebar,
+:root[data-look='elementary'] .options-titlebar {
+    background: var(--look-titlebar-gradient);
+}
+
+/* The close glyph is drawn heavier, like elementary's */
+:root[data-look='elementary'] .window-control-button.close svg line,
+:root[data-look='elementary'] .options-window-control-button.close svg line {
+    stroke-width: 1.8;
+}
+
+:root[data-look='elementary'] .tab--active {
+    background: var(--bg-primary);
+}
