@@ -111,6 +111,8 @@ vi.mock('../../../src/main/managers/windowManager', () => {
             getMainWindowInstance = vi.fn().mockReturnValue(null);
             createMainWindow = vi.fn();
             restoreFromTray = vi.fn();
+            showQuickChat = vi.fn();
+            hideToTray = vi.fn();
             setAlwaysOnTop = vi.fn();
             isAlwaysOnTop = vi.fn().mockReturnValue(false);
             constructor() {
@@ -287,6 +289,80 @@ describe('main.ts', () => {
             ([flag, value]) => flag === 'enable-features' && value === 'GlobalShortcutsPortal'
         );
         expect(hasGlobalShortcutsPortal).toBe(false);
+    });
+
+    describe('second-instance', () => {
+        type WindowManagerMock = {
+            getMainWindow: ReturnType<typeof vi.fn>;
+            createMainWindow: ReturnType<typeof vi.fn>;
+            restoreFromTray: ReturnType<typeof vi.fn>;
+            showQuickChat: ReturnType<typeof vi.fn>;
+        };
+
+        async function loadMain(): Promise<WindowManagerMock> {
+            await import('../../../src/main/main');
+            const context = (global as typeof globalThis & { appContext?: { windowManager: WindowManagerMock } })
+                .appContext;
+            if (!context) throw new Error('main.ts exposed no appContext');
+            // Let the app.whenReady() startup run first, then forget its calls
+            await new Promise((resolve) => setImmediate(resolve));
+            context.windowManager.createMainWindow.mockClear();
+            return context.windowManager;
+        }
+
+        it('passes --quick-chat to the running app as single-instance data', async () => {
+            await loadMain();
+
+            expect(mockApp.requestSingleInstanceLock).toHaveBeenCalledWith({ quickChat: false });
+        });
+
+        it('opens Quick Chat when the second instance was started with --quick-chat', async () => {
+            const windowManager = await loadMain();
+            windowManager.getMainWindow.mockReturnValue({});
+
+            getAppHandler('second-instance')({}, ['/opt/Gemini Desktop/gemini-desktop', '--quick-chat'], '/', {});
+
+            expect(windowManager.showQuickChat).toHaveBeenCalledTimes(1);
+            expect(windowManager.restoreFromTray).not.toHaveBeenCalled();
+            expect(windowManager.createMainWindow).not.toHaveBeenCalled();
+        });
+
+        it('opens Quick Chat from the single-instance data, creating the main window hidden if needed', async () => {
+            const windowManager = await loadMain();
+            windowManager.getMainWindow.mockReturnValue(null);
+
+            getAppHandler('second-instance')({}, ['/usr/bin/gemini-desktop'], '/', { quickChat: true });
+
+            expect(windowManager.createMainWindow).toHaveBeenCalledWith({ startHidden: true });
+            expect(windowManager.showQuickChat).toHaveBeenCalledTimes(1);
+        });
+
+        it('with --quick-chat at startup, creates the main window hidden and opens Quick Chat once ready', async () => {
+            const argv = process.argv;
+            process.argv = [...argv, '--quick-chat'];
+            try {
+                await import('../../../src/main/main');
+                await new Promise((resolve) => setImmediate(resolve));
+            } finally {
+                process.argv = argv;
+            }
+            const windowManager = (global as typeof globalThis & { appContext?: { windowManager: WindowManagerMock } })
+                .appContext?.windowManager;
+
+            expect(mockApp.requestSingleInstanceLock).toHaveBeenCalledWith({ quickChat: true });
+            expect(windowManager?.createMainWindow).toHaveBeenCalledWith({ startHidden: true });
+            expect(windowManager?.showQuickChat).toHaveBeenCalledTimes(1);
+        });
+
+        it('focuses the main window on a plain second start', async () => {
+            const windowManager = await loadMain();
+            windowManager.getMainWindow.mockReturnValue({});
+
+            getAppHandler('second-instance')({}, ['/usr/bin/gemini-desktop'], '/', { quickChat: false });
+
+            expect(windowManager.restoreFromTray).toHaveBeenCalledTimes(1);
+            expect(windowManager.showQuickChat).not.toHaveBeenCalled();
+        });
     });
 
     describe('termination signals', () => {

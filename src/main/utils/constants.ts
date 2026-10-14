@@ -353,6 +353,7 @@ export interface TrayMenuItem {
  */
 export const TRAY_MENU_ITEMS: Record<string, TrayMenuItem> = {
     SHOW: { label: 'Show Gemini Desktop', id: 'show' },
+    QUICK_CHAT: { label: 'Quick Chat', id: 'quickChat' },
     SEPARATOR: { label: '', id: 'separator', isSeparator: true },
     QUIT: { label: 'Quit', id: 'quit' },
 };

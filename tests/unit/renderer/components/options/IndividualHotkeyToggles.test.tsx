@@ -6,10 +6,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { IndividualHotkeyToggles } from '../../../../../src/renderer/components/options/IndividualHotkeyToggles';
 import * as hotkeysContext from '../../../../../src/renderer/context/IndividualHotkeysContext';
-import { DEFAULT_ACCELERATORS } from '../../../../../src/shared/types/hotkeys';
+import { COPILOT_KEY_ACCELERATOR, DEFAULT_ACCELERATORS } from '../../../../../src/shared/types/hotkeys';
+import { setupMockElectronAPI } from '../../../../helpers/mocks';
 
 const mockSetEnabled = vi.fn();
 const mockSetAccelerator = vi.fn();
@@ -96,6 +97,60 @@ describe('IndividualHotkeyToggles', () => {
     describe('accelerator defaults', () => {
         it('should have voiceChat default accelerator as CommandOrControl+Shift+M', () => {
             expect(DEFAULT_ACCELERATORS.voiceChat).toBe('CommandOrControl+Shift+M');
+        });
+    });
+
+    describe('Copilot key preset', () => {
+        let originalElectronAPI: typeof window.electronAPI;
+
+        beforeEach(() => {
+            originalElectronAPI = window.electronAPI;
+        });
+
+        afterEach(() => {
+            window.electronAPI = originalElectronAPI;
+        });
+
+        it.each(['linux', 'win32'] as const)('on %s, sets Quick Chat to Shift+Super+F23 in one click', (platform) => {
+            setupMockElectronAPI({ platform });
+            render(<IndividualHotkeyToggles />);
+
+            const button = screen.getByTestId('hotkey-copilot-preset');
+            expect(button).toHaveTextContent('Use Copilot key');
+            expect(screen.getByTestId('hotkey-row-quickChat')).toContainElement(button);
+
+            fireEvent.click(button);
+
+            expect(COPILOT_KEY_ACCELERATOR).toBe('Shift+Super+F23');
+            expect(mockSetAccelerator).toHaveBeenCalledWith('quickChat', 'Shift+Super+F23');
+        });
+
+        it('is not offered on macOS, which has no Copilot key', () => {
+            setupMockElectronAPI({ platform: 'darwin' });
+            render(<IndividualHotkeyToggles />);
+
+            expect(screen.queryByTestId('hotkey-copilot-preset')).not.toBeInTheDocument();
+        });
+
+        it('is disabled while the Quick Chat hotkey is off or already the Copilot key', () => {
+            setupMockElectronAPI({ platform: 'linux' });
+            vi.spyOn(hotkeysContext, 'useIndividualHotkeys').mockReturnValue({
+                ...mockContextValue,
+                settings: { ...mockContextValue.settings, quickChat: false },
+            });
+            const { unmount } = render(<IndividualHotkeyToggles />);
+            expect(screen.getByTestId('hotkey-copilot-preset')).toBeDisabled();
+            unmount();
+
+            vi.spyOn(hotkeysContext, 'useIndividualHotkeys').mockReturnValue({
+                ...mockContextValue,
+                accelerators: { ...DEFAULT_ACCELERATORS, quickChat: COPILOT_KEY_ACCELERATOR },
+            });
+            render(<IndividualHotkeyToggles />);
+            expect(screen.getByTestId('hotkey-copilot-preset')).toBeDisabled();
+            expect(
+                screen.getByRole('button', { name: /keyboard shortcut: shift \+ super \+ f23/i })
+            ).toBeInTheDocument();
         });
     });
 });

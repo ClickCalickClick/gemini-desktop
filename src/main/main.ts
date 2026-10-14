@@ -83,6 +83,8 @@ import LlmManager from './managers/llmManager';
 import SettingsStore from './store';
 import RendererReloads from './utils/rendererReloads';
 import TerminationSignals from './utils/terminationSignals';
+import { parseLaunchOptions, wantsQuickChat, type SingleInstanceData } from './utils/launchArgs';
+import { ensureQuickChatLauncher } from './utils/quickChatLauncher';
 import type { ApplicationContext, E2EGlobals, ReadyManagers } from './ApplicationContext';
 
 // Path to the production build
@@ -97,7 +99,11 @@ const useProductionBuild = app.isPackaged || process.env.ELECTRON_USE_DIST === '
 
 // For E2E tests, always use production build if it exists
 const isDev = !useProductionBuild;
-const startHidden = process.argv.includes('--hidden');
+const launchOptions = parseLaunchOptions(process.argv);
+const startHidden = launchOptions.startHidden;
+
+/** Set when Quick Chat was asked for (by --quick-chat) before the app was ready to show it */
+let openQuickChatWhenReady = launchOptions.openQuickChat;
 
 /**
  * Manager instances - initialized lazily to allow for declarative pattern.
@@ -294,6 +300,20 @@ function gracefulShutdown(exitCode: number = 0): void {
     }, 500);
 }
 
+/**
+ * Show Quick Chat for a --quick-chat launch. Sending a prompt from Quick Chat needs the main
+ * window, so it is created hidden first when it does not exist; Quick Chat brings it forward.
+ */
+function showQuickChatFromLauncher(): void {
+    if (!appContext) {
+        return;
+    }
+    if (!appContext.windowManager.getMainWindow()) {
+        appContext.windowManager.createMainWindow({ startHidden: true });
+    }
+    appContext.windowManager.showQuickChat();
+}
+
 // Initialize managers before requesting instance lock
 logger.debug('About to call initializeManagers()');
 initializeManagers();
@@ -301,7 +321,8 @@ logger.debug('initializeManagers() completed');
 
 // Single Instance Lock
 logger.debug('About to request single instance lock');
-const gotTheLock = app.requestSingleInstanceLock();
+const singleInstanceData: SingleInstanceData = { quickChat: launchOptions.openQuickChat };
+const gotTheLock = app.requestSingleInstanceLock(singleInstanceData);
 logger.debug('Single instance lock result:', gotTheLock);
 
 if (!gotTheLock) {
@@ -310,8 +331,19 @@ if (!gotTheLock) {
 } else {
     logger.debug('Got the lock, setting up second-instance handler');
 
-    app.on('second-instance', () => {
-        // Someone tried to run a second instance, we should focus our window.
+    app.on('second-instance', (_event, argv, _workingDirectory, additionalData) => {
+        // A launcher with --quick-chat (the Gemini Quick Chat entry, the main entry's action) opens
+        // Quick Chat; any other second start focuses the main window.
+        if (wantsQuickChat(argv, additionalData)) {
+            logger.log('Second instance asked for Quick Chat');
+            if (!app.isReady()) {
+                openQuickChatWhenReady = true;
+                return;
+            }
+            showQuickChatFromLauncher();
+            return;
+        }
+
         logger.log('Second instance detected. Focusing existing window...');
         if (appContext) {
             if (appContext.windowManager.getMainWindow()) {
@@ -452,6 +484,16 @@ if (!gotTheLock) {
         // This is async but we don't need to block startup on it
         appContext.ipcManager.initializeTextPrediction().catch((error) => {
             logger.error('Failed to initialize text prediction:', error);
+        });
+
+        if (openQuickChatWhenReady) {
+            openQuickChatWhenReady = false;
+            showQuickChatFromLauncher();
+        }
+
+        // AppImage and tar.gz installs have no package to ship the Gemini Quick Chat launcher
+        ensureQuickChatLauncher({ isPackaged: app.isPackaged }).catch((error) => {
+            logger.error('Failed to set up the Gemini Quick Chat launcher:', error);
         });
 
         if (app.isPackaged && !process.argv.includes('--test-auto-update') && !process.env.TEST_AUTO_UPDATE) {

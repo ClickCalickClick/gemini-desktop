@@ -16,6 +16,7 @@ import { memo } from 'react';
 import { CapsuleToggle } from '../common/CapsuleToggle';
 import { useIndividualHotkeys, HotkeyId, DEFAULT_ACCELERATORS } from '../../context/IndividualHotkeysContext';
 import { HotkeyAcceleratorInput } from './HotkeyAcceleratorInput';
+import { COPILOT_KEY_ACCELERATOR } from '../../../shared/types/hotkeys';
 import './individualHotkeyToggles.css';
 
 // ============================================================================
@@ -74,6 +75,9 @@ const HOTKEY_CONFIGS: HotkeyConfig[] = [
  */
 export const IndividualHotkeyToggles = memo(function IndividualHotkeyToggles() {
     const { settings, accelerators, setEnabled, setAccelerator } = useIndividualHotkeys();
+    // Copilot keys are on Windows laptops, which also run Linux; Macs have none
+    const platform = window.electronAPI?.platform;
+    const offersCopilotKey = platform === 'linux' || platform === 'win32';
 
     return (
         <div className="individual-hotkey-toggles" data-testid="individual-hotkey-toggles">
@@ -91,6 +95,18 @@ export const IndividualHotkeyToggles = memo(function IndividualHotkeyToggles() {
                             onAcceleratorChange={setAccelerator}
                             defaultAccelerator={DEFAULT_ACCELERATORS[config.id]}
                         />
+                        {config.id === 'quickChat' && offersCopilotKey && (
+                            <button
+                                type="button"
+                                className="hotkey-preset-button"
+                                data-testid="hotkey-copilot-preset"
+                                onClick={() => setAccelerator('quickChat', COPILOT_KEY_ACCELERATOR)}
+                                disabled={!settings.quickChat || accelerators.quickChat === COPILOT_KEY_ACCELERATOR}
+                                title="Open Quick Chat with the Copilot key (Shift+Super+F23)"
+                            >
+                                Use Copilot key
+                            </button>
+                        )}
                     </div>
                     <div className="hotkey-toggle-wrapper">
                         <CapsuleToggle
