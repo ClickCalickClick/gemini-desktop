@@ -20,6 +20,7 @@ import { TextPredictionSettings } from './TextPredictionSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { StartupSettings } from './StartupSettings';
 import { ChatBehaviorSettings } from './ChatBehaviorSettings';
+import { QuickChatSettings } from './QuickChatSettings';
 import './options-window.css';
 
 // ============================================================================
@@ -176,6 +177,11 @@ export function OptionsWindow() {
                             {/* Hotkey Settings */}
                             <OptionsSection title="Hotkey Shortcuts" testId="options-hotkeys">
                                 <IndividualHotkeyToggles />
+                            </OptionsSection>
+
+                            {/* Quick Chat: routing between the Gemini tab and the local agent */}
+                            <OptionsSection title="Quick Chat" testId="options-quick-chat">
+                                <QuickChatSettings />
                             </OptionsSection>
 
                             {/* Updates Settings */}

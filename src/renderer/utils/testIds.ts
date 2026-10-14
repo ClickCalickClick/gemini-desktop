@@ -89,6 +89,32 @@ export const QUICK_CHAT_TEST_IDS = {
     QUICK_CHAT_INPUT: 'quick-chat-input',
     QUICK_CHAT_SUBMIT: 'quick-chat-submit',
     QUICK_CHAT_GHOST_TEXT: 'quick-chat-ghost-text',
+    QUICK_CHAT_ROUTE_CHIP: 'quick-chat-route-chip',
+    QUICK_CHAT_AGENT_PANEL: 'quick-chat-agent-panel',
+    QUICK_CHAT_AGENT_PROGRESS: 'quick-chat-agent-progress',
+    QUICK_CHAT_AGENT_STOP: 'quick-chat-agent-stop',
+    QUICK_CHAT_AGENT_OUTPUT: 'quick-chat-agent-output',
+    QUICK_CHAT_AGENT_TOOLS: 'quick-chat-agent-tools',
+    QUICK_CHAT_AGENT_TOOL_STEP: 'quick-chat-agent-tool-step',
+    QUICK_CHAT_AGENT_PLAN: 'quick-chat-agent-plan',
+    QUICK_CHAT_AGENT_PLAN_ACTION: 'quick-chat-agent-plan-action',
+    QUICK_CHAT_AGENT_PLAN_APPLY: 'quick-chat-agent-plan-apply',
+    QUICK_CHAT_AGENT_PLAN_CANCEL: 'quick-chat-agent-plan-cancel',
+    QUICK_CHAT_AGENT_PLAN_UNDO: 'quick-chat-agent-plan-undo',
+    QUICK_CHAT_AGENT_PLAN_RESULT: 'quick-chat-agent-plan-result',
+    QUICK_CHAT_AGENT_ERROR: 'quick-chat-agent-error',
+    QUICK_CHAT_AGENT_SETUP_HINT: 'quick-chat-agent-setup-hint',
+    QUICK_CHAT_AGENT_NEW: 'quick-chat-agent-new',
+    QUICK_CHAT_AGENT_CONTINUE_WEB: 'quick-chat-agent-continue-web',
+} as const;
+
+export const QUICK_CHAT_SETTINGS_TEST_IDS = {
+    QUICK_CHAT_SETTINGS: 'quick-chat-settings',
+    QUICK_CHAT_SETTINGS_ROUTING: 'quick-chat-settings-routing',
+    QUICK_CHAT_SETTINGS_ENGINE: 'quick-chat-settings-engine',
+    QUICK_CHAT_SETTINGS_MODEL: 'quick-chat-settings-model',
+    QUICK_CHAT_SETTINGS_STATUS: 'quick-chat-settings-status',
+    QUICK_CHAT_SETTINGS_RECHECK: 'quick-chat-settings-recheck',
 } as const;
 
 export const TAB_TEST_IDS = {
@@ -111,5 +137,6 @@ export const TEST_IDS = {
     ...OPTIONS_TEST_IDS,
     ...ABOUT_TEST_IDS,
     ...QUICK_CHAT_TEST_IDS,
+    ...QUICK_CHAT_SETTINGS_TEST_IDS,
     ...TAB_TEST_IDS,
 } as const;

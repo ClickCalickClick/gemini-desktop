@@ -13,7 +13,9 @@ Primary files and folders:
 - `src/shared/types/tabs.ts` — shared tab state and payload shapes
 - `src/shared/types/hotkeys.ts` — hotkey ids, accelerators and `PlatformHotkeyStatus`; while its `registrationPending` is true the desktop is still asking the user to approve the shortcuts, and the main process sends the final status on `PLATFORM_HOTKEY_STATUS_CHANGED`
 - `src/shared/types/` — cross-boundary payloads and state types
+- `src/shared/types/agent.ts` — hybrid Quick Chat contract: routes, `RouteDecision`, agent settings and status, run requests and `AgentRunEvent`s, file plans
 - `src/shared/utils/` — shared pure helpers safe to reuse across boundaries
+- `src/shared/utils/quickChatRouter.ts` — `routePrompt(text, { mode, agentAvailable })` decides whether a Quick Chat prompt goes to the Gemini tab or the local agent, with a short reason. Order: prefix (`@web`, `@gemini`, `@agent`, `@cli`, `@local`, `/web`, `/agent`, stripped from `prompt`), then the routing mode, then the auto rules (paths and file names, web cues such as images, video, Deep Research, Canvas, Gems, web search and news, well-known folders, local code, system questions, else "general question"). An agent route without an installed agent falls back to web unless a prefix forced it. `forceRoute` serves the chip toggle and Ctrl+Enter, `describeRoute` the chip label. The heuristics are exported; `tests/unit/shared/quickChatRouter.test.ts` holds the table of prompts, so add a row there when you change a rule
 
 ## Contract Rules
 
