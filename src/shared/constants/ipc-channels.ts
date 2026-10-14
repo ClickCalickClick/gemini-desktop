@@ -44,6 +44,8 @@ export const IPC_CHANNELS = {
     QUICK_CHAT_CANCEL: 'quick-chat:cancel',
     QUICK_CHAT_EXECUTE: 'quick-chat:execute',
     QUICK_CHAT_RESIZE: 'quick-chat:resize',
+    QUICK_CHAT_SCREENSHOT_CAPTURE: 'quick-chat:screenshot-capture',
+    QUICK_CHAT_SCREENSHOT_DISCARD: 'quick-chat:screenshot-discard',
 
     // Agent engine (hybrid Quick Chat)
     AGENT_STATUS_GET: 'agent:status-get',

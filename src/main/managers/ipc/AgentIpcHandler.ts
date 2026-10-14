@@ -11,6 +11,7 @@
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
 
 import { BaseIpcHandler } from './BaseIpcHandler';
+import { validateRunRequest } from '../agentManager';
 import { IPC_CHANNELS } from '../../utils/constants';
 import type {
     AgentEnginePreference,
@@ -146,9 +147,15 @@ export class AgentIpcHandler extends BaseIpcHandler {
         }
         const settings = this.getSettings();
         const sender = event.sender;
+        const { screenshotId } = validateRunRequest(request);
+        const screenshot = screenshotId ? this.deps.screenshotManager?.take(screenshotId) : null;
+        if (screenshotId && !screenshot) {
+            throw new Error('The screenshot is no longer available. Take it again.');
+        }
         return manager.run(request, {
             enginePreference: settings.agentEngine,
             model: settings.agentModel,
+            ...(screenshot ? { screenshot } : {}),
             emit: (agentEvent: AgentRunEvent) => {
                 try {
                     this.eventTarget(sender)?.send(IPC_CHANNELS.AGENT_EVENT, agentEvent);

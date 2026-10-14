@@ -63,6 +63,8 @@ export interface AgentRunRequest {
     category: AgentTaskCategory;
     /** Continue an earlier conversation (follow-up questions in Quick Chat). */
     conversationId?: string;
+    /** A screenshot taken in Quick Chat (its id from captureQuickChatScreenshot) to show the agent. */
+    screenshotId?: string;
 }
 
 /** One file operation proposed by the agent. Nothing runs until the user applies the plan. */

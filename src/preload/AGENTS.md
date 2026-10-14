@@ -27,6 +27,8 @@ Treat this get/set/onChange shape as the template for new bridge APIs.
 
 Smaller settings follow the get/set half of it, for example `src/preload/api/tray.ts` (`getTrayClickAction()` with `invoke`, `setTrayClickAction()` with `send`).
 
+`src/preload/api/quickChat.ts` also carries Quick Chat's screenshots (H10): `captureQuickChatScreenshot(mode)` with `invoke`, `discardQuickChatScreenshot(id)` with `send`, and `submitQuickChat(text, { screenshotId })`. Only an id crosses the bridge; the image stays in the main process.
+
 ## Security Rules
 
 - Never expose raw `ipcRenderer` to renderer code

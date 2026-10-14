@@ -1,21 +1,40 @@
 import { randomUUID } from 'node:crypto';
 
-import { ipcMain } from 'electron';
+import { clipboard, ipcMain, nativeImage, type BrowserWindow, type WebFrameMain } from 'electron';
 
 import { BaseIpcHandler } from './BaseIpcHandler';
 import { IPC_CHANNELS, isGeminiDomain } from '../../utils/constants';
 import type { GeminiReadyPayload } from '../../../shared/types/tabs';
 import { getTabFrameName } from '../../../shared/types/tabs';
 import { InjectionScriptBuilder, InjectionResult } from '../../utils/injectionScript';
+import {
+    buildAwaitClipboardPasteScript,
+    buildPrepareClipboardPasteScript,
+    buildSyntheticAttachScript,
+    type ImageAttachResult,
+} from '../../utils/imageAttachScript';
+import { showToast } from '../../utils/toast';
+import type { QuickChatSubmitOptions, ScreenshotCaptureResult } from '../../../shared/types/screenshot';
 
 interface PendingQuickChatRequest {
     requestId: string;
     targetTabId: string;
     text: string;
+    /** A screenshot to attach before the text (H10). */
+    screenshot?: Buffer;
     createdAt: number;
 }
 
 const REQUEST_TTL_MS = 2 * 60 * 1000;
+
+/** How long auto-submit waits for Gemini to finish uploading an attached screenshot. */
+export const UPLOAD_SUBMIT_WAIT_MS = 30_000;
+
+interface SavedClipboard {
+    text: string;
+    html: string;
+    image: Electron.NativeImage;
+}
 
 function isGeminiReadyPayload(payload: unknown): payload is GeminiReadyPayload {
     if (typeof payload !== 'object' || payload === null) {
@@ -43,8 +62,17 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
     }
 
     register(): void {
-        ipcMain.on(IPC_CHANNELS.QUICK_CHAT_SUBMIT, (_event, text: string) => {
-            this._handleSubmit(text);
+        ipcMain.on(IPC_CHANNELS.QUICK_CHAT_SUBMIT, (_event, text: unknown, options?: unknown) => {
+            this._handleSubmit(text, options);
+        });
+
+        ipcMain.handle(
+            IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_CAPTURE,
+            (_event, mode: unknown): Promise<ScreenshotCaptureResult> => this._handleScreenshotCapture(mode)
+        );
+
+        ipcMain.on(IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_DISCARD, (_event, id: unknown) => {
+            this.deps.screenshotManager?.discard(id);
         });
 
         ipcMain.on(IPC_CHANNELS.GEMINI_READY, async (_event, payload: unknown) => {
@@ -85,10 +113,39 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
         }
     }
 
-    private _handleSubmit(text: string): void {
+    private async _handleScreenshotCapture(mode: unknown): Promise<ScreenshotCaptureResult> {
+        const manager = this.deps.screenshotManager;
+        if (!manager) {
+            return { status: 'error', error: 'Screenshots are not available in this build.' };
+        }
+        return manager.capture(mode);
+    }
+
+    /** The screenshot sent with a prompt, taken out of the screenshot manager. */
+    private _takeScreenshot(options: unknown): Buffer | undefined {
+        if (typeof options !== 'object' || options === null) {
+            return undefined;
+        }
+        const { screenshotId } = options as QuickChatSubmitOptions;
+        if (screenshotId === undefined) {
+            return undefined;
+        }
+        const png = this.deps.screenshotManager?.take(screenshotId) ?? null;
+        if (!png) {
+            this.logger.warn('Quick Chat screenshot not found; sending the text only');
+        }
+        return png ?? undefined;
+    }
+
+    private _handleSubmit(text: unknown, options?: unknown): void {
         try {
+            if (typeof text !== 'string') {
+                this.logger.warn('Ignoring Quick Chat submit without text');
+                return;
+            }
             this._cleanupExpiredRequests();
             this.logger.log('Quick Chat submit received:', text.substring(0, 50));
+            const screenshot = this._takeScreenshot(options);
 
             this.deps.windowManager.hideQuickChat();
             this.deps.windowManager.focusMainWindow();
@@ -106,6 +163,7 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
                 requestId,
                 targetTabId,
                 text,
+                ...(screenshot ? { screenshot } : {}),
                 createdAt: Date.now(),
             };
 
@@ -117,6 +175,7 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
                 targetTabId,
                 activeTabId: mainWindow.webContents.id,
                 windowId: mainWindow.id,
+                screenshot: Boolean(screenshot),
             });
 
             mainWindow.webContents.send(IPC_CHANNELS.GEMINI_NAVIGATE, {
@@ -256,13 +315,32 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
         }
 
         const isE2EMode = process.argv.includes('--e2e-disable-auto-submit');
-        const injectionScript = new InjectionScriptBuilder().withText(request.text).withAutoSubmit(!isE2EMode).build();
+        let attached = false;
+        if (request.screenshot) {
+            attached = await this._attachScreenshot(mainWindow, targetFrame, request.screenshot);
+        }
+        // Without the screenshot the answer would miss the point: leave the text for the user to send.
+        const missingScreenshot = Boolean(request.screenshot) && !attached;
+        const injectionScript = new InjectionScriptBuilder()
+            .withText(request.text)
+            .withAutoSubmit(!isE2EMode && !missingScreenshot)
+            .withSubmitWait(attached ? UPLOAD_SUBMIT_WAIT_MS : 0)
+            .build();
 
         try {
             const result = (await targetFrame.executeJavaScript(injectionScript)) as InjectionResult;
 
             if (result?.success) {
                 this.logger.log('Text injected into Gemini successfully');
+                if (missingScreenshot) {
+                    showToast(mainWindow, {
+                        type: 'warning',
+                        title: 'Screenshot not attached',
+                        message:
+                            'Gemini did not take the screenshot. It is on the clipboard: paste it into the message box, then send.',
+                        duration: 10_000,
+                    });
+                }
             } else {
                 this.logger.error('Injection script returned failure:', {
                     error: result?.error,
@@ -274,8 +352,66 @@ export class QuickChatIpcHandler extends BaseIpcHandler {
         }
     }
 
+    /**
+     * Attach a screenshot to the message box: as a paste or drop from a script first, then as a
+     * real paste from the clipboard. When nothing works the image is left on the clipboard.
+     */
+    private async _attachScreenshot(mainWindow: BrowserWindow, frame: WebFrameMain, png: Buffer): Promise<boolean> {
+        try {
+            const result = (await frame.executeJavaScript(
+                buildSyntheticAttachScript(png.toString('base64'))
+            )) as ImageAttachResult;
+            if (result?.attached) {
+                this.logger.log('Screenshot attached in Gemini:', { method: result.method });
+                return true;
+            }
+            this.logger.warn('Gemini did not take the screenshot from a script:', { error: result?.error });
+        } catch (error) {
+            this.logger.error('Failed to attach the screenshot from a script:', error);
+        }
+
+        const saved = this._saveClipboard();
+        try {
+            clipboard.writeImage(nativeImage.createFromBuffer(png));
+            const ready = (await frame.executeJavaScript(buildPrepareClipboardPasteScript())) as boolean;
+            if (ready) {
+                mainWindow.webContents.paste();
+                const result = (await frame.executeJavaScript(buildAwaitClipboardPasteScript())) as ImageAttachResult;
+                if (result?.attached) {
+                    this.logger.log('Screenshot attached in Gemini:', { method: result.method });
+                    this._restoreClipboard(saved);
+                    return true;
+                }
+            }
+            this.logger.warn('Gemini did not take the screenshot from the clipboard either');
+        } catch (error) {
+            this.logger.error('Failed to paste the screenshot:', error);
+        }
+        return false;
+    }
+
+    private _saveClipboard(): SavedClipboard {
+        return { text: clipboard.readText(), html: clipboard.readHTML(), image: clipboard.readImage() };
+    }
+
+    private _restoreClipboard(saved: SavedClipboard): void {
+        try {
+            if (saved.text || saved.html) {
+                clipboard.write({ text: saved.text, html: saved.html });
+            } else if (!saved.image.isEmpty()) {
+                clipboard.writeImage(saved.image);
+            } else {
+                clipboard.clear();
+            }
+        } catch (error) {
+            this.logger.warn('Could not restore the clipboard:', error);
+        }
+    }
+
     unregister(): void {
         ipcMain.removeAllListeners(IPC_CHANNELS.QUICK_CHAT_SUBMIT);
+        ipcMain.removeHandler(IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_CAPTURE);
+        ipcMain.removeAllListeners(IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_DISCARD);
         ipcMain.removeAllListeners(IPC_CHANNELS.GEMINI_READY);
         ipcMain.removeAllListeners(IPC_CHANNELS.QUICK_CHAT_HIDE);
         ipcMain.removeAllListeners(IPC_CHANNELS.QUICK_CHAT_CANCEL);

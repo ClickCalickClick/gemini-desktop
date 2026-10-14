@@ -34,12 +34,33 @@ const { mockIpcMain } = vi.hoisted(() => {
     return { mockIpcMain };
 });
 
+const { mockClipboard, mockNativeImage } = vi.hoisted(() => ({
+    mockClipboard: {
+        readText: vi.fn(() => 'old text'),
+        readHTML: vi.fn(() => ''),
+        readImage: vi.fn(() => ({ isEmpty: () => true })),
+        writeImage: vi.fn(),
+        write: vi.fn(),
+        clear: vi.fn(),
+    },
+    mockNativeImage: { createFromBuffer: vi.fn(() => ({ isEmpty: () => false })) },
+}));
+
 vi.mock('electron', () => ({
     ipcMain: mockIpcMain,
+    clipboard: mockClipboard,
+    nativeImage: mockNativeImage,
+}));
+
+vi.mock('../../../../src/main/utils/imageAttachScript', () => ({
+    buildSyntheticAttachScript: () => 'synthetic-attach-script',
+    buildPrepareClipboardPasteScript: () => 'prepare-paste-script',
+    buildAwaitClipboardPasteScript: () => 'await-paste-script',
 }));
 
 // Mock InjectionScriptBuilder
 let autoSubmitArg: boolean | null = null;
+let submitWaitArg: number | null = null;
 
 vi.mock('../../../../src/main/utils/injectionScript', () => ({
     InjectionScriptBuilder: class MockInjectionScriptBuilder {
@@ -48,6 +69,10 @@ vi.mock('../../../../src/main/utils/injectionScript', () => ({
         }
         withAutoSubmit(value: boolean) {
             autoSubmitArg = value;
+            return this;
+        }
+        withSubmitWait(value: number) {
+            submitWaitArg = value;
             return this;
         }
         build() {
@@ -65,8 +90,10 @@ describe('QuickChatIpcHandler', () => {
     let mockLogger: ReturnType<typeof createMockLogger>;
     let mockWindowManager: ReturnType<typeof createMockWindowManager>;
     let mockMainWindow: {
+        isDestroyed?: () => boolean;
         webContents: {
             send: ReturnType<typeof vi.fn>;
+            paste?: ReturnType<typeof vi.fn>;
             mainFrame: {
                 frames: Array<{
                     name?: string;
@@ -84,14 +111,17 @@ describe('QuickChatIpcHandler', () => {
         vi.clearAllMocks();
         mockIpcMain._reset();
         autoSubmitArg = null;
+        submitWaitArg = null;
 
         mockLogger = createMockLogger();
         mockWindowManager = createMockWindowManager();
 
         // Create mock main window with webContents
         mockMainWindow = {
+            isDestroyed: () => false,
             webContents: {
                 send: vi.fn(),
+                paste: vi.fn(),
                 mainFrame: {
                     frames: [],
                 },
@@ -424,6 +454,147 @@ describe('QuickChatIpcHandler', () => {
             } finally {
                 process.argv = originalArgv;
             }
+        });
+    });
+
+    describe('screenshots (H10)', () => {
+        const SCREENSHOT_ID = '0b4d8a46-2f4e-4b8e-9d0a-1c2b3c4d5e6f';
+        const png = Buffer.from('fake-png');
+        let screenshotManager: {
+            capture: ReturnType<typeof vi.fn>;
+            take: ReturnType<typeof vi.fn>;
+            discard: ReturnType<typeof vi.fn>;
+        };
+
+        beforeEach(() => {
+            screenshotManager = {
+                capture: vi.fn().mockResolvedValue({ status: 'cancelled' }),
+                take: vi.fn((id: unknown) => (id === SCREENSHOT_ID ? png : null)),
+                discard: vi.fn(),
+            };
+            (mockDeps as unknown as { screenshotManager: unknown }).screenshotManager = screenshotManager;
+            handler.register();
+        });
+
+        /** Submit, then answer gemini:ready with a frame whose executeJavaScript runs `scripts`. */
+        async function submitAndInject(
+            options: unknown,
+            scripts: Record<string, unknown>
+        ): Promise<ReturnType<typeof vi.fn>> {
+            mockIpcMain._listeners.get(IPC_CHANNELS.QUICK_CHAT_SUBMIT)!({}, 'What is this?', options);
+            const navigatePayload = mockMainWindow.webContents.send.mock.calls[0]?.[1] as {
+                requestId: string;
+                targetTabId: string;
+            };
+            const executeJavaScript = vi.fn(async (script: string) =>
+                script in scripts ? scripts[script] : { success: true }
+            );
+            mockMainWindow.webContents.mainFrame.frames = [
+                {
+                    name: getTabFrameName(navigatePayload.targetTabId),
+                    url: 'https://gemini.google.com/app',
+                    executeJavaScript,
+                },
+            ];
+            await mockIpcMain._listeners.get(IPC_CHANNELS.GEMINI_READY)!({}, navigatePayload);
+            return executeJavaScript;
+        }
+
+        it('registers the capture and discard channels', () => {
+            expect(mockIpcMain.handle).toHaveBeenCalledWith(
+                IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_CAPTURE,
+                expect.any(Function)
+            );
+            expect(mockIpcMain.on).toHaveBeenCalledWith(
+                IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_DISCARD,
+                expect.any(Function)
+            );
+        });
+
+        it('passes capture and discard to the screenshot manager', async () => {
+            const capture = mockIpcMain._handlers.get(IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_CAPTURE)!;
+            await expect(capture({}, 'area')).resolves.toEqual({ status: 'cancelled' });
+            expect(screenshotManager.capture).toHaveBeenCalledWith('area');
+
+            mockIpcMain._listeners.get(IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_DISCARD)!({}, SCREENSHOT_ID);
+            expect(screenshotManager.discard).toHaveBeenCalledWith(SCREENSHOT_ID);
+        });
+
+        it('reports an error when there is no screenshot manager', async () => {
+            (mockDeps as unknown as { screenshotManager: unknown }).screenshotManager = null;
+            const capture = mockIpcMain._handlers.get(IPC_CHANNELS.QUICK_CHAT_SCREENSHOT_CAPTURE)!;
+            await expect(capture({}, 'screen')).resolves.toMatchObject({ status: 'error' });
+        });
+
+        it('attaches the screenshot before the text and waits for the upload to submit', async () => {
+            const executeJavaScript = await submitAndInject(
+                { screenshotId: SCREENSHOT_ID },
+                { 'synthetic-attach-script': { attached: true, method: 'paste' } }
+            );
+
+            expect(screenshotManager.take).toHaveBeenCalledWith(SCREENSHOT_ID);
+            expect(executeJavaScript.mock.calls.map((call) => call[0])).toEqual([
+                'synthetic-attach-script',
+                'mocked-injection-script',
+            ]);
+            expect(autoSubmitArg).toBe(true);
+            expect(submitWaitArg).toBeGreaterThan(0);
+            expect(mockClipboard.writeImage).not.toHaveBeenCalled();
+        });
+
+        it('pastes from the clipboard when the script cannot attach, then restores the clipboard', async () => {
+            const executeJavaScript = await submitAndInject(
+                { screenshotId: SCREENSHOT_ID },
+                {
+                    'synthetic-attach-script': { attached: false, error: 'no_preview_seen' },
+                    'prepare-paste-script': true,
+                    'await-paste-script': { attached: true, method: 'clipboard' },
+                }
+            );
+
+            expect(executeJavaScript.mock.calls.map((call) => call[0])).toEqual([
+                'synthetic-attach-script',
+                'prepare-paste-script',
+                'await-paste-script',
+                'mocked-injection-script',
+            ]);
+            expect(mockClipboard.writeImage).toHaveBeenCalledTimes(1);
+            expect(mockMainWindow.webContents.paste).toHaveBeenCalledTimes(1);
+            expect(mockClipboard.write).toHaveBeenCalledWith({ text: 'old text', html: '' });
+            expect(autoSubmitArg).toBe(true);
+        });
+
+        it('leaves the text unsent and the image on the clipboard when Gemini takes no screenshot', async () => {
+            await submitAndInject(
+                { screenshotId: SCREENSHOT_ID },
+                {
+                    'synthetic-attach-script': { attached: false },
+                    'prepare-paste-script': true,
+                    'await-paste-script': { attached: false },
+                }
+            );
+
+            expect(autoSubmitArg).toBe(false);
+            expect(mockClipboard.write).not.toHaveBeenCalled();
+            expect(mockClipboard.clear).not.toHaveBeenCalled();
+            expect(mockMainWindow.webContents.send).toHaveBeenCalledWith(
+                IPC_CHANNELS.TOAST_SHOW,
+                expect.objectContaining({ type: 'warning', title: 'Screenshot not attached' })
+            );
+        });
+
+        it('sends the text alone when the screenshot id is unknown', async () => {
+            const executeJavaScript = await submitAndInject({ screenshotId: 'something-else' }, {});
+
+            expect(executeJavaScript.mock.calls.map((call) => call[0])).toEqual(['mocked-injection-script']);
+            expect(autoSubmitArg).toBe(true);
+            expect(submitWaitArg).toBe(0);
+            expect(mockLogger.warn).toHaveBeenCalledWith('Quick Chat screenshot not found; sending the text only');
+        });
+
+        it('ignores a submit without text', () => {
+            mockIpcMain._listeners.get(IPC_CHANNELS.QUICK_CHAT_SUBMIT)!({}, { text: 'x' });
+            expect(mockMainWindow.webContents.send).not.toHaveBeenCalled();
         });
     });
 });

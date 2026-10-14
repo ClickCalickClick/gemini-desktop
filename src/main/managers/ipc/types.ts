@@ -12,6 +12,7 @@ import type LlmManager from '../llmManager';
 import type NotificationManager from '../notificationManager';
 import type ExportManager from '../exportManager';
 import type AgentManager from '../agentManager';
+import type ScreenshotManager from '../screenshotManager';
 import type { Logger } from '../../types';
 import type { AgentEnginePreference, QuickChatRoutingMode } from '../../../shared/types/agent';
 import type { DesktopLookPreference } from '../../../shared/types/look';
@@ -84,4 +85,6 @@ export interface IpcHandlerDependencies {
     exportManager?: ExportManager | null;
     /** Optional agent manager for the hybrid Quick Chat's local agent CLI */
     agentManager?: AgentManager | null;
+    /** Optional screenshot manager for Quick Chat's screenshot option */
+    screenshotManager?: ScreenshotManager | null;
 }

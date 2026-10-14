@@ -205,6 +205,72 @@ body {
     border-color: currentColor;
 }
 
+/* Screenshot button and attached screenshot (H10) */
+.quick-chat-screenshot-button {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--qc-control-radius);
+    color: var(--qc-icon);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.quick-chat-screenshot-button:hover:not(:disabled),
+.quick-chat-screenshot-button--attached {
+    background: var(--qc-surface);
+    color: var(--qc-button-text-hover);
+}
+
+.quick-chat-screenshot-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.quick-chat-screenshot-chip {
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    height: 36px;
+    max-width: 72px;
+}
+
+.quick-chat-screenshot-chip img {
+    height: 100%;
+    max-width: 72px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--qc-surface-hover);
+}
+
+.quick-chat-screenshot-remove {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--qc-surface-hover);
+    color: var(--qc-text);
+    font-size: 12px;
+    line-height: 18px;
+    cursor: pointer;
+}
+
+.quick-chat-screenshot-error {
+    padding: 0 16px 12px 52px;
+    font-size: 13px;
+    color: var(--qc-danger);
+}
+
 /* Submit button */
 .quick-chat-submit {
     flex-shrink: 0;
