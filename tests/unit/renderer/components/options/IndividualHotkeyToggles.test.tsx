@@ -204,7 +204,7 @@ describe('IndividualHotkeyToggles', () => {
 
             fireEvent.click(screen.getByTestId('hotkey-change-in-desktop-quickChat'));
             await waitFor(() => expect(api.changeHotkeysInDesktop).toHaveBeenCalledTimes(1));
-            expect(screen.queryByRole('status')).not.toBeInTheDocument();
+            expect(await screen.findByRole('status')).toHaveTextContent(/regular key such as Space/);
         });
 
         it('updates when the desktop reports new keys', async () => {
