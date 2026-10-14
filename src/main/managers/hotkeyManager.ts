@@ -59,7 +59,12 @@ import {
     isGlobalHotkey,
 } from '../types';
 
-import { destroySession, registerViaDBus } from '../utils/dbusFallback';
+import {
+    canConfigureShortcuts,
+    configureShortcutsViaDBus,
+    destroySession,
+    registerViaDBus,
+} from '../utils/dbusFallback';
 import type { WaylandStatus, HotkeyRegistrationResult, PlatformHotkeyStatus } from '../../shared/types/hotkeys';
 
 const logger = createLogger('[HotkeyManager]');
@@ -580,7 +585,13 @@ export default class HotkeyManager {
         const actionCallbacks = this._buildActionCallbacksMap(enabledGlobalHotkeys);
 
         try {
-            const results = await registerViaDBus(shortcuts, actionCallbacks);
+            const results = await registerViaDBus(shortcuts, actionCallbacks, {
+                onShortcutsChanged: (triggers) => {
+                    if (epoch === this._waylandRegistrationEpoch) {
+                        this._applyDesktopTriggers(triggers);
+                    }
+                },
+            });
 
             if (epoch !== this._waylandRegistrationEpoch) {
                 logger.log('Ignoring stale Wayland registration results after teardown');
@@ -616,6 +627,36 @@ export default class HotkeyManager {
                 this._emitPlatformHotkeyStatusChanged();
             }
         }
+    }
+
+    /**
+     * Record the keys the desktop now binds, after the user changed them in its dialog or
+     * settings, and tell the renderer.
+     * @private
+     */
+    private _applyDesktopTriggers(triggers: Map<HotkeyId, string>): void {
+        let changed = false;
+        for (const [id, desktopTrigger] of triggers) {
+            const result = this._registrationResults.get(id);
+            if (result?.success && result.desktopTrigger !== desktopTrigger) {
+                this._registrationResults.set(id, { ...result, desktopTrigger });
+                changed = true;
+            }
+        }
+        if (changed && !this._isWaylandRegistrationInFlight) {
+            this._emitPlatformHotkeyStatusChanged();
+        }
+    }
+
+    /**
+     * Open the desktop's own dialog for the global shortcut keys (Wayland portal, GlobalShortcuts
+     * version 2). The user presses the keys they want there, including keys such as the Copilot
+     * key that the desktop names differently from the app.
+     *
+     * @returns false when the desktop has no such dialog
+     */
+    async changeShortcutsInDesktop(): Promise<boolean> {
+        return configureShortcutsViaDBus();
     }
 
     /**
@@ -844,6 +885,7 @@ export default class HotkeyManager {
             registrationResults: Array.from(this._registrationResults.values()),
             globalHotkeysEnabled: this._globalHotkeysEnabled,
             registrationPending: this._isWaylandRegistrationInFlight,
+            canChangeInDesktop: this._globalHotkeysEnabled && canConfigureShortcuts(),
         };
     }
 }

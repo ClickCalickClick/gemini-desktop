@@ -8,6 +8,7 @@ import {
     getRecordingMessage,
     keyEventToAccelerator,
     parseAcceleratorParts,
+    parseDesktopTrigger,
     type RecordedKeyEvent,
 } from '../../../../../src/renderer/components/options/hotkeyRecording';
 
@@ -159,5 +160,24 @@ describe('parseAcceleratorParts', () => {
             '␣',
         ]);
         expect(parseAcceleratorParts('', 'linux')).toEqual([]);
+    });
+});
+
+describe('parseDesktopTrigger', () => {
+    it.each([
+        ['Press <Shift><Super>XF86Assistant', ['Shift', 'Super', 'Copilot']],
+        ['Press <Control><Alt><Shift>space', ['Ctrl', 'Alt', 'Shift', '␣']],
+        ['Drücken Sie <shift><super>F23', ['Shift', 'Super', 'F23']],
+        ['Press <Super>XF86AudioPlay', ['Super', 'AudioPlay']],
+        ['Press <Control>q or <Alt>w', ['Ctrl', 'Q']],
+        ['Press F13', ['F13']],
+        ['Meta+Shift+F23', ['Super', 'Shift', 'F23']],
+    ])('reads "%s"', (description, parts) => {
+        expect(parseDesktopTrigger(description)).toEqual(parts);
+    });
+
+    it('returns no keys when nothing is bound', () => {
+        expect(parseDesktopTrigger(undefined)).toEqual([]);
+        expect(parseDesktopTrigger('  ')).toEqual([]);
     });
 });

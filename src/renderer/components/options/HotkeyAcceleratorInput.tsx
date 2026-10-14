@@ -38,7 +38,7 @@ interface KeycapProps {
     isModifier?: boolean;
 }
 
-function Keycap({ keyLabel, isModifier = false }: KeycapProps) {
+export function Keycap({ keyLabel, isModifier = false }: KeycapProps) {
     const isSymbol = /^[⌘⌃⌥⇧␣]$/.test(keyLabel);
     return <kbd className={`keycap ${isModifier ? 'modifier' : ''} ${isSymbol ? 'symbol' : ''}`}>{keyLabel}</kbd>;
 }

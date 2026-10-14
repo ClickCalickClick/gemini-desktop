@@ -54,6 +54,8 @@ vi.mock('../../src/main/utils/dbusFallback', () => ({
     registerViaDBus: (...args: unknown[]) => mockRegisterViaDBus(...args),
     isDBusFallbackAvailable: () => mockIsDBusFallbackAvailable(),
     destroySession: (...args: unknown[]) => mockDestroySession(...args),
+    canConfigureShortcuts: () => false,
+    configureShortcutsViaDBus: () => Promise.resolve(false),
 }));
 
 describe('Wayland Hotkey Coordination', () => {
@@ -322,7 +324,11 @@ describe('Wayland Hotkey Coordination', () => {
             hotkeyManager.registerShortcuts();
 
             await vi.waitFor(() => {
-                expect(mockRegisterViaDBus).toHaveBeenCalledWith(expect.any(Array), expect.any(Map));
+                expect(mockRegisterViaDBus).toHaveBeenCalledWith(
+                    expect.any(Array),
+                    expect.any(Map),
+                    expect.any(Object)
+                );
             });
         });
 
@@ -346,7 +352,11 @@ describe('Wayland Hotkey Coordination', () => {
             hotkeyManager.registerShortcuts();
 
             await vi.waitFor(() => {
-                expect(mockRegisterViaDBus).toHaveBeenCalledWith(expect.any(Array), expect.any(Map));
+                expect(mockRegisterViaDBus).toHaveBeenCalledWith(
+                    expect.any(Array),
+                    expect.any(Map),
+                    expect.any(Object)
+                );
             });
         });
     });
