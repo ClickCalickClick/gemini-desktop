@@ -118,6 +118,42 @@ describe('QuickChatIpcHandler', () => {
             expect(mockIpcMain.on).toHaveBeenCalledWith(IPC_CHANNELS.GEMINI_READY, expect.any(Function));
             expect(mockIpcMain.on).toHaveBeenCalledWith(IPC_CHANNELS.QUICK_CHAT_HIDE, expect.any(Function));
             expect(mockIpcMain.on).toHaveBeenCalledWith(IPC_CHANNELS.QUICK_CHAT_CANCEL, expect.any(Function));
+            expect(mockIpcMain.on).toHaveBeenCalledWith(IPC_CHANNELS.QUICK_CHAT_RESIZE, expect.any(Function));
+        });
+    });
+
+    describe('quick-chat:resize handler', () => {
+        beforeEach(() => {
+            handler.register();
+        });
+
+        it('passes a valid height to windowManager.resizeQuickChat', () => {
+            const listener = mockIpcMain._listeners.get(IPC_CHANNELS.QUICK_CHAT_RESIZE);
+            listener!({}, 320);
+
+            expect(mockWindowManager.resizeQuickChat).toHaveBeenCalledWith(320);
+        });
+
+        it('ignores invalid heights', () => {
+            const listener = mockIpcMain._listeners.get(IPC_CHANNELS.QUICK_CHAT_RESIZE);
+            for (const value of ['320', NaN, Infinity, null, undefined, {}]) {
+                listener!({}, value);
+            }
+
+            expect(mockWindowManager.resizeQuickChat).not.toHaveBeenCalled();
+        });
+
+        it('logs errors from the window manager', () => {
+            mockWindowManager.resizeQuickChat.mockImplementation(() => {
+                throw new Error('Resize error');
+            });
+            const listener = mockIpcMain._listeners.get(IPC_CHANNELS.QUICK_CHAT_RESIZE);
+            listener!({}, 200);
+
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                'Error during resizing quick chat:',
+                expect.objectContaining({ error: 'Resize error' })
+            );
         });
     });
 

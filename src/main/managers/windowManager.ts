@@ -217,6 +217,13 @@ export default class WindowManager extends EventEmitter {
     }
 
     /**
+     * Resize the Quick Chat window to fit its content (height in CSS pixels).
+     */
+    resizeQuickChat(height: unknown): void {
+        this.quickChatWindow.resizeToContent(height);
+    }
+
+    /**
      * Get the Quick Chat window instance.
      * @returns The Quick Chat window or null
      */

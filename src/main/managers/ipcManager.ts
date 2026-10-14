@@ -28,6 +28,7 @@ import {
     ExportIpcHandler,
     TabStateIpcHandler,
     SmartEnterIpcHandler,
+    AgentIpcHandler,
     IpcHandlerDependencies,
 } from './ipc/index';
 import SettingsStore from '../store';
@@ -38,6 +39,7 @@ import type UpdateManager from './updateManager';
 import type LlmManager from './llmManager';
 import type NotificationManager from './notificationManager';
 import type ExportManager from './exportManager';
+import type AgentManager from './agentManager';
 import type { ModelStatus } from './llmManager';
 import type { ThemePreference, Logger } from '../types';
 import { DEFAULT_ACCELERATORS } from '../../shared/types/hotkeys';
@@ -111,6 +113,7 @@ export default class IpcManager {
      * @param notificationManager - Optional notification manager for response notifications
      * @param store - Optional store instance for testing
      * @param logger - Optional logger instance for testing
+     * @param agentManager - Optional agent manager for the hybrid Quick Chat
      */
     constructor(
         windowManager: WindowManager,
@@ -120,7 +123,8 @@ export default class IpcManager {
         llmManager?: LlmManager | null,
         notificationManager?: NotificationManager | null,
         store?: SettingsStore<UserPreferences>,
-        logger?: Logger
+        logger?: Logger,
+        agentManager?: AgentManager | null
     ) {
         /* v8 ignore next 16 -- production fallback, tests always inject dependencies */
         const actualStore =
@@ -171,6 +175,7 @@ export default class IpcManager {
             llmManager: llmManager || null,
             notificationManager: notificationManager || null,
             exportManager: exportManager || null,
+            agentManager: agentManager || null,
         };
         this.handlerDeps = handlerDeps;
 
@@ -211,6 +216,7 @@ export default class IpcManager {
             new ExportIpcHandler(handlerDeps),
             this.tabStateHandler,
             new SmartEnterIpcHandler(handlerDeps),
+            new AgentIpcHandler(handlerDeps),
         ];
 
         this.logger.log('Initialized');

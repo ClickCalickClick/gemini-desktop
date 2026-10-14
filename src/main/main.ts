@@ -79,6 +79,7 @@ import BadgeManager from './managers/badgeManager';
 import NotificationManager, { type NotificationSettings } from './managers/notificationManager';
 import UpdateManager, { AutoUpdateSettings } from './managers/updateManager';
 import ExportManager from './managers/exportManager';
+import AgentManager from './managers/agentManager';
 import LlmManager from './managers/llmManager';
 import SettingsStore from './store';
 import RendererReloads from './utils/rendererReloads';
@@ -188,8 +189,22 @@ function initializeManagers(): void {
     const exportManager = new ExportManager();
     logger.debug('initializeManagers() - ExportManager created');
 
+    logger.debug('initializeManagers() - creating AgentManager');
+    const agentManager = new AgentManager();
+    logger.debug('initializeManagers() - AgentManager created');
+
     logger.debug('initializeManagers() - creating IpcManager');
-    const ipcManager = new IpcManager(windowManager, hotkeyManager, updateManager, exportManager, llmManager, null);
+    const ipcManager = new IpcManager(
+        windowManager,
+        hotkeyManager,
+        updateManager,
+        exportManager,
+        llmManager,
+        null,
+        undefined,
+        undefined,
+        agentManager
+    );
     logger.debug('initializeManagers() - IpcManager created');
 
     appContext = {
@@ -200,6 +215,7 @@ function initializeManagers(): void {
         updateManager,
         llmManager,
         exportManager,
+        agentManager,
         ipcManager,
         menuManager: null,
         notificationManager: null,
@@ -240,6 +256,9 @@ function cleanupAllManagers(): void {
 
         // Dispose LLM manager to free model resources
         context.llmManager.dispose();
+
+        // Stop a running agent CLI
+        context.agentManager.dispose();
 
         // Dispose IPC handlers to remove all listeners
         context.ipcManager.dispose();

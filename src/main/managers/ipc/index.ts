@@ -28,3 +28,4 @@ export { LaunchAtStartupIpcHandler } from './LaunchAtStartupIpcHandler';
 export { ExportIpcHandler } from './ExportIpcHandler';
 export { TabStateIpcHandler } from './TabStateIpcHandler';
 export { SmartEnterIpcHandler } from './SmartEnterIpcHandler';
+export { AgentIpcHandler } from './AgentIpcHandler';

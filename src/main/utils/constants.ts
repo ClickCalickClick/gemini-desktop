@@ -240,6 +240,9 @@ export const OPTIONS_WINDOW_CONFIG: BrowserWindowConstructorOptions = {
  */
 export const QUICK_CHAT_WIDTH = 600;
 export const QUICK_CHAT_HEIGHT = 80;
+/** Smallest and largest height Quick Chat resizes to for its content (CSS pixels). */
+export const QUICK_CHAT_MIN_HEIGHT = 64;
+export const QUICK_CHAT_MAX_HEIGHT = 640;
 
 export const QUICK_CHAT_WINDOW_CONFIG: BrowserWindowConstructorOptions = {
     width: QUICK_CHAT_WIDTH,
