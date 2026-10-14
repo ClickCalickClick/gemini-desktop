@@ -14,7 +14,7 @@ Primary files and folders:
 - `src/main/platform/` — OS-specific behavior
 - `src/main/utils/` — main-process utilities
 - `src/main/utils/launchArgs.ts` — the app's own flags: `--quick-chat` (also passed as single-instance data) and `--hidden`
-- `src/main/utils/quickChatLauncher.ts` — writes the Gemini Quick Chat launcher to `~/.local/share/applications` when the app runs as an AppImage (`$APPIMAGE`), and removes its own launcher in deb, rpm and pacman installs, which ship one; tar.gz and `release/linux-unpacked` runs write nothing, and `GEMINI_DESKTOP_NO_LAUNCHER=1` (set by `wdio.base.conf.js` and `scripts/live-check.mjs`) turns it off. It only rewrites or removes a file marked `X-Gemini-Desktop-Generated=true`
+- `src/main/utils/quickChatLauncher.ts` — writes the Gemini Quick Chat launcher to `~/.local/share/applications` when the app runs as an AppImage (`$APPIMAGE`), with a copy of `resources/icon-quick-chat.png` as its icon, and removes its own launcher in deb, rpm and pacman installs, which ship one; tar.gz and `release/linux-unpacked` runs write nothing, and `GEMINI_DESKTOP_NO_LAUNCHER=1` (set by `wdio.base.conf.js` and `scripts/live-check.mjs`) turns it off. It only rewrites or removes a file marked `X-Gemini-Desktop-Generated=true`
 
 ## Manager Pattern
 

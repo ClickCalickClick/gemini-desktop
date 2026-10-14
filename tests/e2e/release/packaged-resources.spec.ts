@@ -100,6 +100,7 @@ describe('Release Build: Packaged Resources', () => {
                 const hasIco = fs.existsSync(path.join(resourcesPath, 'icon.ico'));
                 const hasPng = fs.existsSync(path.join(resourcesPath, 'icon.png'));
                 const hasTrayPng = fs.existsSync(path.join(resourcesPath, 'icon-tray.png'));
+                const hasQuickChatPng = fs.existsSync(path.join(resourcesPath, 'icon-quick-chat.png'));
 
                 // List all files in resources for debugging
                 const files = fs.readdirSync(resourcesPath);
@@ -109,6 +110,7 @@ describe('Release Build: Packaged Resources', () => {
                     hasIco,
                     hasPng,
                     hasTrayPng,
+                    hasQuickChatPng,
                     files,
                     platform: process.platform,
                 };
@@ -135,6 +137,8 @@ describe('Release Build: Packaged Resources', () => {
         if (iconInfo.platform === 'linux') {
             // The Linux tray icon (TrayManager falls back to icon.png without it)
             expect(iconInfo.hasTrayPng).toBe(true);
+            // The AppImage copies it for the Gemini Quick Chat launcher (quickChatLauncher.ts)
+            expect(iconInfo.hasQuickChatPng).toBe(true);
         }
     });
 

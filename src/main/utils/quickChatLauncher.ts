@@ -36,6 +36,9 @@ export const QUICK_CHAT_DESKTOP_FILE = 'gemini-desktop-quick-chat.desktop';
 /** The icon the user launcher points at, copied from the app's resources */
 export const QUICK_CHAT_ICON_FILE = 'gemini-desktop-quick-chat.png';
 
+/** The launcher's icon in the app's resources (from `build/`) */
+export const QUICK_CHAT_SOURCE_ICON = 'icon-quick-chat.png';
+
 /** Marks a launcher the app wrote, so it never touches one the user wrote */
 export const GENERATED_MARKER = 'X-Gemini-Desktop-Generated=true';
 
@@ -165,9 +168,10 @@ export async function ensureQuickChatLauncher(
         return 'kept-user-file';
     }
 
-    // The AppImage is mounted at a new path each run, so its icon is copied somewhere that lasts.
+    // The AppImage is mounted at a new path each run, so its icon is copied somewhere that lasts. The
+    // launcher has its own icon (build/icon-quick-chat.png), so the app grid tells it apart from the app.
     let icon = 'gemini-desktop';
-    const sourceIcon = resourcesPath ? path.join(resourcesPath, 'icon.png') : null;
+    const sourceIcon = resourcesPath ? path.join(resourcesPath, QUICK_CHAT_SOURCE_ICON) : null;
     const sourceSize = sourceIcon ? await fileSize(sourceIcon) : null;
     if (sourceIcon && sourceSize !== null) {
         if ((await fileSize(iconFile)) !== sourceSize) {

@@ -148,7 +148,7 @@ describe('electron-builder Linux package metadata', () => {
                 'Type=Application',
                 'Name=Gemini Quick Chat',
                 'Exec="/opt/Gemini Desktop/gemini-desktop" --quick-chat',
-                'Icon=gemini-desktop',
+                'Icon=gemini-desktop-quick-chat',
                 'StartupNotify=false',
             ])
         );
@@ -156,6 +156,24 @@ describe('electron-builder Linux package metadata', () => {
         expect(lines.some((line) => line.startsWith('StartupWMClass='))).toBe(false);
         // The same path the main entry's action starts
         expect(lines).toContain(`Exec=${builderConfig.linux?.desktop?.desktopActions?.QuickChat?.Exec}`);
+    });
+
+    it('installs its own icon for the Gemini Quick Chat launcher, so the app grid tells it apart', () => {
+        const mapping = (builderConfig.deb?.fpm ?? []).find((arg) =>
+            arg.endsWith('=/usr/share/icons/hicolor/512x512/apps/gemini-desktop-quick-chat.png')
+        );
+        expect(mapping).toBeDefined();
+
+        const source = mapping!.slice(0, mapping!.lastIndexOf('='));
+        expect(source).toBe(path.join(repoRoot, 'build/icon-quick-chat.png'));
+        const png = readFileSync(source);
+        // PNG signature, then the IHDR width and height: hicolor's 512x512 folder needs a 512 px icon
+        expect(png.subarray(1, 4).toString('ascii')).toBe('PNG');
+        expect(png.readUInt32BE(16)).toBe(512);
+        expect(png.readUInt32BE(20)).toBe(512);
+        expect(readFileSync(path.join(repoRoot, 'build/icon-quick-chat.png'))).not.toEqual(
+            readFileSync(path.join(repoRoot, 'build/icon.png'))
+        );
     });
 
     it('declares the metadata fpm needs instead of reading it from .git', () => {

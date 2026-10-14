@@ -13,9 +13,16 @@ const linuxExecutable = '"/opt/Gemini Desktop/gemini-desktop"';
 // ~/.local/share/applications at runtime instead (src/main/utils/quickChatLauncher.ts).
 const quickChatDesktopFile = path.join(__dirname, '..', 'build', 'linux', 'gemini-desktop-quick-chat.desktop');
 
+// The launcher's own icon, a speech bubble, so the app grid tells it apart from the main entry. The
+// desktop file names it `gemini-desktop-quick-chat` from the hicolor theme.
+const quickChatIconFile = path.join(__dirname, '..', 'build', 'icon-quick-chat.png');
+
 // Extra fpm arguments for the deb, rpm and pacman targets (electron-builder only accepts `fpm` per
 // target, not under `linux`): fpm's dir source maps <file>=<path in the package>.
-const fpmExtraFiles = [`${quickChatDesktopFile}=/usr/share/applications/gemini-desktop-quick-chat.desktop`];
+const fpmExtraFiles = [
+    `${quickChatDesktopFile}=/usr/share/applications/gemini-desktop-quick-chat.desktop`,
+    `${quickChatIconFile}=/usr/share/icons/hicolor/512x512/apps/gemini-desktop-quick-chat.png`,
+];
 
 /**
  * The main desktop entry, with a "Quick Chat" action in its right-click menu.

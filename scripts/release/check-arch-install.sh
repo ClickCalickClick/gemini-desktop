@@ -33,6 +33,9 @@ quick_chat_desktop=/usr/share/applications/gemini-desktop-quick-chat.desktop
 grep -qx 'Name=Gemini Quick Chat' "$quick_chat_desktop"
 grep -qx 'Exec="/opt/Gemini Desktop/gemini-desktop" --quick-chat' "$quick_chat_desktop"
 pacman -Qo "$quick_chat_desktop"
+# The launcher has its own icon, so the app grid tells it apart from the main entry.
+grep -qx 'Icon=gemini-desktop-quick-chat' "$quick_chat_desktop"
+pacman -Qo /usr/share/icons/hicolor/512x512/apps/gemini-desktop-quick-chat.png
 # The update notice reads this to tell pacman installs to install the new package (src/main/utils/packageType.ts).
 grep -qx 'pacman' '/opt/Gemini Desktop/resources/package-type'
 
