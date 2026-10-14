@@ -840,6 +840,29 @@ describe('QuickChatApp hybrid routing and agent panel', () => {
             expect(api.resizeQuickChat).toHaveBeenCalledWith(QUICK_CHAT_COMPACT_HEIGHT);
         });
 
+        it('keeps an answer that finished while Quick Chat was hidden', async () => {
+            await renderApp();
+            await startAgentRun('how much disk space is free');
+            await act(async () => {
+                window.dispatchEvent(new Event('blur'));
+            });
+            await send({ type: 'text', runId: 'run-1', delta: 'You have 120 GB free.' });
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: 'You have 120 GB free.' });
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            expect(screen.getByTestId('quick-chat-agent-output')).toHaveTextContent('You have 120 GB free.');
+
+            // Once seen, hiding and showing again starts compact.
+            await act(async () => {
+                window.dispatchEvent(new Event('blur'));
+            });
+            await act(async () => {
+                window.dispatchEvent(new Event('focus'));
+            });
+            expect(screen.queryByTestId('quick-chat-agent-panel')).not.toBeInTheDocument();
+        });
+
         it('keeps a plan that waits for Apply when shown again', async () => {
             await renderApp();
             await startAgentRun();
