@@ -131,11 +131,68 @@ describe('LookSelector', () => {
             fireEvent.keyDown(screen.getByTestId('look-card-kde'), { key: 'Tab' });
             expect(window.electronAPI.setLook).not.toHaveBeenCalled();
         });
+    });
 
-        it('cards are focusable', async () => {
-            await renderWithLook();
+    describe('keyboard (WAI-ARIA radio group)', () => {
+        const tabStops = () => screen.getAllByRole('radio').filter((card) => card.getAttribute('tabindex') === '0');
 
-            expect(screen.getByTestId('look-card-gnome')).toHaveAttribute('tabIndex', '0');
+        it('has one tab stop: the selected card', async () => {
+            await renderWithLook({ preference: 'kde', effectiveLook: 'kde' });
+
+            expect(tabStops()).toEqual([screen.getByTestId('look-card-kde')]);
+            expect(screen.getByTestId('look-card-auto')).toHaveAttribute('tabindex', '-1');
+        });
+
+        it('falls back to the Default card for an unknown preference', async () => {
+            await renderWithLook({ preference: 'bogus' as LookData['preference'], effectiveLook: 'gnome' });
+
+            expect(tabStops()).toEqual([screen.getByTestId('look-card-default')]);
+        });
+
+        it('moves focus and selection with the arrow keys', async () => {
+            await renderWithLook({ preference: 'gnome', effectiveLook: 'gnome' });
+            const gnome = screen.getByTestId('look-card-gnome');
+            gnome.focus();
+
+            fireEvent.keyDown(gnome, { key: 'ArrowRight' });
+            expect(window.electronAPI.setLook).toHaveBeenLastCalledWith('kde');
+            expect(screen.getByTestId('look-card-kde')).toHaveFocus();
+            expect(tabStops()).toEqual([screen.getByTestId('look-card-kde')]);
+
+            fireEvent.keyDown(screen.getByTestId('look-card-kde'), { key: 'ArrowDown' });
+            expect(window.electronAPI.setLook).toHaveBeenLastCalledWith('xfce');
+            expect(screen.getByTestId('look-card-xfce')).toHaveFocus();
+
+            fireEvent.keyDown(screen.getByTestId('look-card-xfce'), { key: 'ArrowLeft' });
+            expect(window.electronAPI.setLook).toHaveBeenLastCalledWith('kde');
+
+            fireEvent.keyDown(screen.getByTestId('look-card-kde'), { key: 'ArrowUp' });
+            expect(window.electronAPI.setLook).toHaveBeenLastCalledWith('gnome');
+            expect(gnome).toHaveFocus();
+        });
+
+        it('wraps around at both ends', async () => {
+            await renderWithLook({ preference: 'auto' });
+
+            fireEvent.keyDown(screen.getByTestId('look-card-auto'), { key: 'ArrowLeft' });
+            expect(window.electronAPI.setLook).toHaveBeenLastCalledWith('windows');
+            expect(screen.getByTestId('look-card-windows')).toHaveFocus();
+
+            fireEvent.keyDown(screen.getByTestId('look-card-windows'), { key: 'ArrowRight' });
+            expect(window.electronAPI.setLook).toHaveBeenLastCalledWith('auto');
+            expect(screen.getByTestId('look-card-auto')).toHaveFocus();
+        });
+
+        it('goes to the first and last card with Home and End', async () => {
+            await renderWithLook({ preference: 'kde', effectiveLook: 'kde' });
+
+            fireEvent.keyDown(screen.getByTestId('look-card-kde'), { key: 'End' });
+            expect(window.electronAPI.setLook).toHaveBeenLastCalledWith('windows');
+            expect(screen.getByTestId('look-card-windows')).toHaveFocus();
+
+            fireEvent.keyDown(screen.getByTestId('look-card-windows'), { key: 'Home' });
+            expect(window.electronAPI.setLook).toHaveBeenLastCalledWith('auto');
+            expect(screen.getByTestId('look-card-auto')).toHaveFocus();
         });
     });
 

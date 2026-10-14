@@ -8,35 +8,16 @@
  */
 
 import type { DesktopLook, DesktopLookPreference } from '../../shared/types/look';
+import { DESKTOP_LOOK_NAMES, DESKTOP_LOOKS, isDesktopLookPreference } from '../../shared/constants/looks';
 
-/** Every look the user can pick, in the order Options lists them. */
-export const DESKTOP_LOOKS: readonly DesktopLook[] = [
-    'default',
-    'gnome',
-    'kde',
-    'xfce',
-    'cinnamon',
-    'mate',
-    'budgie',
-    'elementary',
-    'cosmic',
-    'macos',
-    'windows',
-];
+export { DESKTOP_LOOKS, isDesktopLookPreference };
 
-/** Display name of the desktop behind each look. */
-export const DESKTOP_NAMES: Record<Exclude<DesktopLook, 'default'>, string> = {
-    gnome: 'GNOME',
-    kde: 'KDE Plasma',
-    xfce: 'Xfce',
-    cinnamon: 'Cinnamon',
-    mate: 'MATE',
-    budgie: 'Budgie',
-    elementary: 'elementary OS',
-    cosmic: 'COSMIC',
-    macos: 'macOS',
-    windows: 'Windows',
-};
+/** Display name of the desktop behind each look (the shared look names without 'default'). */
+export const DESKTOP_NAMES: Readonly<Record<Exclude<DesktopLook, 'default'>, string>> = (() => {
+    const { default: _default, ...names } = DESKTOP_LOOK_NAMES;
+    void _default;
+    return names;
+})();
 
 /** The desktop the app runs on. */
 export interface DetectedDesktop {
@@ -44,13 +25,6 @@ export interface DetectedDesktop {
     look: DesktopLook;
     /** A name to show the user, e.g. 'GNOME', or null when nothing was detected */
     name: string | null;
-}
-
-/**
- * Check that a value from the renderer or the settings file is a look preference.
- */
-export function isDesktopLookPreference(value: unknown): value is DesktopLookPreference {
-    return value === 'auto' || (typeof value === 'string' && (DESKTOP_LOOKS as readonly string[]).includes(value));
 }
 
 /**

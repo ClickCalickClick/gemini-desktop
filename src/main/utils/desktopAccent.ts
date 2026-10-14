@@ -265,16 +265,18 @@ export class DesktopAccentWatcher {
      * Read the accent and start following changes. Never throws.
      *
      * @param onChange - Called with the new accent when the desktop changes it after start
+     * @param onLost - Called once when the session bus connection fails after it was set up, so
+     *   the owner can start a new watcher later
      * @returns The accent at start, or null
      */
-    async start(onChange: (accent: string | null) => void): Promise<string | null> {
+    async start(onChange: (accent: string | null) => void, onLost?: () => void): Promise<string | null> {
         if (this.platform !== 'linux') {
             return null;
         }
 
         let portalAccent: string | null = null;
         try {
-            portalAccent = await this.startPortal(onChange);
+            portalAccent = await this.startPortal(onChange, onLost);
         } catch (error) {
             logger.log(`Desktop accent not read from the portal: ${error instanceof Error ? error.message : error}`);
             this.disconnect();
@@ -312,7 +314,7 @@ export class DesktopAccentWatcher {
         this.messageHandler = null;
     }
 
-    private async startPortal(onChange: (accent: string | null) => void): Promise<string | null> {
+    private async startPortal(onChange: (accent: string | null) => void, onLost?: () => void): Promise<string | null> {
         const busAddress = getSessionBusAddress(this.env);
         if (!busAddress) {
             throw new Error('no session bus');
@@ -323,7 +325,11 @@ export class DesktopAccentWatcher {
         // An unhandled 'error' event would crash the main process
         bus.on('error', (error: unknown) => {
             logger.log(`Session bus error: ${error instanceof Error ? error.message : String(error)}`);
+            const wasFollowing = this.messageHandler !== null;
             this.disconnect();
+            if (wasFollowing && !this.stopped) {
+                onLost?.();
+            }
         });
 
         const accent = await this.readPortalAccent(bus, dbus);

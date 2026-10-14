@@ -24,10 +24,11 @@
     --look-control-radius: 50%;
     --look-control-gap: 12px;
     --look-controls-padding: 11px;
-    --look-control-bg: rgba(255, 255, 255, 0.1);
-    --look-control-hover-bg: rgba(255, 255, 255, 0.15);
-    --look-close-hover-bg: rgba(255, 255, 255, 0.15);
-    --look-close-hover-fg: #ffffff;
+    /* libadwaita: 10% of the text color at rest, 15% on hover */
+    --look-control-bg: color-mix(in srgb, currentColor 10%, transparent);
+    --look-control-hover-bg: color-mix(in srgb, currentColor 15%, transparent);
+    --look-close-hover-bg: color-mix(in srgb, currentColor 15%, transparent);
+    --look-close-hover-fg: var(--titlebar-text);
 
     /* libadwaita dark */
     --bg-primary: #222226;
@@ -66,21 +67,16 @@
     --look-tabbar-bg: #ffffff;
     --look-switch-off-bg: rgba(0, 0, 6, 0.15);
 
-    --look-control-bg: rgba(0, 0, 6, 0.08);
-    --look-control-hover-bg: rgba(0, 0, 6, 0.14);
-    --look-close-hover-bg: rgba(0, 0, 6, 0.14);
-    --look-close-hover-fg: #2e2e33;
-
     --look-qc-bg: #ffffff;
     --look-qc-border: rgba(0, 0, 6, 0.12);
     --look-qc-shadow: 0 4px 16px rgba(0, 0, 6, 0.15), 0 0 0 1px rgba(0, 0, 6, 0.05);
 }
 
-/* Window controls: icons at libadwaita's symbolic size */
+/* Window controls: the close glyph at about libadwaita's symbolic size */
 :root[data-look='gnome'] .window-control-button svg,
 :root[data-look='gnome'] .options-window-control-button svg {
-    width: 9px;
-    height: 9px;
+    width: 11px;
+    height: 11px;
 }
 
 /* View switcher: the active page is a soft pill, not an underline */

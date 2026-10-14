@@ -59,6 +59,7 @@ describe('LookContext', () => {
         await waitFor(() => expect(screen.getByTestId('effective')).toHaveTextContent('gnome'));
         expect(root().getAttribute('data-look')).toBe('gnome');
         expect(root().style.getPropertyValue('--desktop-accent')).toBe('#3584e4');
+        expect(root().style.getPropertyValue('--desktop-accent-fg')).toBe('#ffffff');
         expect(screen.getByTestId('preference')).toHaveTextContent('auto');
     });
 
@@ -87,6 +88,7 @@ describe('LookContext', () => {
 
         expect(root().getAttribute('data-look')).toBe('kde');
         expect(root().style.getPropertyValue('--desktop-accent')).toBe('');
+        expect(root().style.getPropertyValue('--desktop-accent-fg')).toBe('');
         expect(screen.getByTestId('accent')).toHaveTextContent('none');
     });
 
@@ -174,6 +176,9 @@ describe('LookContext', () => {
                 'rgb(53, 132, 228)'
             );
             expect(normalizeLookData({ ...GNOME, accentColor: 'red; background: url(x)' })?.accentColor).toBeNull();
+            expect(normalizeLookData({ ...GNOME, accentColor: '#12345' })?.accentColor).toBeNull();
+            expect(normalizeLookData({ ...GNOME, accentColor: '#1234567' })?.accentColor).toBeNull();
+            expect(normalizeLookData({ ...GNOME, accentColor: '#3584e4cc' })?.accentColor).toBe('#3584e4cc');
             expect(normalizeLookData({ ...GNOME, preference: 'bogus', detectedDesktop: 3 })).toMatchObject({
                 preference: 'default',
                 detectedDesktop: null,
@@ -188,9 +193,18 @@ describe('LookContext', () => {
             applyLookToDom(GNOME, element);
             expect(element.getAttribute('data-look')).toBe('gnome');
             expect(element.style.getPropertyValue('--desktop-accent')).toBe('#3584e4');
+            expect(element.style.getPropertyValue('--desktop-accent-fg')).toBe('#ffffff');
             applyLookToDom(DEFAULT_LOOK_DATA, element);
             expect(element.getAttribute('data-look')).toBe('default');
             expect(element.style.getPropertyValue('--desktop-accent')).toBe('');
+            expect(element.style.getPropertyValue('--desktop-accent-fg')).toBe('');
+        });
+
+        it('uses dark text on a light desktop accent such as GNOME yellow', () => {
+            const element = document.createElement('div');
+            applyLookToDom({ ...GNOME, accentColor: '#e5a50a' }, element);
+            expect(element.style.getPropertyValue('--desktop-accent')).toBe('#e5a50a');
+            expect(element.style.getPropertyValue('--desktop-accent-fg')).toBe('#000000');
         });
     });
 });

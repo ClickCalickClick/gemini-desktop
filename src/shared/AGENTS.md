@@ -9,6 +9,7 @@ Primary files and folders:
 
 - `src/shared/constants/ipc-channels.ts` — canonical IPC channel names
 - `src/shared/constants/urls.ts` — the fork's GitHub repository and every link derived from it (release notes, issues, License, Disclaimer, the notify-only update check)
+- `src/shared/constants/looks.ts` — the one list of desktop looks (`DESKTOP_LOOKS`), their display names (`DESKTOP_LOOK_NAMES`) and the `isDesktopLook`/`isDesktopLookPreference` guards; the main process detection, `LookContext` and the Options look selector all derive from it. The `DesktopLook` union itself stays in `src/shared/types/look.ts`; keep both in step
 - `src/shared/types/ipc.ts` — typed preload/renderer contract (`ElectronAPI`)
 - `src/shared/types/tabs.ts` — shared tab state and payload shapes
 - `src/shared/types/hotkeys.ts` — hotkey ids, accelerators and `PlatformHotkeyStatus`; while its `registrationPending` is true the desktop is still asking the user to approve the shortcuts, and the main process sends the final status on `PLATFORM_HOTKEY_STATUS_CHANGED`
