@@ -1,0 +1,90 @@
+/**
+ * Windows look (Windows 11, Fluent).
+ *
+ * Segoe UI Variable, Mica greys, 8px cards, 4px controls, wide caption buttons on the right with
+ * Fluent's red close (#c42b1c), the default Windows accent and an acrylic Quick Chat.
+ */
+
+:root[data-look='windows'] {
+    --look-font: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', 'Selawik', 'Noto Sans', sans-serif;
+    --look-accent: #60cdff;
+    --look-accent-fg: #000000;
+    --look-radius-card: 8px;
+    --look-radius-button: 4px;
+    --look-focus-ring: var(--text-primary);
+    --look-title-size: 12px;
+    --look-title-weight: 400;
+    --look-heading-transform: none;
+    --look-heading-size: 14px;
+    --look-heading-weight: 600;
+    --look-heading-spacing: normal;
+
+    --look-control-width: 46px;
+    --look-control-height: 100%;
+    --look-control-radius: 0;
+    --look-control-bg: transparent;
+    --look-control-hover-bg: rgba(255, 255, 255, 0.06);
+    --look-close-hover-bg: #c42b1c;
+    --look-close-hover-fg: #ffffff;
+
+    /* Windows 11 dark (Mica) */
+    --bg-primary: #202020;
+    --bg-secondary: #2b2b2b;
+    --bg-tertiary: #4a4a4a;
+    --text-primary: #ffffff;
+    --text-secondary: #c5c5c5;
+    --border-color: #3d3d3d;
+    --hover-bg: rgba(255, 255, 255, 0.06);
+    --titlebar-bg: #202020;
+    --titlebar-text: #ffffff;
+    --titlebar-height: 32px;
+    --look-titlebar-border: transparent;
+    --look-tabbar-bg: #1c1c1c;
+    --look-switch-off-bg: #4a4a4a;
+
+    /* Acrylic */
+    --look-qc-bg: rgba(44, 44, 44, 0.82);
+    --look-qc-border: rgba(255, 255, 255, 0.08);
+    --look-qc-radius: 8px;
+    --look-qc-backdrop: blur(30px) saturate(125%);
+    --look-qc-shadow: 0 8px 16px rgba(0, 0, 0, 0.26), 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+:root[data-look='windows'][data-theme='light'] {
+    /* Windows 11 light (Mica) */
+    --look-accent: #005fb8;
+    --look-accent-fg: #ffffff;
+    --bg-primary: #f3f3f3;
+    --bg-secondary: #fbfbfb;
+    --bg-tertiary: #c4c4c4;
+    --text-primary: #1a1a1a;
+    --text-secondary: #5d5d5d;
+    --border-color: #e5e5e5;
+    --hover-bg: rgba(0, 0, 0, 0.04);
+    --titlebar-bg: #f3f3f3;
+    --titlebar-text: #1a1a1a;
+    --look-tabbar-bg: #ebebeb;
+    --look-switch-off-bg: #8a8a8a;
+    --look-control-hover-bg: rgba(0, 0, 0, 0.05);
+
+    --look-qc-bg: rgba(252, 252, 252, 0.85);
+    --look-qc-border: rgba(0, 0, 0, 0.06);
+    --look-qc-shadow: 0 8px 16px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Fluent tabs: the selected tab is a raised surface */
+:root[data-look='windows'] .tab {
+    border-right: none;
+    border-radius: 8px 8px 0 0;
+    margin-top: 4px;
+    height: auto;
+}
+
+:root[data-look='windows'] .tab--active {
+    background: var(--bg-primary);
+    border-bottom-color: transparent;
+}
+
+:root[data-look='windows'] .tab-bar__new {
+    border-left: none;
+}

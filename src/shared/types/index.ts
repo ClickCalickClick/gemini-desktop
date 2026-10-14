@@ -14,6 +14,8 @@ export * from './toast';
 export * from './text-prediction';
 export * from './notifications';
 export * from './tabs';
+export * from './agent';
+export * from './look';
 
 // Re-export ElectronAPI explicitly for easier imports
 export type { ElectronAPI } from './ipc';

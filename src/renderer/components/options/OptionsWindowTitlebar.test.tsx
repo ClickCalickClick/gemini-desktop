@@ -2,9 +2,11 @@
  * Unit tests for OptionsWindowTitlebar component.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { OptionsWindowTitlebar } from './OptionsWindowTitlebar';
+import { LookProvider } from '../../context/LookContext';
+import type { DesktopLook } from '../../../shared/types/look';
 import { setMockPlatform } from '../../../../tests/unit/renderer/test/setup';
 
 // Mock the useWindowControls hook
@@ -129,6 +131,81 @@ describe('OptionsWindowTitlebar', () => {
             // Ensure no menu bar is present (unlike main titlebar)
             expect(screen.queryByRole('menubar')).not.toBeInTheDocument();
             expect(screen.queryByTestId('titlebar-menu-bar')).not.toBeInTheDocument();
+        });
+    });
+
+    describe('desktop looks', () => {
+        const renderWithLook = async (look: DesktopLook) => {
+            vi.mocked(window.electronAPI.getLook).mockResolvedValue({
+                preference: look,
+                effectiveLook: look,
+                detectedDesktop: null,
+                accentColor: null,
+            });
+            const result = render(
+                <LookProvider>
+                    <OptionsWindowTitlebar />
+                </LookProvider>
+            );
+            await waitFor(() => expect(document.documentElement.getAttribute('data-look')).toBe(look));
+            return result;
+        };
+
+        afterEach(() => {
+            vi.mocked(window.electronAPI.getLook).mockResolvedValue({
+                preference: 'default',
+                effectiveLook: 'default',
+                detectedDesktop: null,
+                accentColor: null,
+            });
+        });
+
+        it('GNOME shows only close', async () => {
+            setMockPlatform('linux');
+            await renderWithLook('gnome');
+
+            expect(screen.getByTestId('options-window-controls')).toContainElement(
+                screen.getByTestId('options-close-button')
+            );
+            expect(screen.queryByTestId('options-minimize-button')).not.toBeInTheDocument();
+        });
+
+        it('the macOS look on Linux puts close and minimize on the left', async () => {
+            setMockPlatform('linux');
+            await renderWithLook('macos');
+
+            const left = screen.getByTestId('options-window-controls-left');
+            expect(left).toContainElement(screen.getByTestId('options-close-button'));
+            expect(left).toContainElement(screen.getByTestId('options-minimize-button'));
+            fireEvent.click(screen.getByTestId('options-close-button'));
+            expect(mockClose).toHaveBeenCalledTimes(1);
+        });
+
+        it('elementary puts close on the left', async () => {
+            setMockPlatform('linux');
+            await renderWithLook('elementary');
+
+            expect(screen.getByTestId('options-window-controls-left')).toContainElement(
+                screen.getByTestId('options-close-button')
+            );
+        });
+
+        it('KDE keeps minimize and close on the right', async () => {
+            setMockPlatform('linux');
+            await renderWithLook('kde');
+
+            const right = screen.getByTestId('options-window-controls');
+            expect(right).toContainElement(screen.getByTestId('options-minimize-button'));
+            expect(right).toContainElement(screen.getByTestId('options-close-button'));
+        });
+
+        it('keeps the usual controls on macOS whatever the look', async () => {
+            setMockPlatform('darwin');
+            await renderWithLook('gnome');
+
+            expect(screen.getByTestId('options-minimize-button')).toBeInTheDocument();
+            expect(screen.getByTestId('options-close-button')).toBeInTheDocument();
+            expect(screen.queryByTestId('options-window-controls-left')).not.toBeInTheDocument();
         });
     });
 });

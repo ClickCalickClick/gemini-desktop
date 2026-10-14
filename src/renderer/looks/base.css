@@ -1,0 +1,285 @@
+/**
+ * Desktop looks: shared rules.
+ *
+ * LookProvider sets data-look="<look>" on <html>, and --desktop-accent when the desktop exposes an
+ * accent color. Each look file (gnome.css, kde.css, ...) only sets the --look-* variables below and
+ * the theme variables from theme.css, for dark (the default) and for [data-theme='light'].
+ * The rules here apply those variables to the main window, Options and Quick Chat.
+ *
+ * The 'default' look matches nothing here, so it stays exactly as the app looked before looks.
+ *
+ * Variables a look sets (fallbacks in parentheses):
+ *   --look-font                 Interface font stack
+ *   --look-accent               The desktop's default accent; --desktop-accent wins when present
+ *   --look-accent-fg            Text on the look's default accent (#fff); --desktop-accent-fg (set by
+ *                               LookProvider from the desktop accent's contrast) wins when present
+ *   --look-radius-card          Options sections and cards (8px)
+ *   --look-radius-button        Buttons (6px)
+ *   --look-focus-ring           Focus outline color (accent at 50%)
+ *   --look-titlebar-border      Line under the titlebar (transparent)
+ *   --look-title-weight         Titlebar title weight (400) and --look-title-size (12px)
+ *   --look-control-width        Window control width (46px), --look-control-height (100%)
+ *   --look-control-radius       Window control radius (0), --look-control-gap (0), --look-controls-padding (0)
+ *   --look-control-bg           Window control background at rest (transparent), --look-control-hover-bg
+ *   --look-close-bg             Close button at rest (control bg), --look-close-fg (titlebar text)
+ *   --look-close-hover-bg       Close button on hover (#e81123), --look-close-hover-fg (#fff)
+ *   --look-heading-transform    Options section headings (uppercase), --look-heading-size, --look-heading-weight
+ *   --look-switch-off-bg        Switch track when off, --look-switch-thumb (white)
+ *   --look-qc-bg, --look-qc-border, --look-qc-radius, --look-qc-backdrop, --look-qc-shadow   Quick Chat card
+ */
+
+/* ============================================================================
+   Variables every look shares
+   ============================================================================ */
+
+[data-look]:not([data-look='default']) {
+    --accent-color: var(--desktop-accent, var(--look-accent, #3584e4));
+    --active-bg: var(--accent-color);
+    --look-focus-ring-color: var(--look-focus-ring, color-mix(in srgb, var(--accent-color) 50%, transparent));
+    font-family: var(--look-font, sans-serif);
+}
+
+/* ============================================================================
+   Fonts
+   ============================================================================ */
+
+[data-look]:not([data-look='default']) body,
+[data-look]:not([data-look='default']) button,
+[data-look]:not([data-look='default']) input,
+[data-look]:not([data-look='default']) textarea,
+[data-look]:not([data-look='default']) select,
+[data-look]:not([data-look='default']) .options-window,
+[data-look]:not([data-look='default']) .titlebar-menu-button,
+[data-look]:not([data-look='default']) .toast,
+[data-look]:not([data-look='default']) .update-toast,
+[data-look]:not([data-look='default']) .quick-chat-container,
+[data-look]:not([data-look='default']) .hotkey-accelerator-input {
+    font-family: var(--look-font, sans-serif);
+}
+
+/* ============================================================================
+   Main window titlebar
+   ============================================================================ */
+
+[data-look]:not([data-look='default']) .titlebar {
+    border-bottom: 1px solid var(--look-titlebar-border, transparent);
+}
+
+[data-look]:not([data-look='default']) .titlebar-title,
+[data-look]:not([data-look='default']) .options-titlebar-title {
+    font-size: var(--look-title-size, 12px);
+    font-weight: var(--look-title-weight, 400);
+    letter-spacing: normal;
+}
+
+[data-look]:not([data-look='default']) .titlebar-menu-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+[data-look]:not([data-look='default']) .titlebar-menu-button {
+    border-radius: var(--look-radius-button, 6px);
+    height: calc(100% - 8px);
+}
+
+[data-look]:not([data-look='default']) .titlebar-menu-dropdown {
+    border-radius: var(--look-radius-card, 8px);
+    padding: 6px;
+}
+
+[data-look]:not([data-look='default']) .titlebar-menu-item {
+    border-radius: var(--look-radius-button, 6px);
+}
+
+[data-look]:not([data-look='default']) .titlebar-menu-item:hover {
+    color: var(--desktop-accent-fg, var(--look-accent-fg, #fff));
+}
+
+/* ============================================================================
+   Window controls (main window and Options)
+   ============================================================================ */
+
+[data-look]:not([data-look='default']) .window-controls,
+[data-look]:not([data-look='default']) .options-window-controls {
+    align-items: center;
+    gap: var(--look-control-gap, 0);
+    padding: 0 var(--look-controls-padding, 0);
+}
+
+[data-look]:not([data-look='default']) .window-control-button,
+[data-look]:not([data-look='default']) .options-window-control-button {
+    width: var(--look-control-width, 46px);
+    height: var(--look-control-height, 100%);
+    border-radius: var(--look-control-radius, 0);
+    background-color: var(--look-control-bg, transparent);
+    color: var(--titlebar-text);
+    flex-shrink: 0;
+}
+
+[data-look]:not([data-look='default']) .window-control-button:hover,
+[data-look]:not([data-look='default']) .options-window-control-button:hover {
+    background-color: var(--look-control-hover-bg, var(--hover-bg));
+}
+
+[data-look]:not([data-look='default']) .window-control-button.close,
+[data-look]:not([data-look='default']) .options-window-control-button.close {
+    background-color: var(--look-close-bg, var(--look-control-bg, transparent));
+    color: var(--look-close-fg, var(--titlebar-text));
+}
+
+[data-look]:not([data-look='default']) .window-control-button.close:hover,
+[data-look]:not([data-look='default']) .options-window-control-button.close:hover {
+    background-color: var(--look-close-hover-bg, #e81123);
+    color: var(--look-close-hover-fg, #fff);
+}
+
+[data-look]:not([data-look='default']) .window-control-button:focus-visible,
+[data-look]:not([data-look='default']) .options-window-control-button:focus-visible {
+    outline: 2px solid var(--look-focus-ring-color);
+    outline-offset: 1px;
+}
+
+/* ============================================================================
+   Options window
+   ============================================================================ */
+
+[data-look]:not([data-look='default']) .options-titlebar {
+    height: var(--titlebar-height, 32px);
+    min-height: var(--titlebar-height, 32px);
+    border-bottom-color: var(--look-titlebar-border, var(--border-color));
+}
+
+[data-look]:not([data-look='default']) .options-tab-button {
+    border-radius: var(--look-radius-button, 6px);
+}
+
+[data-look]:not([data-look='default']) .options-tab-button:focus-visible,
+[data-look]:not([data-look='default']) .tab__trigger:focus-visible,
+[data-look]:not([data-look='default']) .tab__close:focus-visible,
+[data-look]:not([data-look='default']) .tab-bar__new:focus-visible {
+    outline: 2px solid var(--look-focus-ring-color);
+    outline-offset: -2px;
+}
+
+[data-look]:not([data-look='default']) .options-section h2 {
+    text-transform: var(--look-heading-transform, uppercase);
+    font-size: var(--look-heading-size, 13px);
+    font-weight: var(--look-heading-weight, 600);
+    letter-spacing: var(--look-heading-spacing, 0.05em);
+}
+
+[data-look]:not([data-look='default']) .options-section__content {
+    border-radius: var(--look-radius-card, 8px);
+}
+
+[data-look]:not([data-look='default']) .theme-card,
+[data-look]:not([data-look='default']) .look-card {
+    border-radius: var(--look-radius-card, 8px);
+}
+
+[data-look]:not([data-look='default']) .theme-card::before {
+    border-radius: var(--look-radius-card, 8px);
+}
+
+[data-look]:not([data-look='default']) .theme-card--selected {
+    background: color-mix(in srgb, var(--bg-secondary) 88%, var(--accent-color) 12%);
+    box-shadow: inset 0 0 0 1px var(--accent-color);
+}
+
+[data-look]:not([data-look='default']) .theme-card:hover::before {
+    background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+
+[data-look]:not([data-look='default']) .theme-card__checkmark {
+    color: var(--desktop-accent-fg, var(--look-accent-fg, #fff));
+}
+
+/* Switches */
+[data-look]:not([data-look='default']) .capsule-toggle__switch {
+    background-color: var(--look-switch-off-bg, var(--bg-tertiary, #4a4a4a));
+}
+
+[data-look]:not([data-look='default']) .capsule-toggle__switch--checked {
+    background-color: var(--accent-color);
+}
+
+[data-look]:not([data-look='default']) .capsule-toggle__switch:hover:not(:disabled) {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 30%, transparent);
+}
+
+[data-look]:not([data-look='default']) .capsule-toggle__switch:focus-visible {
+    box-shadow:
+        0 0 0 2px var(--bg-primary),
+        0 0 0 4px var(--look-focus-ring-color);
+}
+
+[data-look]:not([data-look='default']) .capsule-toggle__thumb {
+    background-color: var(--look-switch-thumb, #fff);
+}
+
+/* ============================================================================
+   Tabs
+   ============================================================================ */
+
+[data-look]:not([data-look='default']) .tab-bar {
+    background: var(--look-tabbar-bg, var(--bg-secondary));
+}
+
+[data-look]:not([data-look='default']) .tab__close {
+    border-radius: var(--look-radius-button, 6px);
+}
+
+/* ============================================================================
+   Toasts
+   ============================================================================ */
+
+[data-look]:not([data-look='default']) .toast,
+[data-look]:not([data-look='default']) .update-toast {
+    border-radius: var(--look-radius-card, 8px);
+}
+
+/* ============================================================================
+   Quick Chat
+   ============================================================================ */
+
+[data-look]:not([data-look='default']) .quick-chat-container {
+    background: var(--look-qc-bg, var(--bg-secondary));
+    border: 1px solid var(--look-qc-border, var(--border-color));
+    border-radius: var(--look-qc-radius, 12px);
+    backdrop-filter: var(--look-qc-backdrop, none);
+    -webkit-backdrop-filter: var(--look-qc-backdrop, none);
+    box-shadow: var(--look-qc-shadow, 0 8px 32px rgba(0, 0, 0, 0.3));
+}
+
+[data-look]:not([data-look='default']) .quick-chat-input {
+    color: var(--text-primary);
+    caret-color: var(--accent-color);
+}
+
+[data-look]:not([data-look='default']) .quick-chat-input::placeholder {
+    color: var(--text-secondary);
+}
+
+[data-look]:not([data-look='default']) .quick-chat-submit {
+    border-radius: var(--look-radius-button, 8px);
+}
+
+[data-look]:not([data-look='default']) .quick-chat-submit:focus-visible {
+    outline-color: var(--look-focus-ring-color);
+}
+
+/* Quick Chat's own variables (QuickChat.css) follow the look, so the agent panel,
+   route chip and plan view match the container above. */
+[data-look]:not([data-look='default']) {
+    --qc-font-family: var(--look-font, sans-serif);
+    --qc-bg: var(--look-qc-bg, var(--bg-secondary));
+    --qc-border: var(--look-qc-border, var(--border-color));
+    --qc-radius: var(--look-qc-radius, 12px);
+    --qc-control-radius: var(--look-radius-button, 8px);
+    --qc-shadow: var(--look-qc-shadow, 0 8px 32px rgba(0, 0, 0, 0.3));
+    --qc-text: var(--text-primary);
+    --qc-text-secondary: var(--text-secondary);
+    --qc-placeholder: var(--text-secondary);
+    --qc-accent: var(--accent-color);
+    --qc-accent-text: var(--desktop-accent-fg, var(--look-accent-fg, #ffffff));
+}

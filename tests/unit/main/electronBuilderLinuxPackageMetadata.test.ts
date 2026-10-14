@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5,25 +6,34 @@ import { describe, expect, it } from 'vitest';
 
 type TargetConfig = string | { target: string; arch?: string[] };
 
+type DesktopConfig = {
+    entry?: Record<string, string>;
+    desktopActions?: Record<string, Record<string, string>>;
+};
+
 type ElectronBuilderConfig = {
     linux?: {
         target?: TargetConfig[];
         executableName?: string;
         synopsis?: string;
         maintainer?: string;
-        desktop?: {
-            entry?: Record<string, string>;
-        };
+        desktop?: DesktopConfig;
+    };
+    appImage?: {
+        desktop?: DesktopConfig;
     };
     deb?: {
         depends?: string[];
         recommends?: string[];
+        fpm?: string[];
     };
     rpm?: {
         depends?: string[];
+        fpm?: string[];
     };
     pacman?: {
         depends?: string[];
+        fpm?: string[];
     };
     toolsets?: {
         appimage?: string | null;
@@ -100,6 +110,52 @@ describe('electron-builder Linux package metadata', () => {
     it('sets the desktop entry window class to gemini-desktop, the wmClass the Linux adapters use', () => {
         expect(builderConfig.linux?.executableName).toBe('gemini-desktop');
         expect(builderConfig.linux?.desktop?.entry?.StartupWMClass).toBe('gemini-desktop');
+    });
+
+    it('adds a Quick Chat action to the main desktop entry (H7)', () => {
+        for (const desktop of [builderConfig.linux?.desktop, builderConfig.appImage?.desktop]) {
+            expect(desktop?.entry?.Actions).toBe('QuickChat;');
+            expect(desktop?.entry?.StartupWMClass).toBe('gemini-desktop');
+            expect(desktop?.desktopActions?.QuickChat?.Name).toBe('Quick Chat');
+            expect(desktop?.desktopActions?.QuickChat?.Exec).toMatch(/ --quick-chat$/);
+        }
+        expect(builderConfig.linux?.desktop?.desktopActions?.QuickChat?.Exec).toBe(
+            '"/opt/Gemini Desktop/gemini-desktop" --quick-chat'
+        );
+        expect(builderConfig.appImage?.desktop?.desktopActions?.QuickChat?.Exec).toMatch(/^AppRun /);
+    });
+
+    it('installs the Gemini Quick Chat launcher with the deb, rpm and pacman packages (H7)', () => {
+        // electron-builder's schema rejects `fpm` under `linux`, so each fpm target carries it
+        const [debFpm, rpmFpm, pacmanFpm] = [builderConfig.deb?.fpm, builderConfig.rpm?.fpm, builderConfig.pacman?.fpm];
+        expect(rpmFpm).toEqual(debFpm);
+        expect(pacmanFpm).toEqual(debFpm);
+        expect((builderConfig.linux as Record<string, unknown> | undefined)?.fpm).toBeUndefined();
+
+        const mapping = (debFpm ?? []).find((arg) =>
+            arg.endsWith('=/usr/share/applications/gemini-desktop-quick-chat.desktop')
+        );
+        expect(mapping).toBeDefined();
+
+        const source = mapping!.slice(0, mapping!.lastIndexOf('='));
+        expect(path.isAbsolute(source)).toBe(true);
+        expect(source).toBe(path.join(repoRoot, 'build/linux/gemini-desktop-quick-chat.desktop'));
+
+        const lines = readFileSync(source, 'utf8').split('\n');
+        expect(lines[0]).toBe('[Desktop Entry]');
+        expect(lines).toEqual(
+            expect.arrayContaining([
+                'Type=Application',
+                'Name=Gemini Quick Chat',
+                'Exec="/opt/Gemini Desktop/gemini-desktop" --quick-chat',
+                'Icon=gemini-desktop',
+                'StartupNotify=false',
+            ])
+        );
+        // Its windows belong to the main app: a StartupWMClass here would take them from the main entry.
+        expect(lines.some((line) => line.startsWith('StartupWMClass='))).toBe(false);
+        // The same path the main entry's action starts
+        expect(lines).toContain(`Exec=${builderConfig.linux?.desktop?.desktopActions?.QuickChat?.Exec}`);
     });
 
     it('declares the metadata fpm needs instead of reading it from .git', () => {

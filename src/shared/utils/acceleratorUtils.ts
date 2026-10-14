@@ -258,109 +258,8 @@ export function isValidAccelerator(accelerator: string): boolean {
     return keyValid;
 }
 
-/**
- * Convert a keyboard event to an accelerator string.
- *
- * @param event - The keyboard event from key press
- * @returns The accelerator string representing the key combination
- *
- * @example
- * // User presses Ctrl+Shift+T
- * keyEventToAccelerator(event) // 'CommandOrControl+Shift+T'
- */
-export function keyEventToAccelerator(event: KeyboardEvent): string {
-    const parts: string[] = [];
-
-    // Modifiers (use CommandOrControl for cross-platform)
-    if (event.ctrlKey || event.metaKey) {
-        parts.push('CommandOrControl');
-    }
-    if (event.altKey) {
-        parts.push('Alt');
-    }
-    if (event.shiftKey) {
-        parts.push('Shift');
-    }
-
-    // Get the main key
-    let key = '';
-
-    // Handle special keys
-    if (event.code.startsWith('Key')) {
-        // KeyA -> A
-        key = event.code.slice(3);
-    } else if (event.code.startsWith('Digit')) {
-        // Digit1 -> 1
-        key = event.code.slice(5);
-    } else if (event.code.startsWith('Numpad')) {
-        // Numpad0 -> num0
-        const numKey = event.code.slice(6);
-        if (/^\d$/.test(numKey)) {
-            key = `num${numKey}`;
-        } else {
-            key = `num${numKey.toLowerCase()}`;
-        }
-    } else if (event.code === 'Space') {
-        key = 'Space';
-    } else if (event.code === 'Enter') {
-        key = 'Enter';
-    } else if (event.code === 'Escape') {
-        key = 'Escape';
-    } else if (event.code === 'Tab') {
-        key = 'Tab';
-    } else if (event.code === 'Backspace') {
-        key = 'Backspace';
-    } else if (event.code === 'Delete') {
-        key = 'Delete';
-    } else if (event.code === 'Insert') {
-        key = 'Insert';
-    } else if (event.code.startsWith('Arrow')) {
-        // ArrowUp -> Up
-        key = event.code.slice(5);
-    } else if (event.code.startsWith('F') && /^F\d{1,2}$/.test(event.code)) {
-        // F1-F24
-        key = event.code;
-    } else if (event.code === 'Home') {
-        key = 'Home';
-    } else if (event.code === 'End') {
-        key = 'End';
-    } else if (event.code === 'PageUp') {
-        key = 'PageUp';
-    } else if (event.code === 'PageDown') {
-        key = 'PageDown';
-    } else if (event.code === 'Backquote') {
-        key = '`';
-    } else if (event.code === 'Minus') {
-        key = '-';
-    } else if (event.code === 'Equal') {
-        key = '=';
-    } else if (event.code === 'BracketLeft') {
-        key = '[';
-    } else if (event.code === 'BracketRight') {
-        key = ']';
-    } else if (event.code === 'Backslash') {
-        key = '\\';
-    } else if (event.code === 'Semicolon') {
-        key = ';';
-    } else if (event.code === 'Quote') {
-        key = "'";
-    } else if (event.code === 'Comma') {
-        key = ',';
-    } else if (event.code === 'Period') {
-        key = '.';
-    } else if (event.code === 'Slash') {
-        key = '/';
-    } else {
-        // Fallback: use the key value
-        key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
-    }
-
-    if (key) {
-        parts.push(key);
-    }
-
-    return parts.join('+');
-}
+// Key presses are turned into accelerators by the Options recorder, in
+// src/renderer/components/options/hotkeyRecording.ts (keyEventToAccelerator).
 
 /**
  * Format an accelerator string for display based on the platform.
@@ -412,7 +311,7 @@ export function formatAcceleratorForDisplay(accelerator: string, platform: NodeJ
  * Normalize an accelerator string to canonical form.
  *
  * Ensures consistent ordering and casing:
- * - Modifiers in order: CommandOrControl, Alt, Shift
+ * - Modifiers in order: CommandOrControl, Alt, Shift, Super
  * - Key in uppercase (for letters)
  *
  * @param accelerator - The accelerator string to normalize
@@ -428,7 +327,8 @@ export function normalizeAccelerator(accelerator: string): string {
         if (lower === 'command' || lower === 'cmd') return 'CommandOrControl';
         if (lower === 'cmdorctrl' || lower === 'commandorcontrol') return 'CommandOrControl';
         if (lower === 'option') return 'Alt';
-        if (lower === 'meta' || lower === 'super') return 'CommandOrControl';
+        // The Super / Windows key is its own modifier (the Copilot key sends Shift+Super+F23)
+        if (lower === 'meta' || lower === 'super') return 'Super';
         if (lower === 'alt') return 'Alt';
         if (lower === 'shift') return 'Shift';
         // Unknown modifier - return as-is with capitalized first letter
@@ -439,7 +339,7 @@ export function normalizeAccelerator(accelerator: string): string {
     const uniqueModifiers = [...new Set(normalizedModifiers)];
 
     // Sort modifiers in consistent order
-    const modifierOrder = ['CommandOrControl', 'Alt', 'Shift'];
+    const modifierOrder = ['CommandOrControl', 'Alt', 'Shift', 'Super'];
     uniqueModifiers.sort((a, b) => {
         const aIndex = modifierOrder.indexOf(a);
         const bIndex = modifierOrder.indexOf(b);

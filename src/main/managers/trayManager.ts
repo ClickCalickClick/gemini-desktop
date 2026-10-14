@@ -21,7 +21,7 @@ const logger = createLogger('[TrayManager]');
  *
  * ## Features
  * - Creates system tray icon with app icon
- * - Provides context menu for show/quit actions
+ * - Provides context menu for show, Quick Chat and quit actions
  * - Handles tray click to restore window
  * - Cross-platform support (Windows, macOS, Linux)
  *
@@ -136,6 +136,9 @@ export default class TrayManager {
             case 'show':
                 this.windowManager.restoreFromTray();
                 break;
+            case 'quickChat':
+                this.windowManager.showQuickChat();
+                break;
             case 'quit':
                 app.quit();
                 break;
@@ -152,9 +155,9 @@ export default class TrayManager {
      * the same code path that would be executed when a user clicks the tray icon
      * or a tray menu item.
      *
-     * @param action - The action to execute: 'click', 'show', or 'quit'
+     * @param action - The action to execute: 'click', 'show', 'quickChat' or 'quit'
      */
-    executeTrayAction(action: 'click' | 'show' | 'quit'): void {
+    executeTrayAction(action: 'click' | 'show' | 'quickChat' | 'quit'): void {
         logger.log(`Executing tray action programmatically: ${action}`);
 
         switch (action) {
@@ -162,6 +165,9 @@ export default class TrayManager {
             case 'show':
                 // Same as tray click handler
                 this.windowManager.restoreFromTray();
+                break;
+            case 'quickChat':
+                this.windowManager.showQuickChat();
                 break;
             case 'quit':
                 app.quit();

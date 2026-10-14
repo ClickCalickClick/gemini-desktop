@@ -67,6 +67,17 @@ describe('QuickChatApp', () => {
             setTheme: vi.fn(),
             onThemeChanged: vi.fn().mockReturnValue(() => {}),
             onQuickChatExecute: vi.fn().mockReturnValue(() => {}),
+            // Hybrid Quick Chat (H4): no agent installed, so every prompt goes to Gemini as before.
+            // Agent routing is tested in QuickChatApp.agent.test.tsx.
+            resizeQuickChat: vi.fn(),
+            getAgentStatus: vi.fn().mockResolvedValue({ engine: null, available: false, error: 'No agent CLI found' }),
+            getAgentSettings: vi
+                .fn()
+                .mockResolvedValue({ quickChatRoutingMode: 'auto', agentEngine: 'auto', agentModel: '' }),
+            onAgentSettingsChanged: vi.fn().mockReturnValue(() => {}),
+            onAgentEvent: vi.fn().mockReturnValue(() => {}),
+            runAgent: vi.fn(),
+            cancelAgent: vi.fn(),
             platform: 'win32',
             isElectron: true,
         };
@@ -191,6 +202,23 @@ describe('QuickChatApp', () => {
             });
 
             expect(mockSubmitQuickChat).not.toHaveBeenCalled();
+        });
+
+        it('sends local-looking prompts to Gemini when no agent is installed', async () => {
+            render(<QuickChatApp />);
+            await waitForInitialization();
+
+            await act(async () => {
+                fireEvent.change(screen.getByTestId('quick-chat-input'), {
+                    target: { value: 'organise my Downloads folder' },
+                });
+            });
+            expect(screen.getByTestId('quick-chat-route-chip')).toHaveTextContent('Gemini');
+            await act(async () => {
+                fireEvent.keyDown(screen.getByTestId('quick-chat-input'), { key: 'Enter' });
+            });
+
+            expect(mockSubmitQuickChat).toHaveBeenCalledWith('organise my Downloads folder');
         });
 
         it('trims whitespace from input before submit', async () => {

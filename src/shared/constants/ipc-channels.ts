@@ -27,6 +27,11 @@ export const IPC_CHANNELS = {
     THEME_SET: 'theme:set',
     THEME_CHANGED: 'theme:changed',
 
+    // Desktop look (titlebar, controls and fonts that follow a desktop environment)
+    LOOK_GET: 'look:get',
+    LOOK_SET: 'look:set',
+    LOOK_CHANGED: 'look:changed',
+
     // App
     OPEN_OPTIONS: 'open-options-window',
     OPEN_GOOGLE_SIGNIN: 'open-google-signin',
@@ -38,6 +43,18 @@ export const IPC_CHANNELS = {
     QUICK_CHAT_HIDE: 'quick-chat:hide',
     QUICK_CHAT_CANCEL: 'quick-chat:cancel',
     QUICK_CHAT_EXECUTE: 'quick-chat:execute',
+    QUICK_CHAT_RESIZE: 'quick-chat:resize',
+
+    // Agent engine (hybrid Quick Chat)
+    AGENT_STATUS_GET: 'agent:status-get',
+    AGENT_SETTINGS_GET: 'agent:settings-get',
+    AGENT_SETTINGS_SET: 'agent:settings-set',
+    AGENT_SETTINGS_CHANGED: 'agent:settings-changed',
+    AGENT_RUN: 'agent:run',
+    AGENT_CANCEL: 'agent:cancel',
+    AGENT_EVENT: 'agent:event',
+    AGENT_APPLY_PLAN: 'agent:apply-plan',
+    AGENT_UNDO_LAST: 'agent:undo-last',
 
     // Gemini Iframe Navigation (for Quick Chat integration)
     GEMINI_NAVIGATE: 'gemini:navigate',

@@ -25,6 +25,14 @@ pacman -Qi gemini-desktop
 
 grep -qx 'StartupWMClass=gemini-desktop' /usr/share/applications/gemini-desktop.desktop
 test -x /usr/bin/gemini-desktop
+# Quick Chat from the dash (H7): the main entry's right-click action and the separate launcher.
+grep -qx 'Actions=QuickChat;' /usr/share/applications/gemini-desktop.desktop
+grep -qx '\[Desktop Action QuickChat\]' /usr/share/applications/gemini-desktop.desktop
+grep -qx 'Exec="/opt/Gemini Desktop/gemini-desktop" --quick-chat' /usr/share/applications/gemini-desktop.desktop
+quick_chat_desktop=/usr/share/applications/gemini-desktop-quick-chat.desktop
+grep -qx 'Name=Gemini Quick Chat' "$quick_chat_desktop"
+grep -qx 'Exec="/opt/Gemini Desktop/gemini-desktop" --quick-chat' "$quick_chat_desktop"
+pacman -Qo "$quick_chat_desktop"
 # The update notice reads this to tell pacman installs to install the new package (src/main/utils/packageType.ts).
 grep -qx 'pacman' '/opt/Gemini Desktop/resources/package-type'
 
@@ -39,6 +47,10 @@ fi
 pacman -R --noconfirm gemini-desktop
 if [ -e /usr/bin/gemini-desktop ]; then
     echo "pacman -R left /usr/bin/gemini-desktop behind." >&2
+    exit 1
+fi
+if [ -e "$quick_chat_desktop" ]; then
+    echo "pacman -R left $quick_chat_desktop behind." >&2
     exit 1
 fi
 

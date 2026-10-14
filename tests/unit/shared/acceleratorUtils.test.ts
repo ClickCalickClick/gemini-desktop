@@ -10,7 +10,6 @@ import { describe, it, expect } from 'vitest';
 import {
     parseAccelerator,
     isValidAccelerator,
-    keyEventToAccelerator,
     formatAcceleratorForDisplay,
     normalizeAccelerator,
 } from '../../../src/shared/utils/acceleratorUtils';
@@ -139,130 +138,6 @@ describe('acceleratorUtils', () => {
     });
 
     // ==========================================================================
-    // keyEventToAccelerator
-    // ==========================================================================
-
-    describe('keyEventToAccelerator', () => {
-        const createKeyboardEvent = (options: {
-            code: string;
-            key: string;
-            ctrlKey?: boolean;
-            metaKey?: boolean;
-            altKey?: boolean;
-            shiftKey?: boolean;
-        }): KeyboardEvent => {
-            return {
-                code: options.code,
-                key: options.key,
-                ctrlKey: options.ctrlKey ?? false,
-                metaKey: options.metaKey ?? false,
-                altKey: options.altKey ?? false,
-                shiftKey: options.shiftKey ?? false,
-            } as KeyboardEvent;
-        };
-
-        it('should convert Ctrl+T to CommandOrControl+T', () => {
-            const event = createKeyboardEvent({
-                code: 'KeyT',
-                key: 't',
-                ctrlKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+T');
-        });
-
-        it('should convert Cmd+T to CommandOrControl+T', () => {
-            const event = createKeyboardEvent({
-                code: 'KeyT',
-                key: 't',
-                metaKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+T');
-        });
-
-        it('should convert Ctrl+Shift+T', () => {
-            const event = createKeyboardEvent({
-                code: 'KeyT',
-                key: 'T',
-                ctrlKey: true,
-                shiftKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+Shift+T');
-        });
-
-        it('should convert Ctrl+Alt+E', () => {
-            const event = createKeyboardEvent({
-                code: 'KeyE',
-                key: 'e',
-                ctrlKey: true,
-                altKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+Alt+E');
-        });
-
-        it('should convert Ctrl+Shift+Space', () => {
-            const event = createKeyboardEvent({
-                code: 'Space',
-                key: ' ',
-                ctrlKey: true,
-                shiftKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+Shift+Space');
-        });
-
-        it('should convert function keys', () => {
-            const event = createKeyboardEvent({
-                code: 'F12',
-                key: 'F12',
-                ctrlKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+F12');
-        });
-
-        it('should convert digit keys', () => {
-            const event = createKeyboardEvent({
-                code: 'Digit1',
-                key: '1',
-                ctrlKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+1');
-        });
-
-        it('should convert arrow keys', () => {
-            const event = createKeyboardEvent({
-                code: 'ArrowUp',
-                key: 'ArrowUp',
-                ctrlKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+Up');
-        });
-
-        it('should convert escape key', () => {
-            const event = createKeyboardEvent({
-                code: 'Escape',
-                key: 'Escape',
-                ctrlKey: true,
-            });
-            expect(keyEventToAccelerator(event)).toBe('CommandOrControl+Escape');
-        });
-
-        it('should convert Home/End keys', () => {
-            const homeEvent = createKeyboardEvent({
-                code: 'Home',
-                key: 'Home',
-                ctrlKey: true,
-            });
-            expect(keyEventToAccelerator(homeEvent)).toBe('CommandOrControl+Home');
-
-            const endEvent = createKeyboardEvent({
-                code: 'End',
-                key: 'End',
-                ctrlKey: true,
-            });
-            expect(keyEventToAccelerator(endEvent)).toBe('CommandOrControl+End');
-        });
-    });
-
-    // ==========================================================================
     // formatAcceleratorForDisplay
     // ==========================================================================
 
@@ -353,6 +228,12 @@ describe('acceleratorUtils', () => {
         it('should preserve multi-character key names', () => {
             expect(normalizeAccelerator('CommandOrControl+Space')).toBe('CommandOrControl+Space');
             expect(normalizeAccelerator('CommandOrControl+F12')).toBe('CommandOrControl+F12');
+        });
+
+        it('should keep Super and Meta as Super, after the other modifiers', () => {
+            expect(normalizeAccelerator('Super+Shift+F23')).toBe('Shift+Super+F23');
+            expect(normalizeAccelerator('Meta+Shift+F23')).toBe('Shift+Super+F23');
+            expect(normalizeAccelerator('Super+Ctrl+G')).toBe('CommandOrControl+Super+G');
         });
 
         it('should remove duplicate modifiers', () => {

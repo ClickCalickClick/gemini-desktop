@@ -1,0 +1,124 @@
+/**
+ * QuickChatSettings Component Styles
+ *
+ * Quick Chat routing, agent engine, model and engine status in the Options window.
+ * Uses the theme's custom properties so desktop looks can restyle it.
+ */
+
+.quick-chat-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.quick-chat-settings.loading {
+    padding: 8px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.quick-chat-settings__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 0;
+}
+
+.quick-chat-settings__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.quick-chat-settings__label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.quick-chat-settings__description {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+.quick-chat-settings__control {
+    flex-shrink: 0;
+}
+
+.quick-chat-settings__select,
+.quick-chat-settings__input {
+    box-sizing: border-box;
+    width: 200px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--qc-settings-control-radius, 6px);
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.quick-chat-settings__select:focus-visible,
+.quick-chat-settings__input:focus-visible,
+.quick-chat-settings__recheck:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 1px;
+}
+
+.quick-chat-settings__status {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--qc-settings-control-radius, 6px);
+    background-color: var(--bg-secondary);
+    font-size: 12px;
+}
+
+.quick-chat-settings__status-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.quick-chat-settings__status-text--ok {
+    display: block;
+    color: var(--text-primary);
+}
+
+.quick-chat-settings__status-text--error > span:first-child {
+    color: var(--error-color);
+}
+
+.quick-chat-settings__path {
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.quick-chat-settings__hint {
+    color: var(--text-secondary);
+}
+
+.quick-chat-settings__recheck {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--qc-settings-control-radius, 6px);
+    background: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.quick-chat-settings__recheck:hover {
+    background-color: var(--hover-bg);
+}

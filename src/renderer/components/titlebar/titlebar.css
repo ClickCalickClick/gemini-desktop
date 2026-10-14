@@ -73,6 +73,11 @@
     -webkit-app-region: no-drag;
 }
 
+/* Controls a look puts on the left (elementary OS, the macOS look): moved to the start of the titlebar */
+.window-controls--left {
+    order: -1;
+}
+
 .window-control-button {
     display: flex;
     align-items: center;

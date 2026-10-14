@@ -199,6 +199,18 @@ describe('DBusFallback', () => {
     // ========================================================================
 
     describe('electronAcceleratorToXdg', () => {
+        it('converts the Copilot key chord to SHIFT+LOGO+F23', () => {
+            // Most Copilot keys send Left Shift + Left Meta + F23; the Options preset is Shift+Super+F23
+            expect(dbusFallback.electronAcceleratorToXdg('Shift+Super+F23')).toBe('SHIFT+LOGO+F23');
+            expect(dbusFallback.electronAcceleratorToXdg('Shift+Meta+F23')).toBe('SHIFT+LOGO+F23');
+        });
+
+        it('converts F13-F24 with or without modifiers', () => {
+            expect(dbusFallback.electronAcceleratorToXdg('F23')).toBe('F23');
+            expect(dbusFallback.electronAcceleratorToXdg('Super+F13')).toBe('LOGO+F13');
+            expect(dbusFallback.electronAcceleratorToXdg('CommandOrControl+F24')).toBe('CTRL+F24');
+        });
+
         it('converts CommandOrControl to CTRL', () => {
             expect(dbusFallback.electronAcceleratorToXdg('CommandOrControl+Shift+Alt+Space')).toBe(
                 'CTRL+SHIFT+ALT+space'

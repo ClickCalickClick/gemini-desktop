@@ -12,8 +12,15 @@
 
 import { BrowserWindow, screen, type BrowserWindowConstructorOptions } from 'electron';
 import BaseWindow from './baseWindow';
-import { QUICK_CHAT_WINDOW_CONFIG, QUICK_CHAT_WIDTH } from '../utils/constants';
+import {
+    isWayland,
+    QUICK_CHAT_MAX_HEIGHT,
+    QUICK_CHAT_MIN_HEIGHT,
+    QUICK_CHAT_WINDOW_CONFIG,
+    QUICK_CHAT_WIDTH,
+} from '../utils/constants';
 import { getPreloadPath } from '../utils/paths';
+import { getPlatformAdapter } from '../platform/platformAdapterFactory';
 
 /**
  * Quick Chat floating window.
@@ -121,8 +128,10 @@ export default class QuickChatWindow extends BaseWindow {
             return;
         }
         this._suppressBlurUntil = Date.now() + 500;
-        this.window.show();
-        this.window.focus();
+        // On GNOME Wayland a window that is open but not focused cannot raise itself without an
+        // activation token, so the adapter hides and shows it again (B16, L21). A second instance's
+        // XDG_ACTIVATION_TOKEN cannot be used here: Electron has no API to apply one to a window.
+        getPlatformAdapter().bringToFront(this.window);
     }
 
     private handleBlur(): void {
@@ -166,6 +175,54 @@ export default class QuickChatWindow extends BaseWindow {
         if (this._readyToShowFallbackTimeout) {
             clearTimeout(this._readyToShowFallbackTimeout);
             this._readyToShowFallbackTimeout = null;
+        }
+    }
+
+    /**
+     * Resize the window to fit its content. The height is in CSS pixels, clamped to
+     * QUICK_CHAT_MIN_HEIGHT..QUICK_CHAT_MAX_HEIGHT and scaled by the page zoom. The width
+     * and the top edge stay where they are. Invalid numbers are ignored.
+     */
+    resizeToContent(height: unknown): void {
+        if (typeof height !== 'number' || !Number.isFinite(height)) {
+            return;
+        }
+        const win = this.window;
+        if (!win || win.isDestroyed()) {
+            return;
+        }
+
+        const zoomFactor = win.webContents.getZoomFactor?.() || 1;
+        const clamped = Math.min(QUICK_CHAT_MAX_HEIGHT, Math.max(QUICK_CHAT_MIN_HEIGHT, height));
+        let targetHeight = Math.round(clamped * zoomFactor);
+
+        const bounds = win.getBounds();
+        // Keep the bottom edge on screen (positions are unknown on Wayland, where the
+        // compositor keeps the window on screen itself).
+        if (!isWayland) {
+            const workArea = screen.getDisplayMatching(bounds).workArea;
+            const available = workArea.y + workArea.height - bounds.y;
+            if (available > 0) {
+                targetHeight = Math.min(targetHeight, available);
+            }
+        }
+        if (targetHeight === bounds.height) {
+            return;
+        }
+
+        // A window that is not resizable may ignore setSize on Linux.
+        const wasResizable = win.isResizable();
+        if (!wasResizable) {
+            win.setResizable(true);
+        }
+        if (isWayland) {
+            // Wayland apps cannot place their windows; only change the size.
+            win.setSize(bounds.width, targetHeight);
+        } else {
+            win.setBounds({ x: bounds.x, y: bounds.y, width: bounds.width, height: targetHeight });
+        }
+        if (!wasResizable) {
+            win.setResizable(false);
         }
     }
 

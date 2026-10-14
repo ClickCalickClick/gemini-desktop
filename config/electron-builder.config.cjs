@@ -2,7 +2,41 @@
  * @type {import('electron-builder').Configuration}
  * @see https://www.electron.build/configuration/configuration
  */
+const path = require('path');
 const { description } = require('../package.json');
+
+// Where the deb, rpm and pacman packages install the app (electron-builder's /opt/<productName>).
+const linuxExecutable = '"/opt/Gemini Desktop/gemini-desktop"';
+
+// The "Gemini Quick Chat" launcher that can be pinned to the GNOME dash or a dock (H7). The deb, rpm and
+// pacman packages install it next to the main entry; AppImage and tar.gz installs write it to
+// ~/.local/share/applications at runtime instead (src/main/utils/quickChatLauncher.ts).
+const quickChatDesktopFile = path.join(__dirname, '..', 'build', 'linux', 'gemini-desktop-quick-chat.desktop');
+
+// Extra fpm arguments for the deb, rpm and pacman targets (electron-builder only accepts `fpm` per
+// target, not under `linux`): fpm's dir source maps <file>=<path in the package>.
+const fpmExtraFiles = [`${quickChatDesktopFile}=/usr/share/applications/gemini-desktop-quick-chat.desktop`];
+
+/**
+ * The main desktop entry, with a "Quick Chat" action in its right-click menu.
+ * @param {string} quickChatExec - The Exec line of the action
+ */
+function linuxDesktop(quickChatExec) {
+    return {
+        entry: {
+            // Must match the window class the app sets with --class on Linux, so desktops
+            // group the window with its launcher. The default is the product name.
+            StartupWMClass: 'gemini-desktop',
+            Actions: 'QuickChat;',
+        },
+        desktopActions: {
+            QuickChat: {
+                Name: 'Quick Chat',
+                Exec: quickChatExec,
+            },
+        },
+    };
+}
 
 const explicitBuildArch = process.env.npm_config_arch || process.env.BUILD_ARCH;
 const buildArch = explicitBuildArch || process.arch;
@@ -147,13 +181,12 @@ module.exports = {
         synopsis: description,
         // The deb Maintainer and the pacman packager. Without it, fpm uses the upstream author.
         maintainer: 'ClickCalickClick <16350651+ClickCalickClick@users.noreply.github.com>',
-        desktop: {
-            entry: {
-                // Must match the window class the app sets with --class on Linux, so desktops
-                // group the window with its launcher. The default is the product name.
-                StartupWMClass: 'gemini-desktop',
-            },
-        },
+        desktop: linuxDesktop(`${linuxExecutable} --quick-chat`),
+    },
+    // The AppImage's own entry starts AppRun; AppImage integration tools rewrite its Exec lines to
+    // the AppImage's path, the action's included.
+    appImage: {
+        desktop: linuxDesktop('AppRun --no-sandbox --quick-chat'),
     },
     // The default AppImage runtime loads libfuse2, which CachyOS and Ubuntu 22.04 and later do not
     // install. The static type2 runtime in toolset 1.0.2 only needs fusermount3 from fuse3, which
@@ -177,6 +210,7 @@ module.exports = {
             'libasound2',
         ],
         recommends: ['libayatana-appindicator3-1'],
+        fpm: fpmExtraFiles,
     },
     rpm: {
         depends: [
@@ -190,6 +224,7 @@ module.exports = {
             '(libuuid or libuuid1)',
             'alsa-lib',
         ],
+        fpm: fpmExtraFiles,
     },
     // The pacman defaults pull in all of ffmpeg (Electron bundles its own), the archived http-parser
     // and libappindicator-gtk3, which Arch only has as a provides. This list follows Arch's own
@@ -208,6 +243,7 @@ module.exports = {
             'hicolor-icon-theme',
             'mesa',
         ],
+        fpm: fpmExtraFiles,
     },
     // Builds use --publish never. This only names the repository that AppImage and Windows
     // builds check for updates (app-update.yml); without it electron-builder guesses from .git.
