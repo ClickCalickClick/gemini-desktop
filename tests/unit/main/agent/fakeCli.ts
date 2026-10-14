@@ -8,7 +8,9 @@
  * refused, as agy 1.3.5 reports it; the command is `$FAKE_BLOCKED_COMMAND` or `df -h`). It
  * writes its arguments, working directory, the workspace's entries, its input copies and
  * the allow rules in `$FAKE_HOME/.gemini/antigravity-cli/settings.json` to `$FAKE_ARGS_FILE`
- * when set (`$FAKE_SILENT_FIRST` adds a silent `true` that ran before it). `agy models` and
+ * when set (`$FAKE_SILENT_FIRST` adds a silent `true` that ran before it, `$FAKE_RAN_FIRST` a
+ * `df -h /` that ran and printed, and `$FAKE_ACTIVE_ONLY` reports the refused step ACTIVE twice
+ * and never DONE). `agy models` and
  * `agy -p /model` print a model list and the default model (`$FAKE_MODELS_HANG` makes them
  * hang, `$FAKE_MODELS_FAIL` makes `models` fail, `$FAKE_DEFAULT_MODEL` replaces the default
  * line) and append their arguments to `$FAKE_CALLS_FILE`.
@@ -150,8 +152,20 @@ if (mode === 'blocked') {
         out(tool('ACTIVE', 2, 'true'));
         out(tool('DONE', 2, 'true'));
     }
+    if (process.env.FAKE_RAN_FIRST) {
+        // A command that ran and printed something.
+        out(tool('ACTIVE', 1, 'df -h /'));
+        const ran = tool('DONE', 1, 'df -h /');
+        ran.step_update.tool_info.output = 'Filesystem Size Used Avail Use% Mounted on\r\n/dev/nvme0n1p6 400G 120G 280G 30% /\r\n';
+        out(ran);
+    }
     out(tool('ACTIVE', 3, command));
-    out(tool('DONE', 3, command));
+    if (process.env.FAKE_ACTIVE_ONLY) {
+        // agy 1.3.5 refusing "cat /etc/fstab": the step is reported ACTIVE twice and never DONE.
+        out(tool('ACTIVE', 3, command));
+    } else {
+        out(tool('DONE', 3, command));
+    }
     process.stderr.write('jetski: no output produced - a tool required the "command" permission that headless mode cannot prompt for, so it was auto-denied.\n');
     out({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response: '', duration_seconds: 4.4, num_turns: 1, usage: {}, denied_actions: [{ action: 'command', display_name: 'RunCommand' }] } });
     process.exit(0);

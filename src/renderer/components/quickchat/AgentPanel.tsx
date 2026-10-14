@@ -97,7 +97,7 @@ function PlanActionRow({ action }: { action: FileAction }): React.ReactElement {
     );
 }
 
-function ToolStepRow({ step }: { step: ToolStep }): React.ReactElement {
+function ToolStepRow({ step, openOutput }: { step: ToolStep; openOutput: boolean }): React.ReactElement {
     const failed = Boolean(step.error);
     const blocked = !failed && Boolean(step.blocked);
     const stateLabel = failed ? 'failed' : blocked ? 'blocked' : step.state === 'ACTIVE' ? 'running' : 'done';
@@ -126,6 +126,16 @@ function ToolStepRow({ step }: { step: ToolStep }): React.ReactElement {
             </span>
             {step.error && <span className="qc-tools__error">{step.error}</span>}
             {blocked && <span className="qc-tools__blocked">Blocked</span>}
+            {step.output && (
+                <details
+                    className="qc-tools__output"
+                    open={openOutput}
+                    data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_TOOL_OUTPUT}
+                >
+                    <summary>Output</summary>
+                    <pre>{step.output}</pre>
+                </details>
+            )}
         </li>
     );
 }
@@ -414,7 +424,12 @@ export function AgentPanel({
                         data-testid={QUICK_CHAT_TEST_IDS.QUICK_CHAT_AGENT_TOOLS}
                     >
                         {state.tools.map((step) => (
-                            <ToolStepRow key={step.key} step={step} />
+                            // Without an answer, what the commands printed is all there is to read.
+                            <ToolStepRow
+                                key={step.key}
+                                step={step}
+                                openOutput={state.phase === 'done' && !state.text.trim()}
+                            />
                         ))}
                     </ul>
                 )}

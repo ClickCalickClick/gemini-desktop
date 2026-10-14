@@ -29,6 +29,8 @@ export interface ToolStep {
     stepIndex?: number;
     /** The CLI refused to run this command (headless mode could not ask). */
     blocked?: boolean;
+    /** What the command printed, when the CLI reported it. */
+    output?: string;
 }
 
 /** The approval card for blocked commands: waiting, sending the decision, or dismissed. */
@@ -155,6 +157,14 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 text: state.text + event.delta,
             };
         case 'tool': {
+            // agy can report the same step ACTIVE more than once; keep one row for it.
+            if (
+                event.state === 'ACTIVE' &&
+                event.stepIndex !== undefined &&
+                state.tools.some((step) => step.stepIndex === event.stepIndex)
+            ) {
+                return state;
+            }
             if (event.state === 'DONE') {
                 let index = -1;
                 const sameStep = (step: ToolStep): boolean =>
@@ -176,6 +186,7 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                         state: 'DONE',
                         error: event.error,
                         command: event.command ?? existing.command,
+                        ...(event.output ? { output: event.output } : {}),
                     };
                     return { ...state, tools };
                 }
@@ -188,6 +199,7 @@ function applyEvent(state: AgentRunState, event: AgentRunEvent): AgentRunState {
                 error: event.error,
                 ...(event.command ? { command: event.command } : {}),
                 ...(event.stepIndex !== undefined ? { stepIndex: event.stepIndex } : {}),
+                ...(event.output ? { output: event.output } : {}),
             };
             return { ...state, tools: [...state.tools, step], nextToolKey: state.nextToolKey + 1 };
         }

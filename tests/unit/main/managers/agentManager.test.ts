@@ -653,6 +653,28 @@ describe('AgentManager', () => {
             expect(silentDone.canResume).toBeUndefined();
         });
 
+        it('finds a refused command that agy reported only as ACTIVE, never DONE', async () => {
+            const manager = createManager({
+                env: env({ FAKE_ACTIVE_ONLY: '1', FAKE_RAN_FIRST: '1', FAKE_BLOCKED_COMMAND: 'cat /etc/fstab' }),
+            });
+            const { done } = await startBlocked(manager);
+            expect(done.blocked?.map((entry) => entry.command)).toEqual(['cat /etc/fstab']);
+            expect(done.canResume).toBe(true);
+        });
+
+        it('passes on what a command printed, without carriage returns', async () => {
+            const manager = createManager({ env: env({ FAKE_RAN_FIRST: '1' }) });
+            const { events, done } = await startBlocked(manager);
+            const ran = events.find(
+                (event) => event.type === 'tool' && event.state === 'DONE' && event.stepIndex === 1
+            );
+            expect(ran?.type === 'tool' && ran.output).toBe(
+                'Filesystem Size Used Avail Use% Mounted on\n/dev/nvme0n1p6 400G 120G 280G 30% /'
+            );
+            // The command that printed is not the refused one.
+            expect(done.blocked?.map((entry) => entry.command)).toEqual(['df -h']);
+        });
+
         it('offers only Allow for this answer, with a caution, for a state-changing command', async () => {
             const manager = createManager({ env: env({ FAKE_BLOCKED_COMMAND: 'rm -rf ~/old' }) });
             const { runId, done } = await startBlocked(manager);
@@ -687,7 +709,7 @@ describe('AgentManager', () => {
             expect(seen.allow).toEqual(['command(ls)', 'command(df -h)']);
             expect(seen.args).toEqual(expect.arrayContaining(['--conversation', 'c1', '--sandbox']));
             expect(seen.args[1]).toBe(
-                'The user approved this command: `df -h`. Run it now and finish answering the original question.'
+                "The user approved this command: `df -h`. Run it now and answer the original question from the output. Other commands still need the user's approval, so only run another one if the question cannot be answered without it."
             );
             expect(seen.args).not.toContain('--dangerously-skip-permissions');
 

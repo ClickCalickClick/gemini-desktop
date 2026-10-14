@@ -165,8 +165,18 @@ interface ActiveRun {
     stderr: string;
     warnings: string[];
     timers: ReturnType<typeof setTimeout>[];
-    /** Finished terminal command steps, to find the ones headless mode refused. */
-    commandSteps: { tool: string; command: string; summary: string; stepIndex?: number; withoutOutput: boolean }[];
+    /**
+     * Terminal command steps in the order they started, to find the ones headless mode
+     * refused. A step that never reported DONE counts as without output.
+     */
+    commandSteps: {
+        tool: string;
+        command: string;
+        summary: string;
+        stepIndex?: number;
+        done: boolean;
+        withoutOutput: boolean;
+    }[];
     /** Rules for this answer that this run asked for; removed when it ends. */
     temporaryRules: string[];
     /** Set for a run that resumes a conversation after the user decided about blocked commands. */
@@ -725,14 +735,8 @@ export default class AgentManager {
                 }
                 break;
             case 'tool':
-                if (event.state === 'DONE' && event.command) {
-                    run.commandSteps.push({
-                        tool: event.name,
-                        command: event.command,
-                        summary: event.summary,
-                        ...(event.stepIndex !== undefined ? { stepIndex: event.stepIndex } : {}),
-                        withoutOutput: event.hasOutput === false && !event.error,
-                    });
+                if (event.command) {
+                    this.trackCommandStep(run, event);
                 }
                 run.emit({
                     type: 'tool',
@@ -743,6 +747,7 @@ export default class AgentManager {
                     ...(event.error ? { error: event.error } : {}),
                     ...(event.command ? { command: event.command } : {}),
                     ...(event.stepIndex !== undefined ? { stepIndex: event.stepIndex } : {}),
+                    ...(event.output ? { output: event.output } : {}),
                 });
                 break;
             case 'warning':
@@ -752,6 +757,45 @@ export default class AgentManager {
                 run.resultSeen = true;
                 this.completeRun(run, event);
                 break;
+        }
+    }
+
+    /**
+     * Record a terminal command step. agy 1.3.5 may report a refused command only as
+     * ACTIVE (sometimes twice) and never DONE, so steps are recorded when they start and
+     * updated when they finish.
+     */
+    private trackCommandStep(run: ActiveRun, event: Extract<ParsedAgentEvent, { kind: 'tool' }>): void {
+        const command = event.command as string;
+        let existing: ActiveRun['commandSteps'][number] | undefined;
+        for (let i = run.commandSteps.length - 1; i >= 0; i--) {
+            const step = run.commandSteps[i];
+            if (!step || step.done) {
+                continue;
+            }
+            const same =
+                event.stepIndex !== undefined && step.stepIndex !== undefined
+                    ? step.stepIndex === event.stepIndex
+                    : step.command === command;
+            if (same) {
+                existing = step;
+                break;
+            }
+        }
+        if (!existing) {
+            existing = {
+                tool: event.name,
+                command,
+                summary: event.summary,
+                ...(event.stepIndex !== undefined ? { stepIndex: event.stepIndex } : {}),
+                done: false,
+                withoutOutput: true,
+            };
+            run.commandSteps.push(existing);
+        }
+        if (event.state === 'DONE') {
+            existing.done = true;
+            existing.withoutOutput = event.hasOutput === false && !event.error;
         }
     }
 
@@ -818,7 +862,8 @@ export default class AgentManager {
      * step ends DONE without output or error, but so does a command that ran and printed
      * nothing, so a command only counts as refused when the result lists denied commands:
      * then the last that many output-less command steps are the refused ones (a denial ends
-     * the turn, so in practice it is the last tool step).
+     * the turn, so in practice it is the last tool step). A command step that never reached
+     * DONE (seen with a refused `cat`) counts as output-less.
      */
     private collectBlocked(
         run: ActiveRun,
@@ -1170,7 +1215,7 @@ export default class AgentManager {
         const prompt =
             choice === 'without'
                 ? `The user did not allow: ${list}. Do not run any more commands. Answer the original question from the command output you already have, and say briefly what you could not check.`
-                : `The user approved ${one ? 'this command' : 'these commands'}: ${list}. Run ${one ? 'it' : 'them'} now and finish answering the original question.`;
+                : `The user approved ${one ? 'this command' : 'these commands'}: ${list}. Run ${one ? 'it' : 'them'} now and answer the original question from the output. Other commands still need the user's approval, so only run another one if the question cannot be answered without it.`;
         try {
             const valid = validateRunRequest({
                 prompt,

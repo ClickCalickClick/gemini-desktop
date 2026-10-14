@@ -178,6 +178,8 @@ export type AgentRunEvent =
           command?: string;
           /** The CLI's step index (Antigravity), to tell steps apart. */
           stepIndex?: number;
+          /** What a terminal command printed (Antigravity, DONE steps), cut short. Plain text. */
+          output?: string;
       }
     | { type: 'plan'; runId: string; plan: FileActionPlan }
     | {

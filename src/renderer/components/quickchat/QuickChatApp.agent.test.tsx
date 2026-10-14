@@ -977,6 +977,29 @@ describe('QuickChatApp hybrid routing and agent panel', () => {
             expect(document.activeElement).toBe(screen.getByTestId('quick-chat-input'));
         });
 
+        it('shows what a command printed, open when the turn has no answer, and one row per step', async () => {
+            await renderApp();
+            await startAgentRun(`@agent ${DISK_PROMPT}`);
+            await send({ type: 'started', runId: 'run-1', engine: 'antigravity' });
+            const step = { type: 'tool', runId: 'run-1', name: 'run_command', command: 'df -h /', summary: 'df -h /' };
+            await send({ ...step, state: 'ACTIVE', stepIndex: 1 } as AgentRunEvent);
+            await send({ ...step, state: 'ACTIVE', stepIndex: 1 } as AgentRunEvent);
+            await send({
+                ...step,
+                state: 'DONE',
+                stepIndex: 1,
+                output: '/dev/nvme0n1p6 400G 120G 280G 30% /',
+            } as AgentRunEvent);
+            expect(screen.getAllByTestId('quick-chat-agent-tool-step')).toHaveLength(1);
+            const output = screen.getByTestId('quick-chat-agent-tool-output');
+            expect(output).toHaveTextContent('280G');
+            // Folded while the agent may still answer.
+            expect(output).not.toHaveAttribute('open');
+
+            await send({ type: 'done', runId: 'run-1', status: 'SUCCESS', response: '', deniedActions: ['command'] });
+            expect(screen.getByTestId('quick-chat-agent-tool-output')).toHaveAttribute('open');
+        });
+
         it('matches blocked rows by step, not by their shortened summary', async () => {
             await renderApp();
             await startAgentRun(`@agent ${DISK_PROMPT}`);

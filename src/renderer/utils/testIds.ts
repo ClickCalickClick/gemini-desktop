@@ -97,6 +97,7 @@ export const QUICK_CHAT_TEST_IDS = {
     QUICK_CHAT_AGENT_OUTPUT: 'quick-chat-agent-output',
     QUICK_CHAT_AGENT_TOOLS: 'quick-chat-agent-tools',
     QUICK_CHAT_AGENT_TOOL_STEP: 'quick-chat-agent-tool-step',
+    QUICK_CHAT_AGENT_TOOL_OUTPUT: 'quick-chat-agent-tool-output',
     QUICK_CHAT_AGENT_PLAN: 'quick-chat-agent-plan',
     QUICK_CHAT_AGENT_PLAN_ACTION: 'quick-chat-agent-plan-action',
     QUICK_CHAT_AGENT_PLAN_APPLY: 'quick-chat-agent-plan-apply',

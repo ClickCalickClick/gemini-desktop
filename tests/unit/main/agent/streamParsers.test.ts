@@ -7,6 +7,7 @@ import {
     GeminiCliEventParser,
     LineSplitter,
     MAX_LINE_LENGTH,
+    MAX_TOOL_OUTPUT_LENGTH,
     createEventParser,
     parseAntigravityEvent,
     parseJsonLine,
@@ -279,6 +280,7 @@ describe('parseAntigravityEvent', () => {
                     state: 'DONE',
                     command: 'df -h',
                     hasOutput: true,
+                    output: 'Filesystem Size Used Avail Use% Mounted on',
                 },
             ]);
             // A tool that is not a command has no command line.
@@ -292,6 +294,23 @@ describe('parseAntigravityEvent', () => {
                     },
                 })
             ).toEqual([{ kind: 'tool', name: 'view_file', summary: '/w/a.txt', state: 'DONE', hasOutput: true }]);
+        });
+
+        it("cleans a command's output and cuts a long one short", () => {
+            const parse = (output: unknown) =>
+                parseAntigravityEvent({
+                    event: 'step_update',
+                    step_update: {
+                        state: 'DONE',
+                        step_type: 'tool',
+                        tool_info: { name: 'run_command', parameters: { CommandLine: 'df -h' }, output },
+                    },
+                })[0];
+            expect(parse('a\r\nb\r\n')).toMatchObject({ output: 'a\nb' });
+            expect(parse('   \r\n')).not.toHaveProperty('output');
+            expect(parse(42)).not.toHaveProperty('output');
+            const long = parse('x'.repeat(MAX_TOOL_OUTPUT_LENGTH + 50));
+            expect(long?.kind === 'tool' && long.output).toBe(`${'x'.repeat(MAX_TOOL_OUTPUT_LENGTH)}\n…`);
         });
 
         it('keeps a long command line whole while the summary is shortened', () => {

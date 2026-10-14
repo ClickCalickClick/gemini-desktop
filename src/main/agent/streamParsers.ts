@@ -89,6 +89,8 @@ export type ParsedAgentEvent =
            * nothing, so this alone does not mean the command was refused.
            */
           hasOutput?: boolean;
+          /** Antigravity, DONE steps: what a terminal command printed, cut to {@link MAX_TOOL_OUTPUT_LENGTH}. */
+          output?: string;
       }
     | { kind: 'warning'; message: string }
     | {
@@ -156,6 +158,18 @@ const SUMMARY_KEYS = [
 ];
 
 const MAX_SUMMARY_LENGTH = 120;
+
+/** Longest command output passed on to Quick Chat. */
+export const MAX_TOOL_OUTPUT_LENGTH = 8000;
+
+/** A command's printed output, without carriage returns and cut to a length the UI can show. */
+function toolOutputOf(value: unknown): string | undefined {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        return undefined;
+    }
+    const text = value.replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+    return text.length > MAX_TOOL_OUTPUT_LENGTH ? `${text.slice(0, MAX_TOOL_OUTPUT_LENGTH)}\n…` : text;
+}
 
 /** Parameter names that hold a terminal command line. */
 const COMMAND_KEYS = ['CommandLine', 'command', 'command_line', 'cmd'];
@@ -266,6 +280,7 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
                 const name = nonEmpty(toolInfo.name) ?? nonEmpty(step.tool_name) ?? 'tool';
                 const error = errorMessage(toolInfo.error);
                 const command = commandLineOf(toolInfo.parameters);
+                const output = state === 'DONE' && command ? toolOutputOf(toolInfo.output) : undefined;
                 const stepIndex =
                     typeof step.step_index === 'number' && Number.isInteger(step.step_index)
                         ? step.step_index
@@ -283,6 +298,7 @@ export function parseAntigravityEvent(event: JsonObject): ParsedAgentEvent[] {
                         ...(state === 'DONE'
                             ? { hasOutput: toolInfo.output !== undefined && toolInfo.output !== null }
                             : {}),
+                        ...(output ? { output } : {}),
                     },
                 ];
             }

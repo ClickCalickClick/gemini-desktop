@@ -375,9 +375,36 @@ body {
 
 .qc-tools__step {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     min-width: 0;
+}
+
+.qc-tools__output {
+    flex-basis: 100%;
+    min-width: 0;
+    margin-left: 20px;
+}
+
+.qc-tools__output summary {
+    cursor: pointer;
+    width: fit-content;
+}
+
+.qc-tools__output pre {
+    margin: 4px 0 2px;
+    padding: 6px 8px;
+    max-height: 200px;
+    overflow: auto;
+    border-radius: 6px;
+    background: var(--qc-code-bg);
+    color: var(--qc-text);
+    font-family: var(--qc-mono-font-family);
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre;
+    user-select: text;
 }
 
 .qc-tools__icon {
