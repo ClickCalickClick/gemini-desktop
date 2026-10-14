@@ -66,7 +66,7 @@ export function DesktopHotkeyField({ hotkeyId, desktopTrigger, disabled }: Deskt
                 data-testid={`hotkey-change-in-desktop-${hotkeyId}`}
                 onClick={openDesktopDialog}
                 disabled={disabled}
-                title="Opens your desktop's shortcut dialog. Press the key you want there, such as the Copilot key."
+                title="Opens your desktop's shortcut settings. Press the key you want there, such as the Copilot key."
             >
                 Change…
             </button>

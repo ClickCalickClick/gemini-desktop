@@ -83,6 +83,10 @@ const createBusMock = () => ({
     removeListener: mockBusRemoveListener,
 });
 
+// gnome-control-center, which the app opens for its global shortcuts on GNOME
+const mockSpawn = vi.hoisted(() => vi.fn());
+vi.mock('node:child_process', () => ({ spawn: mockSpawn }));
+
 // Mock dbus-next at the top level
 vi.mock('dbus-next', () => ({
     sessionBus: (options?: unknown) => {
@@ -697,6 +701,7 @@ describe('DBusFallback', () => {
         const mockConfigureShortcuts = vi.fn();
 
         beforeEach(() => {
+            vi.stubEnv('XDG_CURRENT_DESKTOP', 'KDE');
             mockConfigureShortcuts.mockResolvedValue(undefined);
             mockGetInterface.mockImplementation((iface: string) => {
                 if (iface === 'org.freedesktop.DBus.Properties') {
@@ -793,11 +798,71 @@ describe('DBusFallback', () => {
             );
         });
 
+        describe('on GNOME, which refuses ConfigureShortcuts for an app id without a dot', () => {
+            function fakeChild(event: 'spawn' | 'error') {
+                // Fires the chosen event once the app listens for it, as a ChildProcess would
+                const child = {
+                    once: vi.fn((name: string, handler: (arg?: unknown) => void) => {
+                        if (name === event) {
+                            setImmediate(() => handler(event === 'error' ? new Error('ENOENT') : undefined));
+                        }
+                        return child;
+                    }),
+                    unref: vi.fn(),
+                };
+                return child;
+            }
+
+            beforeEach(() => {
+                vi.stubEnv('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME');
+            });
+
+            it('opens the app page in GNOME Settings instead, even on portal version 1', async () => {
+                mockGet.mockResolvedValue({ signature: 'u', value: 1 });
+                const child = fakeChild('spawn');
+                mockSpawn.mockReturnValue(child);
+                await dbusFallback.registerViaDBus(shortcuts);
+
+                expect(dbusFallback.canConfigureShortcuts()).toBe(true);
+                await expect(dbusFallback.configureShortcutsViaDBus()).resolves.toBe(true);
+                expect(mockSpawn).toHaveBeenCalledWith(
+                    'gnome-control-center',
+                    ['applications', 'gemini-desktop'],
+                    expect.objectContaining({ detached: true, stdio: 'ignore' })
+                );
+                expect(child.unref).toHaveBeenCalled();
+                expect(mockConfigureShortcuts).not.toHaveBeenCalled();
+            });
+
+            it('reports false when GNOME Settings cannot start', async () => {
+                mockSpawn.mockReturnValue(fakeChild('error'));
+                await dbusFallback.registerViaDBus(shortcuts);
+
+                await expect(dbusFallback.configureShortcutsViaDBus()).resolves.toBe(false);
+            });
+
+            it('offers nothing before the shortcuts are bound', () => {
+                expect(dbusFallback.canConfigureShortcuts()).toBe(false);
+            });
+        });
+
         it('forgets the portal version when the session ends', async () => {
             await dbusFallback.registerViaDBus(shortcuts);
             await dbusFallback.destroySession();
 
             expect(dbusFallback.canConfigureShortcuts()).toBe(false);
+        });
+    });
+
+    describe('isValidGApplicationId', () => {
+        it.each([
+            ['gemini-desktop', false],
+            ['io.github.clickcalickclick.GeminiDesktop', true],
+            ['org.gnome.Settings', true],
+            ['com.1password.App', false],
+            ['a..b', false],
+        ])('%s → %s', (id, valid) => {
+            expect(dbusFallback.isValidGApplicationId(id)).toBe(valid);
         });
     });
 

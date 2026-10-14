@@ -935,27 +935,87 @@ export async function registerViaDBus(
 }
 
 /**
- * Whether the desktop can open its own dialog for changing the bound keys: the portal has
- * GlobalShortcuts version 2 or later and the shortcuts are bound.
+ * Whether an app id passes GLib's `g_application_id_is_valid()`: two or more dot-separated
+ * elements of letters, digits, `_` and `-`, none starting with a digit, at most 255 characters.
  */
-export function canConfigureShortcuts(): boolean {
-    return portalVersion >= 2 && sessionPath !== null && typeof portalInterface?.ConfigureShortcuts === 'function';
+export function isValidGApplicationId(id: string): boolean {
+    return id.length <= 255 && /^[A-Za-z_-][A-Za-z0-9_-]*(\.[A-Za-z_-][A-Za-z0-9_-]*)+$/.test(id);
+}
+
+/** Whether the session runs GNOME (XDG_CURRENT_DESKTOP is a colon-separated list) */
+function isGnomeDesktop(env: NodeJS.ProcessEnv = process.env): boolean {
+    return (env.XDG_CURRENT_DESKTOP ?? '').split(':').some((name) => name.trim().toLowerCase() === 'gnome');
 }
 
 /**
- * Open the desktop's own dialog for the bound shortcuts (GlobalShortcuts.ConfigureShortcuts),
- * where the user presses the keys they want. The desktop sends ShortcutsChanged when the user
- * saves, which reaches `onShortcutsChanged`.
- *
- * @returns true when the dialog was asked for, false when the desktop has none or the call failed
+ * GNOME 51 discards ConfigureShortcuts from an app whose id is not a valid GApplication id
+ * ("Discarded shortcut configure request from application with an invalid app_id"), and the
+ * portal still reports success. `gemini-desktop` has no dot, so on GNOME the app opens the
+ * Global Shortcuts of its page in GNOME Settings instead, which changes the same binding and
+ * rebinds the running session (ShortcutsChanged).
  */
-export async function configureShortcutsViaDBus(): Promise<boolean> {
-    if (!canConfigureShortcuts() || !sessionPath || !portalInterface?.ConfigureShortcuts) {
-        logger.log('ConfigureShortcuts is not available (portal version or session missing)');
+function usesGnomeSettingsPage(): boolean {
+    return isGnomeDesktop() && !isValidGApplicationId(PORTAL_APP_ID);
+}
+
+/**
+ * Whether the user can change the bound keys from the app: the shortcuts are bound and either
+ * GNOME Settings can show them or the portal has ConfigureShortcuts (GlobalShortcuts version 2).
+ */
+export function canConfigureShortcuts(): boolean {
+    if (sessionPath === null) {
         return false;
     }
+    return usesGnomeSettingsPage() || (portalVersion >= 2 && typeof portalInterface?.ConfigureShortcuts === 'function');
+}
+
+/**
+ * Open the app's page in GNOME Settings (Apps), where Global Shortcuts lists the bound keys.
+ *
+ * @returns true once gnome-control-center has started
+ */
+async function openGnomeSettingsPage(): Promise<boolean> {
+    const { spawn } = await import('node:child_process');
+    return new Promise((resolve) => {
+        try {
+            const child = spawn('gnome-control-center', ['applications', PORTAL_APP_ID], {
+                detached: true,
+                stdio: 'ignore',
+            });
+            child.once('error', (error) => {
+                logger.error('Could not start GNOME Settings:', error);
+                resolve(false);
+            });
+            child.once('spawn', () => {
+                child.unref();
+                logger.log('Opened the app page in GNOME Settings for its global shortcuts');
+                resolve(true);
+            });
+        } catch (error) {
+            logger.error('Could not start GNOME Settings:', error);
+            resolve(false);
+        }
+    });
+}
+
+/**
+ * Let the user pick new keys for the bound shortcuts in the desktop's own UI: the app's page in
+ * GNOME Settings on GNOME (see `usesGnomeSettingsPage()`), otherwise the portal's dialog
+ * (GlobalShortcuts.ConfigureShortcuts). The desktop sends ShortcutsChanged when the user saves,
+ * which reaches `onShortcutsChanged`.
+ *
+ * @returns true when the desktop UI was asked for, false when there is none or the call failed
+ */
+export async function configureShortcutsViaDBus(): Promise<boolean> {
+    if (!canConfigureShortcuts() || !sessionPath) {
+        logger.log('Changing shortcut keys in the desktop is not available (no session or portal support)');
+        return false;
+    }
+    if (usesGnomeSettingsPage()) {
+        return openGnomeSettingsPage();
+    }
     try {
-        await portalInterface.ConfigureShortcuts(sessionPath, '', {});
+        await portalInterface!.ConfigureShortcuts!(sessionPath, '', {});
         logger.log('Asked the desktop to open its shortcut dialog');
         return true;
     } catch (error) {
