@@ -76,6 +76,11 @@ interface DBusInterface {
         options: Record<string, unknown>
     ) => Promise<unknown>;
     ListShortcuts?: (sessionPath: string, options?: Record<string, unknown>) => Promise<unknown>;
+    ConfigureShortcuts?: (
+        sessionPath: string,
+        parentWindow: string,
+        options: Record<string, unknown>
+    ) => Promise<unknown>;
     on?: (signal: string, handler: (...args: unknown[]) => void) => void;
 }
 
@@ -92,6 +97,16 @@ interface DBusMessage {
 
 interface PortalShortcutSignalPayload {
     shortcutId: string;
+}
+
+/** Options for `registerViaDBus()` */
+export interface DBusRegistrationOptions {
+    /**
+     * Called when the desktop changes the keys of the bound shortcuts (its ShortcutsChanged
+     * signal), for example after the user picked new keys in its dialog. Gets each shortcut's
+     * trigger description.
+     */
+    onShortcutsChanged?: (triggers: Map<HotkeyId, string>) => void;
 }
 
 // ============================================================================
@@ -297,6 +312,12 @@ let activatedMessageHandler: ((msg: DBusMessage) => void) | null = null;
  * Periodic heartbeat timer for D-Bus connection logging.
  */
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * The GlobalShortcuts version the portal reports. Version 2 added ConfigureShortcuts, which
+ * opens the desktop's own dialog for changing the keys.
+ */
+let portalVersion = 0;
 
 // ============================================================================
 // Test-Only Signal Tracking
@@ -550,6 +571,51 @@ function parseShortcutSignalPayload(msg: DBusMessage): PortalShortcutSignalPaylo
     return { shortcutId };
 }
 
+/**
+ * Read each shortcut's trigger description from a BindShortcuts result or a ShortcutsChanged
+ * signal: an array of [id, { trigger_description: Variant<string>, ... }].
+ *
+ * @param shortcuts - The `a(sa{sv})` value as dbus-next unpacks it
+ * @returns Shortcut id to trigger description; shortcuts without one are left out
+ */
+export function readTriggerDescriptions(shortcuts: unknown): Map<HotkeyId, string> {
+    const triggers = new Map<HotkeyId, string>();
+    if (!Array.isArray(shortcuts)) {
+        return triggers;
+    }
+    for (const entry of shortcuts) {
+        if (!Array.isArray(entry) || typeof entry[0] !== 'string') {
+            continue;
+        }
+        const props = entry[1] as Record<string, { value?: unknown } | undefined> | undefined;
+        const trigger = props?.trigger_description?.value;
+        if (typeof trigger === 'string' && trigger.trim() !== '') {
+            triggers.set(entry[0] as HotkeyId, trigger);
+        }
+    }
+    return triggers;
+}
+
+/**
+ * Read the portal's GlobalShortcuts version, or 0 when it cannot be read.
+ */
+async function readPortalVersion(proxyObj: { getInterface: (name: string) => DBusInterface }): Promise<number> {
+    try {
+        const props = proxyObj.getInterface('org.freedesktop.DBus.Properties') as unknown as {
+            Get?: (iface: string, prop: string) => Promise<unknown>;
+        };
+        const raw = await props?.Get?.(GLOBAL_SHORTCUTS_INTERFACE, 'version');
+        const value =
+            typeof raw === 'object' && raw !== null && 'value' in raw ? (raw as { value: unknown }).value : raw;
+        return typeof value === 'number' ? value : 0;
+    } catch (error) {
+        logger.log(
+            `Could not read the GlobalShortcuts version: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return 0;
+    }
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -600,11 +666,13 @@ export async function isDBusFallbackAvailable(): Promise<boolean> {
  *
  * @param shortcuts - Shortcut definitions to register
  * @param actionCallbacks - Optional map of HotkeyId to action callback functions
- * @returns Per-shortcut registration results
+ * @param options - Optional listener for key changes made in the desktop
+ * @returns Per-shortcut registration results, with the keys the desktop bound
  */
 export async function registerViaDBus(
     shortcuts: DBusShortcutConfig[],
-    actionCallbacks?: Map<HotkeyId, () => void>
+    actionCallbacks?: Map<HotkeyId, () => void>,
+    options: DBusRegistrationOptions = {}
 ): Promise<HotkeyRegistrationResult[]> {
     const callbackIds = actionCallbacks ? Array.from(actionCallbacks.keys()) : [];
     logger.log(
@@ -648,6 +716,8 @@ export async function registerViaDBus(
         if (!portalInterface?.CreateSession || !portalInterface?.BindShortcuts) {
             throw new Error('GlobalShortcuts interface methods not available');
         }
+        portalVersion = await readPortalVersion(proxyObj);
+        logger.log(`GlobalShortcuts portal version: ${portalVersion}`);
 
         // Read sender name (available after getProxyObject completes the Hello handshake)
         const sender = connection.name?.replace(/^:/, '')?.replace(/\./g, '_') || '';
@@ -743,6 +813,25 @@ export async function registerViaDBus(
                 const { shortcutId } = payload;
                 logger.log(`Shortcut deactivated via D-Bus: ${shortcutId}`);
             }
+
+            // The user changed the keys in the desktop's dialog or settings
+            if (
+                msg.type === DBUS_MESSAGE_TYPE_SIGNAL &&
+                msg.interface === GLOBAL_SHORTCUTS_INTERFACE &&
+                msg.member === 'ShortcutsChanged' &&
+                Array.isArray(msg.body) &&
+                msg.body[0] === sessionPath
+            ) {
+                const triggers = readTriggerDescriptions(msg.body[1]);
+                for (const [id, trigger] of triggers) {
+                    logger.log(`Shortcut keys changed by the desktop: ${id}: "${trigger}"`);
+                }
+                try {
+                    options.onShortcutsChanged?.(triggers);
+                } catch (error) {
+                    logger.error('Error handling changed shortcut keys:', error);
+                }
+            }
         };
 
         connection.on?.('message', activatedMessageHandler);
@@ -782,21 +871,20 @@ export async function registerViaDBus(
 
         // Wait for BindShortcuts Response
         let bindSucceeded = false;
+        let boundTriggers = new Map<HotkeyId, string>();
         try {
             const bindResponse = await bindResponsePromise;
             if (bindResponse.code === 0) {
                 logger.log(`BindShortcuts succeeded (code=0)`);
                 bindSucceeded = true;
 
-                // Log the trigger descriptions assigned by KDE
-                const boundShortcuts = (
-                    bindResponse.results?.shortcuts as { value?: Array<[string, Record<string, { value?: unknown }>]> }
-                )?.value;
-                if (boundShortcuts) {
-                    for (const [id, props] of boundShortcuts) {
-                        const trigger = props?.trigger_description?.value;
-                        logger.log(`  ${id}: trigger_description="${trigger || '(none)'}"`);
-                    }
+                // The keys the desktop bound. GNOME and KDE keep the keys the user approved (or
+                // changed) and ignore preferred_trigger for a shortcut they already know.
+                boundTriggers = readTriggerDescriptions(
+                    (bindResponse.results?.shortcuts as { value?: unknown } | undefined)?.value
+                );
+                for (const s of shortcuts) {
+                    logger.log(`  ${s.id}: trigger_description="${boundTriggers.get(s.id) ?? '(none)'}"`);
                 }
             } else if (bindResponse.code === 1) {
                 logger.warn('BindShortcuts: user dismissed the approval dialog (code=1)');
@@ -817,10 +905,12 @@ export async function registerViaDBus(
 
         if (bindSucceeded) {
             logger.log(`Bound ${shortcuts.length} shortcuts via D-Bus portal`);
-            return shortcuts.map((s) => ({
-                hotkeyId: s.id,
-                success: true,
-            }));
+            return shortcuts.map((s) => {
+                const desktopTrigger = boundTriggers.get(s.id);
+                return desktopTrigger
+                    ? { hotkeyId: s.id, success: true, desktopTrigger }
+                    : { hotkeyId: s.id, success: true };
+            });
         } else {
             logger.warn(`BindShortcuts did not succeed — reporting failure for all ${shortcuts.length} shortcuts`);
             // Clean up D-Bus session since shortcuts won't work
@@ -841,6 +931,36 @@ export async function registerViaDBus(
             success: false,
             error: errorMessage,
         }));
+    }
+}
+
+/**
+ * Whether the desktop can open its own dialog for changing the bound keys: the portal has
+ * GlobalShortcuts version 2 or later and the shortcuts are bound.
+ */
+export function canConfigureShortcuts(): boolean {
+    return portalVersion >= 2 && sessionPath !== null && typeof portalInterface?.ConfigureShortcuts === 'function';
+}
+
+/**
+ * Open the desktop's own dialog for the bound shortcuts (GlobalShortcuts.ConfigureShortcuts),
+ * where the user presses the keys they want. The desktop sends ShortcutsChanged when the user
+ * saves, which reaches `onShortcutsChanged`.
+ *
+ * @returns true when the dialog was asked for, false when the desktop has none or the call failed
+ */
+export async function configureShortcutsViaDBus(): Promise<boolean> {
+    if (!canConfigureShortcuts() || !sessionPath || !portalInterface?.ConfigureShortcuts) {
+        logger.log('ConfigureShortcuts is not available (portal version or session missing)');
+        return false;
+    }
+    try {
+        await portalInterface.ConfigureShortcuts(sessionPath, '', {});
+        logger.log('Asked the desktop to open its shortcut dialog');
+        return true;
+    } catch (error) {
+        logger.error('ConfigureShortcuts failed:', error);
+        return false;
     }
 }
 
@@ -878,5 +998,6 @@ export async function destroySession(): Promise<void> {
         sessionPath = null;
         portalInterface = null;
         activatedMessageHandler = null;
+        portalVersion = 0;
     }
 }

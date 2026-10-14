@@ -74,6 +74,16 @@ export class HotkeyIpcHandler extends BaseIpcHandler {
             return this._handleGetPlatformHotkeyStatus();
         });
 
+        // Open the desktop's own dialog for the global shortcut keys
+        ipcMain.handle(IPC_CHANNELS.HOTKEYS_CHANGE_IN_DESKTOP, async (): Promise<boolean> => {
+            try {
+                return (await this.deps.hotkeyManager?.changeShortcutsInDesktop()) ?? false;
+            } catch (error) {
+                this.logger.error('Failed to open the desktop shortcut dialog:', error);
+                return false;
+            }
+        });
+
         // Send the status to all windows when a portal registration finishes
         this._boundPlatformHotkeyStatusChanged = (status: PlatformHotkeyStatus) => {
             this.broadcastToAllWindows(IPC_CHANNELS.PLATFORM_HOTKEY_STATUS_CHANGED, status);
@@ -401,6 +411,7 @@ export class HotkeyIpcHandler extends BaseIpcHandler {
         ipcMain.removeAllListeners(IPC_CHANNELS.HOTKEYS_ACCELERATOR_SET);
         ipcMain.removeHandler(IPC_CHANNELS.HOTKEYS_FULL_SETTINGS_GET);
         ipcMain.removeHandler(IPC_CHANNELS.PLATFORM_HOTKEY_STATUS_GET);
+        ipcMain.removeHandler(IPC_CHANNELS.HOTKEYS_CHANGE_IN_DESKTOP);
         // Only remove test-only handlers if they were registered
         if (TEST_ONLY_DBUS_SIGNALS_ENABLED) {
             ipcMain.removeHandler(IPC_CHANNELS.DBUS_ACTIVATION_SIGNAL_STATS_GET);
