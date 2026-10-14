@@ -8,7 +8,7 @@ This repository is [ClickCalickClick/gemini-desktop](https://github.com/ClickCal
 
 - **Read [TODO.md](TODO.md) before starting work.** It holds the plan, the current focus and the owner's decisions. Update it in the same PR as the work: tick the item, link the PR and add a Done log line.
 - **[docs/CODEBASE_OVERVIEW.md](docs/CODEBASE_OVERVIEW.md)** maps every feature, the known bugs (B1, B2, ...), the build and release setup, and the maintenance hotspots.
-- Primary platforms are CachyOS (Arch-based, KDE Plasma on Wayland) and macOS. Windows must keep building, and no feature may be dropped without the owner's OK.
+- Primary platforms are CachyOS (Arch-based, Wayland; the owner's machine runs GNOME) and macOS. Windows must keep building, and no feature may be dropped without the owner's OK.
 - Some statements in this file and in `docs/ARCHITECTURE.md` are out of date, for example the `persist:gemini` partition and "Google-only connections". Trust the code and [section 9 of the overview](docs/CODEBASE_OVERVIEW.md#9-docs-that-are-wrong-today) until TODO item S6 fixes them.
 
 ## 🛠 Build, Lint, and Test Commands
@@ -24,7 +24,7 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 - `npm run build` - Full build (TypeScript + Vite)
 - `npm run clean` - Clean build artifacts
 - `npm run dist:win` auto-builds `dist/` and `dist-electron/` if missing before packaging the default Windows x64 installer.
-- `npm run dist:linux`, `npm run dist:mac-x64` and `npm run dist:mac-arm64` always rebuild `dist/` and `dist-electron/` before packaging. `dist:linux` builds AppImage, deb, rpm, pacman and tar.gz (x64); on a Debian or Ubuntu build host the pacman target needs `bsdtar` (`libarchive-tools`) and the rpm target needs `rpmbuild` (`rpm`).
+- `npm run dist:linux`, `npm run dist:mac-x64` and `npm run dist:mac-arm64` always rebuild `dist/` and `dist-electron/` before packaging. `dist:linux` builds AppImage, deb, rpm, pacman and tar.gz (x64); on a Debian or Ubuntu build host the pacman target needs `bsdtar` (`libarchive-tools`) and the rpm target needs `rpmbuild` (`rpm`). On an Arch-based host such as CachyOS, install `libarchive`, `rpm-tools` and `libxcrypt-compat`: electron-builder's bundled fpm, which builds the deb, rpm and pacman packages, needs `libcrypt.so.1`.
 
 ### Linting & Formatting
 
