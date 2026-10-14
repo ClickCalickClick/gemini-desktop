@@ -17,7 +17,16 @@ import type { UpdateInfo, DownloadProgress } from './updates';
 import type { ToastPayload } from './toast';
 import type { TextPredictionSettings } from './text-prediction';
 import type { QuickChatSubmitOptions, ScreenshotCaptureResult, ScreenshotMode } from './screenshot';
-import type { AgentEngineStatus, AgentRunEvent, AgentRunRequest, AgentSettings, FileActionResult } from './agent';
+import type {
+    AgentEngineStatus,
+    AgentModelList,
+    AgentPermissionsInfo,
+    AgentRunEvent,
+    AgentRunRequest,
+    AgentSettings,
+    CommandApprovalRequest,
+    FileActionResult,
+} from './agent';
 import type { DesktopLookPreference, LookData } from './look';
 import type { TrayClickAction } from './tray';
 import type { GeminiNavigatePayload, GeminiReadyPayload, TabsState, TabShortcutPayload } from './tabs';
@@ -540,4 +549,23 @@ export interface ElectronAPI {
 
     /** Undo the last applied file plan */
     undoLastFilePlan: () => Promise<FileActionResult>;
+
+    /**
+     * Decide about a finished run's blocked commands (Antigravity CLI): allow them for this
+     * answer, always allow their lookup prefix, or answer without them. Resumes the
+     * conversation; resolves with the resumed run's id, or an error for the UI
+     */
+    approveAgentCommands: (request: CommandApprovalRequest) => Promise<{ runId?: string; error?: string }>;
+
+    /** The command allow rules the app manages in Antigravity CLI's settings */
+    getAgentPermissions: () => Promise<AgentPermissionsInfo>;
+
+    /** Turn the lookup command list on or off */
+    setLookupAgentCommands: (enabled: boolean) => Promise<AgentPermissionsInfo>;
+
+    /** Remove a lasting rule added with "Always allow" */
+    removeAllowedAgentRule: (rule: string) => Promise<AgentPermissionsInfo>;
+
+    /** The models the agent CLI offers (Antigravity CLI only); `refresh` skips the 5-minute cache */
+    listAgentModels: (refresh?: boolean) => Promise<AgentModelList>;
 }

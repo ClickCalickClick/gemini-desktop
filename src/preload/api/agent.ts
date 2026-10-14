@@ -16,6 +16,11 @@ export const agentAPI: Pick<
     | 'onAgentEvent'
     | 'applyFilePlan'
     | 'undoLastFilePlan'
+    | 'approveAgentCommands'
+    | 'getAgentPermissions'
+    | 'setLookupAgentCommands'
+    | 'removeAllowedAgentRule'
+    | 'listAgentModels'
 > = {
     getAgentStatus: () => ipcRenderer.invoke(IPC_CHANNELS.AGENT_STATUS_GET),
     getAgentSettings: () => ipcRenderer.invoke(IPC_CHANNELS.AGENT_SETTINGS_GET),
@@ -26,4 +31,9 @@ export const agentAPI: Pick<
     onAgentEvent: createSubscription<AgentRunEvent>(IPC_CHANNELS.AGENT_EVENT),
     applyFilePlan: (runId) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_APPLY_PLAN, runId),
     undoLastFilePlan: () => ipcRenderer.invoke(IPC_CHANNELS.AGENT_UNDO_LAST),
+    approveAgentCommands: (request) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_APPROVE_COMMANDS, request),
+    getAgentPermissions: () => ipcRenderer.invoke(IPC_CHANNELS.AGENT_PERMISSIONS_GET),
+    setLookupAgentCommands: (enabled) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, enabled),
+    removeAllowedAgentRule: (rule) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE, rule),
+    listAgentModels: (refresh) => ipcRenderer.invoke(IPC_CHANNELS.AGENT_MODELS_LIST, refresh === true),
 };

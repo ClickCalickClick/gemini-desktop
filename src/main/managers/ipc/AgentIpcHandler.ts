@@ -3,7 +3,10 @@
  *
  * Channels: agent:status-get, agent:settings-get, agent:settings-set (broadcasts
  * agent:settings-changed), agent:run (streams agent:event), agent:cancel,
- * agent:apply-plan and agent:undo-last. The work is done by AgentManager.
+ * agent:apply-plan, agent:undo-last, agent:approve-commands (resumes a run whose
+ * commands were blocked, streaming agent:event), agent:permissions-get,
+ * agent:lookup-commands-set, agent:allowed-rule-remove and agent:models-list.
+ * The work is done by AgentManager.
  *
  * @module ipc/AgentIpcHandler
  */
@@ -16,6 +19,8 @@ import { IPC_CHANNELS } from '../../utils/constants';
 import type {
     AgentEnginePreference,
     AgentEngineStatus,
+    AgentModelList,
+    AgentPermissionsInfo,
     AgentRunEvent,
     AgentSettings,
     FileActionResult,
@@ -25,7 +30,8 @@ import type {
 const ROUTING_MODES: readonly QuickChatRoutingMode[] = ['auto', 'web', 'agent'];
 const ENGINE_PREFERENCES: readonly AgentEnginePreference[] = ['auto', 'antigravity', 'gemini-cli'];
 export const MAX_AGENT_MODEL_LENGTH = 100;
-const AGENT_MODEL_PATTERN = /^[A-Za-z0-9._:-]*$/;
+/** A model id; never starting with `-`, so it cannot be read as another CLI flag. */
+const AGENT_MODEL_PATTERN = /^(?:[A-Za-z0-9._:][A-Za-z0-9._:-]*)?$/;
 
 const DEFAULT_SETTINGS: AgentSettings = {
     quickChatRoutingMode: 'auto',
@@ -61,7 +67,9 @@ export function validateAgentSettingsUpdate(update: unknown): Partial<AgentSetti
         }
         const model = candidate.agentModel.trim();
         if (model.length > MAX_AGENT_MODEL_LENGTH || !AGENT_MODEL_PATTERN.test(model)) {
-            throw new Error('The model name may only use letters, digits and . _ : - (up to 100 characters).');
+            throw new Error(
+                'The model name may only use letters, digits and . _ : - and may not start with - (up to 100 characters).'
+            );
         }
         result.agentModel = model;
     }
@@ -77,6 +85,17 @@ export class AgentIpcHandler extends BaseIpcHandler {
         ipcMain.on(IPC_CHANNELS.AGENT_CANCEL, (_event: IpcMainEvent, runId: unknown) => this.handleCancel(runId));
         ipcMain.handle(IPC_CHANNELS.AGENT_APPLY_PLAN, (_event, runId: unknown) => this.handleApplyPlan(runId));
         ipcMain.handle(IPC_CHANNELS.AGENT_UNDO_LAST, () => this.handleUndoLast());
+        ipcMain.handle(IPC_CHANNELS.AGENT_APPROVE_COMMANDS, (event, request: unknown) =>
+            this.handleApproveCommands(event, request)
+        );
+        ipcMain.handle(IPC_CHANNELS.AGENT_PERMISSIONS_GET, () => this.handlePermissionsGet());
+        ipcMain.handle(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, (_event, enabled: unknown) =>
+            this.handleLookupCommandsSet(enabled)
+        );
+        ipcMain.handle(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE, (_event, rule: unknown) =>
+            this.handleAllowedRuleRemove(rule)
+        );
+        ipcMain.handle(IPC_CHANNELS.AGENT_MODELS_LIST, (_event, refresh: unknown) => this.handleModelsList(refresh));
     }
 
     /** Read the agent settings, falling back to defaults for missing or invalid values. */
@@ -140,22 +159,12 @@ export class AgentIpcHandler extends BaseIpcHandler {
         return sender && !sender.isDestroyed() ? sender : null;
     }
 
-    private async handleRun(event: IpcMainInvokeEvent, request: unknown): Promise<{ runId: string }> {
-        const manager = this.deps.agentManager;
-        if (!manager) {
-            throw new Error('The agent engine is not available in this build.');
-        }
+    /** Run options from the settings, sending events to Quick Chat (or the sender). */
+    private runOptions(sender: WebContents) {
         const settings = this.getSettings();
-        const sender = event.sender;
-        const { screenshotId } = validateRunRequest(request);
-        const screenshot = screenshotId ? this.deps.screenshotManager?.take(screenshotId) : null;
-        if (screenshotId && !screenshot) {
-            throw new Error('The screenshot is no longer available. Take it again.');
-        }
-        return manager.run(request, {
+        return {
             enginePreference: settings.agentEngine,
             model: settings.agentModel,
-            ...(screenshot ? { screenshot } : {}),
             emit: (agentEvent: AgentRunEvent) => {
                 try {
                     this.eventTarget(sender)?.send(IPC_CHANNELS.AGENT_EVENT, agentEvent);
@@ -163,7 +172,85 @@ export class AgentIpcHandler extends BaseIpcHandler {
                     this.handleError('sending agent event', error, { type: agentEvent.type });
                 }
             },
-        });
+        };
+    }
+
+    private async handleRun(event: IpcMainInvokeEvent, request: unknown): Promise<{ runId: string }> {
+        const manager = this.deps.agentManager;
+        if (!manager) {
+            throw new Error('The agent engine is not available in this build.');
+        }
+        const { screenshotId } = validateRunRequest(request);
+        const screenshot = screenshotId ? this.deps.screenshotManager?.take(screenshotId) : null;
+        if (screenshotId && !screenshot) {
+            throw new Error('The screenshot is no longer available. Take it again.');
+        }
+        return manager.run(request, { ...this.runOptions(event.sender), ...(screenshot ? { screenshot } : {}) });
+    }
+
+    private async handleApproveCommands(
+        event: IpcMainInvokeEvent,
+        request: unknown
+    ): Promise<{ runId?: string; error?: string }> {
+        const manager = this.deps.agentManager;
+        if (!manager) {
+            return { error: 'The agent engine is not available in this build.' };
+        }
+        try {
+            return await manager.approveBlockedCommands(request, this.runOptions(event.sender));
+        } catch (error) {
+            this.handleError('approving agent commands', error);
+            return { error: 'Could not approve the commands.' };
+        }
+    }
+
+    private unsupportedPermissions(): AgentPermissionsInfo {
+        return { supported: false, settingsFile: '', lookupCommandsEnabled: false, allowedRules: [] };
+    }
+
+    private async handlePermissionsGet(): Promise<AgentPermissionsInfo> {
+        const manager = this.deps.agentManager;
+        if (!manager) {
+            return this.unsupportedPermissions();
+        }
+        try {
+            return await manager.getPermissions(this.getSettings().agentEngine);
+        } catch (error) {
+            this.handleError('reading agent permissions', error);
+            return { ...this.unsupportedPermissions(), error: 'Could not read the command rules.' };
+        }
+    }
+
+    private async handleLookupCommandsSet(enabled: unknown): Promise<AgentPermissionsInfo> {
+        const manager = this.deps.agentManager;
+        if (!manager) {
+            return this.unsupportedPermissions();
+        }
+        if (typeof enabled !== 'boolean') {
+            throw new Error('Invalid value.');
+        }
+        return manager.setLookupCommands(enabled, this.getSettings().agentEngine);
+    }
+
+    private async handleAllowedRuleRemove(rule: unknown): Promise<AgentPermissionsInfo> {
+        const manager = this.deps.agentManager;
+        if (!manager) {
+            return this.unsupportedPermissions();
+        }
+        return manager.removeAllowedRule(rule, this.getSettings().agentEngine);
+    }
+
+    private async handleModelsList(refresh: unknown): Promise<AgentModelList> {
+        const manager = this.deps.agentManager;
+        if (!manager) {
+            return { models: [], error: 'The agent engine is not available in this build.' };
+        }
+        try {
+            return await manager.listModels(this.getSettings().agentEngine, refresh === true);
+        } catch (error) {
+            this.handleError('listing agent models', error);
+            return { models: [], error: 'Could not list the models.' };
+        }
     }
 
     private handleCancel(runId: unknown): void {
@@ -206,5 +293,10 @@ export class AgentIpcHandler extends BaseIpcHandler {
         ipcMain.removeAllListeners(IPC_CHANNELS.AGENT_CANCEL);
         ipcMain.removeHandler(IPC_CHANNELS.AGENT_APPLY_PLAN);
         ipcMain.removeHandler(IPC_CHANNELS.AGENT_UNDO_LAST);
+        ipcMain.removeHandler(IPC_CHANNELS.AGENT_APPROVE_COMMANDS);
+        ipcMain.removeHandler(IPC_CHANNELS.AGENT_PERMISSIONS_GET);
+        ipcMain.removeHandler(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET);
+        ipcMain.removeHandler(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE);
+        ipcMain.removeHandler(IPC_CHANNELS.AGENT_MODELS_LIST);
     }
 }

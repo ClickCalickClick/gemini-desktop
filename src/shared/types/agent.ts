@@ -90,6 +90,77 @@ export interface FileActionResult {
     undoAvailable: boolean;
 }
 
+/**
+ * A terminal command the CLI refused to run because headless mode cannot ask for
+ * approval (Antigravity soft-denies it and reports it in `denied_actions`).
+ */
+export interface BlockedCommand {
+    /** Tool that asked to run it, e.g. `run_command`. */
+    tool: string;
+    /** The full command line. */
+    command: string;
+    /** The tool step's one-line summary. */
+    summary: string;
+    /** The CLI's step index, to find the step's row in the panel. */
+    stepIndex?: number;
+    /**
+     * The lasting allow rule offered by "Always allow", e.g. `command(df)`. Only set when
+     * the command starts with an entry of the lookup command list.
+     */
+    lastingRule?: string;
+    /** True when the command can change or delete things; the card says so. */
+    caution?: boolean;
+}
+
+/**
+ * What the user decided about a run's blocked commands: allow them for one answer, allow
+ * their lookup prefix for good, or let the agent answer without them.
+ */
+export type CommandApprovalDecision = 'once' | 'always' | 'without';
+
+/** Request to approve a finished run's blocked commands and resume its conversation. */
+export interface CommandApprovalRequest {
+    runId: string;
+    decision: CommandApprovalDecision;
+}
+
+/** A model offered by the CLI (`agy models`). */
+export interface AgentModel {
+    id: string;
+    name: string;
+}
+
+/** The CLI's models, or why they could not be listed. */
+export interface AgentModelList {
+    models: AgentModel[];
+    /** The CLI's default model, when it could be read. */
+    defaultModel?: AgentModel;
+    error?: string;
+}
+
+/** A group of lookup command rules, for the Options list. */
+export interface LookupCommandGroup {
+    name: string;
+    prefixes: readonly string[];
+}
+
+/** Command allow rules the app manages in Antigravity CLI's settings. */
+export interface AgentPermissionsInfo {
+    /**
+     * False when the engine in use is not Antigravity CLI, or on Windows (the CLI's sandbox
+     * is not documented there); the rest is then empty.
+     */
+    supported: boolean;
+    /** Antigravity CLI's settings file. */
+    settingsFile: string;
+    /** Set when the settings file cannot be read or changed (for example invalid JSON). */
+    error?: string;
+    /** True when the lookup command list is turned on. */
+    lookupCommandsEnabled: boolean;
+    /** Lasting rules the user added with "Always allow" that are still in the file. */
+    allowedRules: string[];
+}
+
 /** Final status of a run, mirroring the CLI's result status. */
 export type AgentRunStatus = 'SUCCESS' | 'ERROR' | 'CANCELED' | 'INTERRUPTED' | 'TIMEOUT';
 
@@ -105,6 +176,12 @@ export type AgentRunEvent =
           summary: string;
           state: 'ACTIVE' | 'DONE';
           error?: string;
+          /** The full command line, for tools that run a terminal command. */
+          command?: string;
+          /** The CLI's step index (Antigravity), to tell steps apart. */
+          stepIndex?: number;
+          /** What a terminal command printed (Antigravity, DONE steps), cut short. Plain text. */
+          output?: string;
       }
     | { type: 'plan'; runId: string; plan: FileActionPlan }
     | {
@@ -114,4 +191,18 @@ export type AgentRunEvent =
           response: string;
           conversationId?: string;
           error?: string;
+          /** Commands the CLI refused to run (Antigravity only). */
+          blocked?: BlockedCommand[];
+          /** Actions the CLI reports it denied (`command`, ...), when it says so. */
+          deniedActions?: string[];
+          /**
+           * True when the conversation can be resumed after the user decides about the
+           * blocked commands (the approval card shows).
+           */
+          canResume?: boolean;
+          /**
+           * Why the commands cannot be allowed (Windows, invisible characters, ...); the card
+           * then only offers to answer without them.
+           */
+          approvalUnavailable?: string;
       };

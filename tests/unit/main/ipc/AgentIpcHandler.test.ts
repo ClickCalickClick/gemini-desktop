@@ -42,6 +42,13 @@ vi.mock('electron', () => ({
     BrowserWindow: mockBrowserWindow,
 }));
 
+const PERMISSIONS = {
+    supported: true,
+    settingsFile: '/home/u/.gemini/antigravity-cli/settings.json',
+    lookupCommandsEnabled: false,
+    allowedRules: ['command(df)'],
+};
+
 function createMockAgentManager() {
     return {
         getStatus: vi.fn().mockResolvedValue({ engine: 'antigravity', available: true, path: '/bin/agy' }),
@@ -50,6 +57,11 @@ function createMockAgentManager() {
         cancel: vi.fn(),
         applyPlan: vi.fn().mockResolvedValue({ applied: 1, failed: [], undoAvailable: true }),
         undoLastPlan: vi.fn().mockResolvedValue({ applied: 1, failed: [], undoAvailable: false }),
+        approveBlockedCommands: vi.fn().mockResolvedValue({ runId: 'run-2' }),
+        getPermissions: vi.fn().mockResolvedValue(PERMISSIONS),
+        setLookupCommands: vi.fn().mockResolvedValue({ ...PERMISSIONS, lookupCommandsEnabled: true }),
+        removeAllowedRule: vi.fn().mockResolvedValue(PERMISSIONS),
+        listModels: vi.fn().mockResolvedValue({ models: [{ id: 'm', name: 'M' }] }),
     };
 }
 
@@ -97,13 +109,18 @@ describe('AgentIpcHandler', () => {
             IPC_CHANNELS.AGENT_RUN,
             IPC_CHANNELS.AGENT_APPLY_PLAN,
             IPC_CHANNELS.AGENT_UNDO_LAST,
+            IPC_CHANNELS.AGENT_APPROVE_COMMANDS,
+            IPC_CHANNELS.AGENT_PERMISSIONS_GET,
+            IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET,
+            IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE,
+            IPC_CHANNELS.AGENT_MODELS_LIST,
         ]) {
             expect(mockIpcMain._handlers.has(channel)).toBe(true);
         }
         expect(mockIpcMain._listeners.has(IPC_CHANNELS.AGENT_CANCEL)).toBe(true);
 
         handler.unregister();
-        expect(mockIpcMain.removeHandler).toHaveBeenCalledTimes(6);
+        expect(mockIpcMain.removeHandler).toHaveBeenCalledTimes(11);
         expect(mockIpcMain.removeAllListeners).toHaveBeenCalledWith(IPC_CHANNELS.AGENT_CANCEL);
     });
 
@@ -155,6 +172,9 @@ describe('AgentIpcHandler', () => {
 
         it('rejects invalid values without saving anything', () => {
             expect(() => invoke(IPC_CHANNELS.AGENT_SETTINGS_SET, {}, { agentModel: 'a b' })).toThrow('model name');
+            expect(() =>
+                invoke(IPC_CHANNELS.AGENT_SETTINGS_SET, {}, { agentModel: '--dangerously-skip-permissions' })
+            ).toThrow('model name');
             expect(() => invoke(IPC_CHANNELS.AGENT_SETTINGS_SET, {}, { quickChatRoutingMode: 'x' })).toThrow(
                 'routing mode'
             );
@@ -331,6 +351,89 @@ describe('AgentIpcHandler', () => {
             createHandler(false);
             expect(await invoke(IPC_CHANNELS.AGENT_APPLY_PLAN, {}, 'run-1')).toMatchObject({ applied: 0 });
             expect(await invoke(IPC_CHANNELS.AGENT_UNDO_LAST, {})).toMatchObject({ applied: 0 });
+        });
+    });
+
+    describe('blocked commands', () => {
+        const sender = { send: vi.fn(), isDestroyed: vi.fn(() => false) };
+
+        it('approves through the manager with the run settings and streams the resumed run', async () => {
+            store._defaults.agentModel = 'flash';
+            const request = { runId: 'run-1', decision: 'once' };
+            expect(await invoke(IPC_CHANNELS.AGENT_APPROVE_COMMANDS, { sender }, request)).toEqual({ runId: 'run-2' });
+            const [passed, options] = agentManager.approveBlockedCommands.mock.calls[0] as [
+                unknown,
+                { model: string; emit: (event: AgentRunEvent) => void },
+            ];
+            expect(passed).toBe(request);
+            expect(options.model).toBe('flash');
+            const event: AgentRunEvent = { type: 'text', runId: 'run-2', delta: 'x' };
+            options.emit(event);
+            expect(sender.send).toHaveBeenCalledWith(IPC_CHANNELS.AGENT_EVENT, event);
+        });
+
+        it('turns failures and a missing manager into errors for the card', async () => {
+            agentManager.approveBlockedCommands.mockRejectedValueOnce(new Error('secret detail'));
+            expect(await invoke(IPC_CHANNELS.AGENT_APPROVE_COMMANDS, { sender }, {})).toEqual({
+                error: 'Could not approve the commands.',
+            });
+            mockIpcMain._reset();
+            createHandler(false);
+            expect((await invoke(IPC_CHANNELS.AGENT_APPROVE_COMMANDS, { sender }, {})).error).toContain(
+                'not available'
+            );
+        });
+    });
+
+    describe('command rules and models', () => {
+        it('reads and changes the command rules with the engine preference', async () => {
+            store._defaults.agentEngine = 'antigravity';
+            expect(await invoke(IPC_CHANNELS.AGENT_PERMISSIONS_GET, {})).toEqual(PERMISSIONS);
+            expect(agentManager.getPermissions).toHaveBeenCalledWith('antigravity');
+
+            expect(await invoke(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, {}, true)).toMatchObject({
+                lookupCommandsEnabled: true,
+            });
+            expect(agentManager.setLookupCommands).toHaveBeenCalledWith(true, 'antigravity');
+            await expect(invoke(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, {}, 'yes')).rejects.toThrow('Invalid');
+
+            await invoke(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE, {}, 'command(df)');
+            expect(agentManager.removeAllowedRule).toHaveBeenCalledWith('command(df)', 'antigravity');
+        });
+
+        it('reports read failures without throwing', async () => {
+            agentManager.getPermissions.mockRejectedValueOnce(new Error('boom'));
+            expect(await invoke(IPC_CHANNELS.AGENT_PERMISSIONS_GET, {})).toMatchObject({
+                supported: false,
+                error: 'Could not read the command rules.',
+            });
+        });
+
+        it('lists models, passing refresh only when it is true', async () => {
+            expect(await invoke(IPC_CHANNELS.AGENT_MODELS_LIST, {}, true)).toEqual({
+                models: [{ id: 'm', name: 'M' }],
+            });
+            expect(agentManager.listModels).toHaveBeenLastCalledWith('auto', true);
+            await invoke(IPC_CHANNELS.AGENT_MODELS_LIST, {}, 'yes');
+            expect(agentManager.listModels).toHaveBeenLastCalledWith('auto', false);
+            agentManager.listModels.mockRejectedValueOnce(new Error('boom'));
+            expect(await invoke(IPC_CHANNELS.AGENT_MODELS_LIST, {})).toEqual({
+                models: [],
+                error: 'Could not list the models.',
+            });
+        });
+
+        it('answers without a manager', async () => {
+            mockIpcMain._reset();
+            createHandler(false);
+            expect(await invoke(IPC_CHANNELS.AGENT_PERMISSIONS_GET, {})).toMatchObject({ supported: false });
+            expect(await invoke(IPC_CHANNELS.AGENT_LOOKUP_COMMANDS_SET, {}, true)).toMatchObject({
+                supported: false,
+            });
+            expect(await invoke(IPC_CHANNELS.AGENT_ALLOWED_RULE_REMOVE, {}, 'command(df)')).toMatchObject({
+                supported: false,
+            });
+            expect((await invoke(IPC_CHANNELS.AGENT_MODELS_LIST, {})).error).toContain('not available');
         });
     });
 });

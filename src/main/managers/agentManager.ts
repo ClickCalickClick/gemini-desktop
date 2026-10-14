@@ -10,6 +10,9 @@
  * - The app never passes `--dangerously-skip-permissions` or a permissive approval mode,
  *   and does not run Antigravity CLI when the user's global settings allow more.
  * - Changes to the user's files are only made by the app, from a plan the user applied.
+ * - The app writes only specific `command(...)` allow rules to Antigravity CLI's settings,
+ *   only after the user approved a blocked command or turned on the lookup command list,
+ *   records why it wants each rule and never removes the user's own (see agent/agentPermissions).
  *
  * Never log prompts or answers: only ids, lengths and statuses.
  *
@@ -18,12 +21,24 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import * as fs from 'node:fs/promises';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { app, shell } from 'electron';
 
+import {
+    AgentPermissionsError,
+    hasInvisibleCharacters,
+    lastingRuleFor,
+    needsCaution,
+    PermissionTracker,
+    readAllowRules,
+    refuseAllowRule,
+    updateAllowRules,
+    wantedRules,
+    type PermissionRecord,
+} from '../agent/agentPermissions';
 import { discoverEngine, ENGINE_NAMES, getSearchDirectories, readBinaryVersion } from '../agent/engineDiscovery';
 import {
     applyPlan,
@@ -36,6 +51,7 @@ import {
     type PathPolicy,
     type UndoEntry,
 } from '../agent/filePlan';
+import { parseModelLines } from '../agent/models';
 import { buildAgentPrompt, gatherContext, type WellKnownFolder } from '../agent/promptContext';
 import { createEventParser, LineSplitter, parseJsonLine, type ParsedAgentEvent } from '../agent/streamParsers';
 import {
@@ -46,14 +62,19 @@ import {
     settingsFilesFor,
 } from '../agent/workspace';
 import { createLogger } from '../utils/logger';
+import { commandRule, LOOKUP_COMMAND_RULES } from '../../shared/constants/agentLookupCommands';
 import type {
     AgentEngineId,
     AgentEnginePreference,
     AgentEngineStatus,
+    AgentModelList,
+    AgentPermissionsInfo,
     AgentRunEvent,
     AgentRunRequest,
     AgentRunStatus,
     AgentTaskCategory,
+    BlockedCommand,
+    CommandApprovalDecision,
     FileActionPlan,
     FileActionResult,
 } from '../../shared/types/agent';
@@ -77,10 +98,22 @@ const AFTER_RESULT_GRACE_MS = 5000;
 const MAX_STDERR_CHARS = 64 * 1024;
 const MAX_RESPONSE_CHARS = 1024 * 1024;
 const MAX_STORED_PLANS = 10;
+/** Runs whose blocked commands can still be approved. */
+const MAX_STORED_BLOCKED_RUNS = 10;
+/** Most blocked commands one approval covers. */
+const MAX_BLOCKED_COMMANDS = 10;
+/** How long `agy models` and `agy -p /model` may take. */
+export const MODEL_LIST_TIMEOUT_MS = 20_000;
+/** How long a model list is kept. */
+export const MODEL_LIST_TTL_MS = 5 * 60 * 1000;
+/** How long a failed listing is kept before the CLI is asked again. */
+export const MODEL_LIST_FAILURE_TTL_MS = 60 * 1000;
+const MAX_MODEL_OUTPUT_CHARS = 256 * 1024;
 
 /**
  * Pass `--sandbox` to Antigravity CLI: terminal commands, if the user's settings allow any,
- * run in the OS sandbox where only the workspace is writable.
+ * run in the OS sandbox (workspace, temporary folders and build caches writable, home folders
+ * not visible, no network).
  */
 const ANTIGRAVITY_SANDBOX = true;
 
@@ -113,6 +146,11 @@ export interface AgentManagerOptions {
     /** Settings files to check for an engine (tests); defaults to the CLI's own files. */
     settingsFiles?: (engine: AgentEngineId) => string[];
     trashItem?: (target: string) => Promise<void>;
+    /** Antigravity CLI's global settings file, where the app writes command allow rules. */
+    antigravitySettingsFile?: () => string;
+    /** The app's record of the allow rules it added; defaults to `<userData>/agent-permissions.json`. */
+    permissionRecordFile?: () => string;
+    modelListTimeoutMs?: number;
     runTimeoutMs?: number;
     cancelGraceMs?: number;
     statusTtlMs?: number;
@@ -132,6 +170,47 @@ interface ActiveRun {
     stderr: string;
     warnings: string[];
     timers: ReturnType<typeof setTimeout>[];
+    /**
+     * Terminal command steps in the order they started, to find the ones headless mode
+     * refused. A step that never reported DONE counts as without output.
+     */
+    commandSteps: {
+        tool: string;
+        command: string;
+        summary: string;
+        stepIndex?: number;
+        done: boolean;
+        withoutOutput: boolean;
+    }[];
+    /** Rules for this answer that this run asked for; removed when it ends. */
+    temporaryRules: string[];
+    /** Set for a run that resumes a conversation after the user decided about blocked commands. */
+    resume?: ResumeKind;
+}
+
+/** How a run resumes after blocked commands: allowed, or answering without them. */
+type ResumeKind = 'approved' | 'declined';
+
+interface RunExtras {
+    temporaryRules?: string[];
+    resume?: ResumeKind;
+}
+
+/** A finished run whose blocked commands the user can still approve. */
+interface BlockedRun {
+    conversationId: string;
+    category: AgentTaskCategory;
+    commands: BlockedCommand[];
+    /** Set when the commands cannot be allowed; answering without them still works. */
+    approvalUnavailable?: string;
+}
+
+interface CachedModels {
+    binaryPath: string;
+    list: AgentModelList;
+    checkedAt: number;
+    /** How long this entry is kept: 5 minutes for a list, 1 minute for a failure. */
+    ttlMs: number;
 }
 
 interface StoredPlan {
@@ -175,6 +254,26 @@ export function validateRunRequest(request: unknown): AgentRunRequest {
         valid.screenshotId = screenshotId;
     }
     return valid;
+}
+
+/** What a run's `done` event reports. */
+interface DoneDetails {
+    status: AgentRunStatus;
+    response: string;
+    error?: string;
+    blocked?: BlockedCommand[];
+    deniedActions?: string[];
+    canResume?: boolean;
+    approvalUnavailable?: string;
+}
+
+/** A settings problem's message for the UI; never the raw text of other errors. */
+function permissionErrorMessage(error: unknown): string {
+    return error instanceof AgentPermissionsError ? error.message : "Could not change Antigravity CLI's settings file.";
+}
+
+function union(list: string[], more: string[]): string[] {
+    return [...new Set([...list, ...more])];
 }
 
 const AUTH_PATTERN =
@@ -225,6 +324,9 @@ export default class AgentManager {
     private readonly readVersion?: (binaryPath: string) => Promise<string | undefined>;
     private readonly settingsFiles?: (engine: AgentEngineId) => string[];
     private readonly fileOps: FileOperations;
+    private readonly antigravitySettingsFile: () => string;
+    private readonly permissions: PermissionTracker;
+    private readonly modelListTimeoutMs: number;
     private readonly runTimeoutMs: number;
     private readonly cancelGraceMs: number;
     private readonly statusTtlMs: number;
@@ -233,6 +335,8 @@ export default class AgentManager {
     private statusCache: CachedStatus | null = null;
     private activeRun: ActiveRun | null = null;
     private readonly plans = new Map<string, StoredPlan>();
+    private readonly blockedRuns = new Map<string, BlockedRun>();
+    private modelCache: CachedModels | null = null;
     private undoLog: UndoEntry[] = [];
     private fileWorkBusy = false;
     private disposed = false;
@@ -258,6 +362,13 @@ export default class AgentManager {
         this.readVersion = options.readVersion;
         this.settingsFiles = options.settingsFiles;
         this.fileOps = { trashItem: options.trashItem ?? ((target) => shell.trashItem(target)) };
+        this.antigravitySettingsFile =
+            options.antigravitySettingsFile ??
+            (() => settingsFilesFor('antigravity', this.homeDir(), this.platform)[0] ?? '');
+        const permissionRecordFile =
+            options.permissionRecordFile ?? (() => path.join(this.userDataDir(), 'agent-permissions.json'));
+        this.permissions = new PermissionTracker(permissionRecordFile);
+        this.modelListTimeoutMs = options.modelListTimeoutMs ?? MODEL_LIST_TIMEOUT_MS;
         this.runTimeoutMs = options.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
         this.cancelGraceMs = options.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS;
         this.statusTtlMs = options.statusTtlMs ?? DEFAULT_STATUS_TTL_MS;
@@ -315,7 +426,18 @@ export default class AgentManager {
 
     /** Start a run. Resolves with its id at once; progress arrives through `emit`. */
     async run(request: unknown, options: AgentRunOptions): Promise<{ runId: string }> {
-        const valid = validateRunRequest(request);
+        return this.startNewRun(validateRunRequest(request), options, {});
+    }
+
+    /**
+     * Start a run. A resumed run (after the user decided about blocked commands) gathers no
+     * context and copies no files: the conversation already has them, and the commands in
+     * its prompt must not make the app hand their files to the agent. `temporaryRules` are
+     * rules for this answer, written to Antigravity's settings right before the CLI starts
+     * and removed when the run ends, however it ends.
+     */
+    private startNewRun(valid: AgentRunRequest, options: AgentRunOptions, extras: RunExtras): { runId: string } {
+        const temporaryRules = extras.temporaryRules ?? [];
         if (this.disposed) {
             throw new Error('The app is quitting.');
         }
@@ -338,12 +460,15 @@ export default class AgentManager {
             stderr: '',
             warnings: [],
             timers: [],
+            commandSteps: [],
+            temporaryRules: [],
+            resume: extras.resume,
         };
         this.activeRun = run;
 
         // Events are sent after the runId has been returned to the renderer.
         setTimeout(() => {
-            void this.startRun(run, valid, options).catch((error: unknown) => {
+            void this.startRun(run, valid, options, temporaryRules).catch((error: unknown) => {
                 this.logger.error('Agent run failed to start:', { runId, error: (error as Error)?.message });
                 this.finish(run, { status: 'ERROR', response: '', error: 'The agent could not be started.' });
             });
@@ -352,7 +477,12 @@ export default class AgentManager {
         return { runId };
     }
 
-    private async startRun(run: ActiveRun, request: AgentRunRequest, options: AgentRunOptions): Promise<void> {
+    private async startRun(
+        run: ActiveRun,
+        request: AgentRunRequest,
+        options: AgentRunOptions,
+        temporaryRules: string[]
+    ): Promise<void> {
         if (run.finished) {
             return;
         }
@@ -385,15 +515,17 @@ export default class AgentManager {
         }
 
         const inputsRelativeDir = `inputs/${run.runId}`;
-        const context = await gatherContext(request.prompt, {
-            homeDir,
-            userDataDir: this.userDataDir(),
-            platform: this.platform,
-            getFolder: this.getFolder,
-            inputsDir: path.join(workspaceDir, 'inputs', run.runId),
-            inputsRelativeDir,
-            category: request.category,
-        });
+        const context = run.resume
+            ? { text: '', locations: 0, copiedFiles: 0 }
+            : await gatherContext(request.prompt, {
+                  homeDir,
+                  userDataDir: this.userDataDir(),
+                  platform: this.platform,
+                  getFolder: this.getFolder,
+                  inputsDir: path.join(workspaceDir, 'inputs', run.runId),
+                  inputsRelativeDir,
+                  category: request.category,
+              });
         if (run.finished) {
             return;
         }
@@ -401,8 +533,8 @@ export default class AgentManager {
         const attachments: string[] = [];
         if (options.screenshot) {
             const inputsDir = path.join(workspaceDir, 'inputs', run.runId);
-            await fs.mkdir(inputsDir, { recursive: true });
-            await fs.writeFile(path.join(inputsDir, SCREENSHOT_FILE_NAME), options.screenshot);
+            await fs.promises.mkdir(inputsDir, { recursive: true });
+            await fs.promises.writeFile(path.join(inputsDir, SCREENSHOT_FILE_NAME), options.screenshot);
             attachments.push(`${inputsRelativeDir}/${SCREENSHOT_FILE_NAME}`);
             if (run.finished) {
                 return;
@@ -419,6 +551,23 @@ export default class AgentManager {
         });
         const args = this.buildArgs(status.engine, prompt, request, options.model);
 
+        if (temporaryRules.length > 0) {
+            if (status.engine !== 'antigravity') {
+                this.finish(run, {
+                    status: 'ERROR',
+                    response: '',
+                    error: 'Only Antigravity CLI can run approved commands.',
+                });
+                return;
+            }
+            try {
+                this.addTemporaryRules(run, temporaryRules);
+            } catch (error) {
+                this.finish(run, { status: 'ERROR', response: '', error: permissionErrorMessage(error) });
+                return;
+            }
+        }
+
         this.logger.log('Starting agent run:', {
             runId: run.runId,
             engine: status.engine,
@@ -428,6 +577,8 @@ export default class AgentManager {
             copiedFiles: context.copiedFiles,
             screenshot: attachments.length > 0,
             followUp: Boolean(request.conversationId),
+            resume: run.resume ?? null,
+            temporaryRules: run.temporaryRules.length,
         });
 
         let child: ChildProcess;
@@ -525,6 +676,10 @@ export default class AgentManager {
 
     private buildArgs(engine: AgentEngineId, prompt: string, request: AgentRunRequest, model: string): string[] {
         const args = ['-p', prompt, '--output-format', 'stream-json'];
+        // Settings validation refuses such ids; never let one be read as another flag.
+        if (model.startsWith('-')) {
+            model = '';
+        }
         if (engine === 'antigravity') {
             args.push('--print-timeout', CLI_PRINT_TIMEOUT);
             if (ANTIGRAVITY_SANDBOX) {
@@ -609,6 +764,9 @@ export default class AgentManager {
                 }
                 break;
             case 'tool':
+                if (event.command) {
+                    this.trackCommandStep(run, event);
+                }
                 run.emit({
                     type: 'tool',
                     runId: run.runId,
@@ -616,6 +774,9 @@ export default class AgentManager {
                     summary: event.summary,
                     state: event.state,
                     ...(event.error ? { error: event.error } : {}),
+                    ...(event.command ? { command: event.command } : {}),
+                    ...(event.stepIndex !== undefined ? { stepIndex: event.stepIndex } : {}),
+                    ...(event.output ? { output: event.output } : {}),
                 });
                 break;
             case 'warning':
@@ -628,12 +789,52 @@ export default class AgentManager {
         }
     }
 
+    /**
+     * Record a terminal command step. agy 1.3.5 may report a refused command only as
+     * ACTIVE (sometimes twice) and never DONE, so steps are recorded when they start and
+     * updated when they finish.
+     */
+    private trackCommandStep(run: ActiveRun, event: Extract<ParsedAgentEvent, { kind: 'tool' }>): void {
+        const command = event.command as string;
+        let existing: ActiveRun['commandSteps'][number] | undefined;
+        for (let i = run.commandSteps.length - 1; i >= 0; i--) {
+            const step = run.commandSteps[i];
+            if (!step || step.done) {
+                continue;
+            }
+            const same =
+                event.stepIndex !== undefined && step.stepIndex !== undefined
+                    ? step.stepIndex === event.stepIndex
+                    : step.command === command;
+            if (same) {
+                existing = step;
+                break;
+            }
+        }
+        if (!existing) {
+            existing = {
+                tool: event.name,
+                command,
+                summary: event.summary,
+                ...(event.stepIndex !== undefined ? { stepIndex: event.stepIndex } : {}),
+                done: false,
+                withoutOutput: true,
+            };
+            run.commandSteps.push(existing);
+        }
+        if (event.state === 'DONE') {
+            existing.done = true;
+            existing.withoutOutput = event.hasOutput === false && !event.error;
+        }
+    }
+
     private completeRun(run: ActiveRun, result: Extract<ParsedAgentEvent, { kind: 'result' }>): void {
         const conversationId = result.conversationId ?? run.conversationId;
         if (conversationId) {
             run.conversationId = conversationId;
         }
         const response = result.response ?? run.text;
+        const blocked = this.collectBlocked(run, result);
 
         if (result.status !== 'SUCCESS') {
             const status: AgentRunStatus = result.status;
@@ -644,6 +845,7 @@ export default class AgentManager {
                     status === 'ERROR'
                         ? describeFailure(run.engine, run.stderr, result.error ?? run.warnings.at(-1), null)
                         : result.error,
+                ...blocked,
             });
             this.scheduleLingeringKill(run);
             return;
@@ -675,16 +877,101 @@ export default class AgentManager {
                 removed,
             });
             run.emit({ type: 'plan', runId: run.runId, plan: safePlan });
-            this.finish(run, { status: 'SUCCESS', response: safePlan.summary });
+            this.finish(run, { status: 'SUCCESS', response: safePlan.summary, ...blocked });
             this.scheduleLingeringKill(run);
             return;
         }
 
-        this.finish(run, { status: 'SUCCESS', response });
+        this.finish(run, { status: 'SUCCESS', response, ...blocked });
         this.scheduleLingeringKill(run);
     }
 
-    private finish(run: ActiveRun, done: { status: AgentRunStatus; response: string; error?: string }): void {
+    /**
+     * The commands headless mode refused in this run. With agy 1.3.5 a refused command's
+     * step ends DONE without output or error, but so does a command that ran and printed
+     * nothing, so a command only counts as refused when the result lists denied commands:
+     * then the last that many output-less command steps are the refused ones (a denial ends
+     * the turn, so in practice it is the last tool step). A command step that never reached
+     * DONE (seen with a refused `cat`) counts as output-less.
+     */
+    private collectBlocked(
+        run: ActiveRun,
+        result: Extract<ParsedAgentEvent, { kind: 'result' }>
+    ): Partial<DoneDetails> {
+        const deniedActions = result.deniedActions;
+        if (run.engine !== 'antigravity' || !deniedActions || deniedActions.length === 0) {
+            return {};
+        }
+        const blocked: BlockedCommand[] = [];
+        const count = result.deniedCommands ?? 0;
+        if (count > 0) {
+            const refused = run.commandSteps.filter((step) => step.withoutOutput).slice(-count);
+            const seen = new Set<string>();
+            for (const step of refused) {
+                if (seen.has(step.command)) {
+                    continue;
+                }
+                seen.add(step.command);
+                const lastingRule = lastingRuleFor(step.command);
+                blocked.push({
+                    tool: step.tool,
+                    command: step.command,
+                    summary: step.summary,
+                    ...(step.stepIndex !== undefined ? { stepIndex: step.stepIndex } : {}),
+                    ...(lastingRule ? { lastingRule } : {}),
+                    ...(needsCaution(step.command) ? { caution: true } : {}),
+                });
+            }
+        }
+        // The card needs a conversation to resume and an answering task (file tasks must
+        // not run commands). A run that already answers without the commands gets no card.
+        const canResume =
+            blocked.length > 0 &&
+            blocked.length <= MAX_BLOCKED_COMMANDS &&
+            Boolean(run.conversationId) &&
+            run.category !== 'files' &&
+            run.resume !== 'declined';
+        const approvalUnavailable = canResume ? this.approvalUnavailable(blocked) : undefined;
+        if (canResume && run.conversationId) {
+            this.blockedRuns.set(run.runId, {
+                conversationId: run.conversationId,
+                category: run.category,
+                commands: blocked,
+                ...(approvalUnavailable ? { approvalUnavailable } : {}),
+            });
+            while (this.blockedRuns.size > MAX_STORED_BLOCKED_RUNS) {
+                const oldest = this.blockedRuns.keys().next().value as string;
+                this.blockedRuns.delete(oldest);
+            }
+        }
+        this.logger.log('Agent CLI denied actions:', {
+            runId: run.runId,
+            deniedActions,
+            blockedCommands: blocked.length,
+            canResume,
+            approvalAvailable: canResume && !approvalUnavailable,
+        });
+        return {
+            blocked,
+            deniedActions,
+            canResume,
+            ...(approvalUnavailable ? { approvalUnavailable } : {}),
+        };
+    }
+
+    /** Why blocked commands cannot be allowed, or undefined when they can. */
+    private approvalUnavailable(blocked: BlockedCommand[]): string | undefined {
+        if (this.platform === 'win32') {
+            return "On Windows the app does not allow the agent's commands: Antigravity CLI does not document a sandbox there.";
+        }
+        if (blocked.some((entry) => hasInvisibleCharacters(entry.command))) {
+            return 'A command contains control or invisible characters, so what you see may not be what would run. It cannot be allowed.';
+        }
+        const refusal = blocked.map((entry) => refuseAllowRule(commandRule(entry.command))).find(Boolean);
+        return refusal ? `This command cannot be allowed: ${refusal}` : undefined;
+    }
+
+    private finish(run: ActiveRun, done: DoneDetails): void {
         if (run.finished) {
             return;
         }
@@ -693,6 +980,7 @@ export default class AgentManager {
             clearTimeout(timer);
         }
         void removeRunInputs(this.workspaceDir(), run.runId).catch(() => undefined);
+        this.removeTemporaryRules(run);
         this.logger.log('Agent run finished:', {
             runId: run.runId,
             status: done.status,
@@ -705,6 +993,10 @@ export default class AgentManager {
             response: done.response,
             ...(run.conversationId ? { conversationId: run.conversationId } : {}),
             ...(done.error ? { error: done.error } : {}),
+            ...(done.blocked && done.blocked.length > 0 ? { blocked: done.blocked } : {}),
+            ...(done.deniedActions && done.deniedActions.length > 0 ? { deniedActions: done.deniedActions } : {}),
+            ...(done.canResume ? { canResume: true } : {}),
+            ...(done.approvalUnavailable ? { approvalUnavailable: done.approvalUnavailable } : {}),
         });
     }
 
@@ -772,6 +1064,402 @@ export default class AgentManager {
     /** True while a run is in progress. */
     isRunning(): boolean {
         return Boolean(this.activeRun && !this.activeRun.finished);
+    }
+
+    // =========================================================================
+    // Blocked commands and allow rules (Antigravity CLI)
+    // =========================================================================
+
+    /**
+     * Record that the app wants `rules` (with `change`), noting the ones that were in the
+     * settings file before the app wanted them as the user's own, then add the missing ones.
+     * The record is written first, so a crash leaves nothing the app would not remove.
+     */
+    private wantRules(rules: string[], change: (record: PermissionRecord) => PermissionRecord): string[] {
+        const file = this.antigravitySettingsFile();
+        const present = readAllowRules(file);
+        this.permissions.update((record) => {
+            const wanted = wantedRules(record);
+            const userOwned = rules.filter((rule) => present.includes(rule) && !wanted.has(rule));
+            const next = change(record);
+            return { ...next, userOwned: union(next.userOwned, userOwned) };
+        });
+        const { added } = updateAllowRules(file, { add: rules.filter((rule) => !present.includes(rule)) });
+        this.invalidateStatus();
+        return added;
+    }
+
+    /**
+     * Forget the app's reasons for `rules` (with `change`) and remove from the settings file
+     * those no reason keeps any more. The user's own rules are never removed.
+     */
+    private releaseRules(rules: string[], change: (record: PermissionRecord) => PermissionRecord): string[] {
+        const next = change(this.permissions.read());
+        const stillWanted = new Set([...next.lasting, ...next.lookup, ...next.pending, ...next.userOwned]);
+        const { removed } = updateAllowRules(this.antigravitySettingsFile(), {
+            remove: rules.filter((rule) => !stillWanted.has(rule)),
+        });
+        // A user-owned rule no reason refers to any more is the user's business again.
+        const referenced = new Set([...next.lasting, ...next.lookup, ...next.pending]);
+        this.permissions.write({ ...next, userOwned: next.userOwned.filter((rule) => referenced.has(rule)) });
+        this.invalidateStatus();
+        return removed;
+    }
+
+    /** Write a run's rules for this answer, recording them as pending first. */
+    private addTemporaryRules(run: ActiveRun, rules: string[]): void {
+        run.temporaryRules = [...new Set(rules)];
+        try {
+            this.wantRules(run.temporaryRules, (record) => ({
+                ...record,
+                pending: union(record.pending, run.temporaryRules),
+            }));
+        } catch (error) {
+            const failed = run.temporaryRules.splice(0);
+            try {
+                this.permissions.update((record) => ({
+                    ...record,
+                    pending: record.pending.filter((rule) => !failed.includes(rule)),
+                }));
+            } catch {
+                // The record stays; the next start cleans up.
+            }
+            throw error;
+        }
+        this.logger.log('Added temporary allow rules:', { runId: run.runId, count: run.temporaryRules.length });
+    }
+
+    /** Remove a run's rules for this answer. On failure they stay pending for the next start. */
+    private removeTemporaryRules(run: ActiveRun): void {
+        const rules = run.temporaryRules.splice(0);
+        if (rules.length === 0) {
+            return;
+        }
+        try {
+            const removed = this.releaseRules(rules, (record) => ({
+                ...record,
+                pending: record.pending.filter((rule) => !rules.includes(rule)),
+            }));
+            this.logger.log('Removed temporary allow rules:', { runId: run.runId, count: removed.length });
+        } catch (error) {
+            this.logger.warn('Could not remove temporary allow rules; they are removed at the next start:', {
+                runId: run.runId,
+                count: rules.length,
+                error: error instanceof AgentPermissionsError ? 'settings' : (error as NodeJS.ErrnoException)?.code,
+            });
+        }
+    }
+
+    /**
+     * Remove rules for one answer that a crashed or killed app left behind, and bring the
+     * lookup list up to date when it is on. Call once at startup.
+     */
+    initialize(): void {
+        let record: PermissionRecord;
+        try {
+            record = this.permissions.read();
+        } catch {
+            return;
+        }
+        if (record.pending.length > 0) {
+            try {
+                const removed = this.releaseRules(record.pending, (current) => ({ ...current, pending: [] }));
+                this.logger.log('Removed leftover temporary allow rules:', { count: removed.length });
+            } catch (error) {
+                this.logger.warn('Could not remove leftover temporary allow rules:', {
+                    count: record.pending.length,
+                    error: error instanceof AgentPermissionsError ? 'settings' : (error as NodeJS.ErrnoException)?.code,
+                });
+            }
+        }
+        if (record.lookupEnabled && this.platform !== 'win32') {
+            try {
+                this.syncLookupRules(true);
+            } catch (error) {
+                this.logger.warn('Could not update the lookup command rules:', {
+                    error: error instanceof AgentPermissionsError ? 'settings' : (error as NodeJS.ErrnoException)?.code,
+                });
+            }
+        }
+    }
+
+    /**
+     * Decide about a finished run's blocked commands and resume its conversation, without
+     * gathering context again. "once" adds a rule per command line for the resumed run
+     * only; "always" adds the lasting lookup prefix rules the run offered; "without" asks
+     * the agent to answer from what it has. Resolves with the resumed run's id, or an error
+     * for the UI.
+     */
+    async approveBlockedCommands(
+        request: unknown,
+        options: AgentRunOptions
+    ): Promise<{ runId?: string; error?: string }> {
+        if (typeof request !== 'object' || request === null) {
+            return { error: 'Invalid approval.' };
+        }
+        const { runId, decision } = request as { runId?: unknown; decision?: unknown };
+        if (typeof runId !== 'string' || (decision !== 'once' && decision !== 'always' && decision !== 'without')) {
+            return { error: 'Invalid approval.' };
+        }
+        const blocked = this.blockedRuns.get(runId);
+        if (!blocked) {
+            return { error: 'These commands can no longer be approved. Ask again.' };
+        }
+        const choice: CommandApprovalDecision = decision;
+        if (choice !== 'without' && blocked.approvalUnavailable) {
+            return { error: blocked.approvalUnavailable };
+        }
+
+        let temporaryRules: string[] = [];
+        if (choice === 'always') {
+            const rules = blocked.commands.map((entry) => entry.lastingRule);
+            if (rules.some((rule) => rule === undefined)) {
+                return { error: 'Some of these commands can only be allowed for this answer.' };
+            }
+            try {
+                const added = this.wantRules(rules as string[], (record) => ({
+                    ...record,
+                    lasting: union(record.lasting, rules as string[]),
+                }));
+                this.logger.log('Added lasting allow rules:', { count: added.length });
+            } catch (error) {
+                return { error: permissionErrorMessage(error) };
+            }
+        } else if (choice === 'once') {
+            temporaryRules = blocked.commands.map((entry) => commandRule(entry.command));
+            const refusal = temporaryRules.map(refuseAllowRule).find((reason) => reason !== null);
+            if (refusal) {
+                return { error: refusal };
+            }
+            try {
+                // Fail here, while the card is still showing, when the file cannot be changed.
+                readAllowRules(this.antigravitySettingsFile());
+            } catch (error) {
+                return { error: permissionErrorMessage(error) };
+            }
+        }
+
+        const one = blocked.commands.length === 1;
+        const list = blocked.commands.map((entry) => `\`${entry.command}\``).join(', ');
+        const prompt =
+            choice === 'without'
+                ? `The user did not allow: ${list}. Do not run any more commands. Answer the original question from the command output you already have, and say briefly what you could not check.`
+                : `The user approved ${one ? 'this command' : 'these commands'}: ${list}. Run ${one ? 'it' : 'them'} now and answer the original question from the output. Other commands still need the user's approval, so only run another one if the question cannot be answered without it.`;
+        try {
+            const valid = validateRunRequest({
+                prompt,
+                category: blocked.category,
+                conversationId: blocked.conversationId,
+            });
+            const started = this.startNewRun(valid, options, {
+                temporaryRules,
+                resume: choice === 'without' ? 'declined' : 'approved',
+            });
+            this.blockedRuns.delete(runId);
+            this.logger.log('Decided about blocked commands:', {
+                runId,
+                resumedRunId: started.runId,
+                decision: choice,
+                commands: blocked.commands.length,
+            });
+            return started;
+        } catch (error) {
+            return { error: (error as Error).message };
+        }
+    }
+
+    /**
+     * Add the lookup list's rules or take them back. The whole list is recorded as wanted,
+     * so turning it off keeps rules the user also chose with "Always allow", rules for a
+     * running answer and the user's own rules.
+     */
+    private syncLookupRules(enabled: boolean): void {
+        const record = this.permissions.read();
+        if (enabled) {
+            const wanted = new Set(LOOKUP_COMMAND_RULES);
+            // Rules of an older list that are no longer in it.
+            const outdated = record.lookup.filter((rule) => !wanted.has(rule));
+            const added = this.wantRules([...LOOKUP_COMMAND_RULES], (current) => ({
+                ...current,
+                lookupEnabled: true,
+                lookup: [...LOOKUP_COMMAND_RULES],
+            }));
+            const removed = outdated.length > 0 ? this.releaseRules(outdated, (current) => ({ ...current })) : [];
+            this.logger.log('Lookup command rules on:', { added: added.length, removed: removed.length });
+        } else {
+            const removed = this.releaseRules(record.lookup, (current) => ({
+                ...current,
+                lookupEnabled: false,
+                lookup: [],
+            }));
+            this.logger.log('Lookup command rules off:', { removed: removed.length });
+        }
+    }
+
+    /** The command rules the app manages, for Options. */
+    async getPermissions(preference: AgentEnginePreference): Promise<AgentPermissionsInfo> {
+        const status = await this.getStatus(preference);
+        const settingsFile = this.antigravitySettingsFile();
+        // On Windows Antigravity CLI documents no sandbox, so the app allows no commands there.
+        if (status.engine !== 'antigravity' || this.platform === 'win32') {
+            return { supported: false, settingsFile, lookupCommandsEnabled: false, allowedRules: [] };
+        }
+        const record = this.permissions.read();
+        try {
+            const present = new Set(readAllowRules(settingsFile));
+            return {
+                supported: true,
+                settingsFile,
+                lookupCommandsEnabled: record.lookupEnabled,
+                allowedRules: record.lasting.filter((rule) => present.has(rule)),
+            };
+        } catch (error) {
+            return {
+                supported: true,
+                settingsFile,
+                error: permissionErrorMessage(error),
+                lookupCommandsEnabled: record.lookupEnabled,
+                allowedRules: record.lasting,
+            };
+        }
+    }
+
+    /** Turn the lookup command list on or off. */
+    async setLookupCommands(enabled: unknown, preference: AgentEnginePreference): Promise<AgentPermissionsInfo> {
+        if (typeof enabled !== 'boolean') {
+            throw new Error('Invalid value.');
+        }
+        const before = await this.getPermissions(preference);
+        if (!before.supported) {
+            return before;
+        }
+        try {
+            this.syncLookupRules(enabled);
+        } catch (error) {
+            return { ...(await this.getPermissions(preference)), error: permissionErrorMessage(error) };
+        }
+        return this.getPermissions(preference);
+    }
+
+    /** Take back a lasting rule the user chose with "Always allow". Other rules stay. */
+    async removeAllowedRule(rule: unknown, preference: AgentEnginePreference): Promise<AgentPermissionsInfo> {
+        const record = this.permissions.read();
+        if (typeof rule !== 'string' || !record.lasting.includes(rule)) {
+            return { ...(await this.getPermissions(preference)), error: 'The app did not add this rule.' };
+        }
+        try {
+            this.releaseRules([rule], (current) => ({
+                ...current,
+                lasting: current.lasting.filter((entry) => entry !== rule),
+            }));
+            this.logger.log('Removed a lasting allow rule.');
+        } catch (error) {
+            return { ...(await this.getPermissions(preference)), error: permissionErrorMessage(error) };
+        }
+        return this.getPermissions(preference);
+    }
+
+    // =========================================================================
+    // Models
+    // =========================================================================
+
+    /**
+     * The models Antigravity CLI offers (`agy models`) and its default (`agy -p /model`,
+     * which the CLI answers itself), cached for 5 minutes; a failure is kept for a minute
+     * so a broken install does not hold up Options. Gemini CLI cannot list its models.
+     */
+    async listModels(preference: AgentEnginePreference, refresh = false): Promise<AgentModelList> {
+        const status = await this.getStatus(preference);
+        if (status.engine === 'gemini-cli') {
+            return { models: [], error: 'Gemini CLI does not list its models.' };
+        }
+        if (!status.available || status.engine !== 'antigravity' || !status.path) {
+            return { models: [], error: status.error ?? 'No agent CLI is available.' };
+        }
+        const cached = this.modelCache;
+        if (!refresh && cached && cached.binaryPath === status.path && this.now() - cached.checkedAt < cached.ttlMs) {
+            return cached.list;
+        }
+        const list = await this.readModels(status.path);
+        this.modelCache = {
+            binaryPath: status.path,
+            list,
+            checkedAt: this.now(),
+            ttlMs: list.error ? MODEL_LIST_FAILURE_TTL_MS : MODEL_LIST_TTL_MS,
+        };
+        return list;
+    }
+
+    private async readModels(binaryPath: string): Promise<AgentModelList> {
+        const listing = await this.readCliOutput(binaryPath, ['models']);
+        const models = listing.ok ? parseModelLines(listing.stdout) : [];
+        if (models.length === 0) {
+            this.logger.warn('Could not list the agent models:', { ok: listing.ok, code: listing.code });
+            return {
+                models: [],
+                error: listing.ok
+                    ? 'Antigravity CLI did not list any models.'
+                    : 'Could not list the models of Antigravity CLI.',
+            };
+        }
+        // Only once listing worked, and with a short limit in case a CLI sends it to the model.
+        const defaultLine = await this.readCliOutput(binaryPath, ['-p', '/model', '--print-timeout', '20s']);
+        const named = defaultLine.ok ? parseModelLines(defaultLine.stdout)[0] : undefined;
+        // Trust only a default that is one of the listed models.
+        const defaultModel = named ? models.find((model) => model.id === named.id) : undefined;
+        this.logger.log('Listed agent models:', { count: models.length, defaultKnown: Boolean(defaultModel) });
+        return { models, ...(defaultModel ? { defaultModel } : {}) };
+    }
+
+    /** Run the CLI with short arguments (no prompt from the user) and collect its output. */
+    private readCliOutput(
+        binaryPath: string,
+        args: string[]
+    ): Promise<{ ok: boolean; stdout: string; code: number | null }> {
+        return new Promise((resolve) => {
+            // An empty folder of its own, emptied each time, so no workspace files or rules apply.
+            const cwd = path.join(this.userDataDir(), 'agent-cli');
+            let child: ChildProcess;
+            try {
+                fs.rmSync(cwd, { recursive: true, force: true });
+                fs.mkdirSync(cwd, { recursive: true });
+                child = this.spawnProcess(binaryPath, args, {
+                    cwd,
+                    env: this.childEnv(path.dirname(binaryPath)),
+                    stdio: ['ignore', 'pipe', 'ignore'],
+                    shell: false,
+                    windowsHide: true,
+                });
+            } catch {
+                resolve({ ok: false, stdout: '', code: null });
+                return;
+            }
+            let stdout = '';
+            let settled = false;
+            const settle = (result: { ok: boolean; stdout: string; code: number | null }) => {
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(result);
+                }
+            };
+            const timer = setTimeout(() => {
+                try {
+                    child.kill('SIGKILL');
+                } catch {
+                    // Already gone.
+                }
+                settle({ ok: false, stdout: '', code: null });
+            }, this.modelListTimeoutMs);
+            child.stdout?.setEncoding('utf8');
+            child.stdout?.on('data', (chunk: string) => {
+                if (stdout.length < MAX_MODEL_OUTPUT_CHARS) {
+                    stdout += chunk;
+                }
+            });
+            child.on('error', () => settle({ ok: false, stdout: '', code: null }));
+            child.on('close', (code: number | null) => settle({ ok: code === 0, stdout, code }));
+        });
     }
 
     // =========================================================================
@@ -874,6 +1562,7 @@ export default class AgentManager {
             clearTimeout(timer);
         }
         run.finished = true;
+        this.removeTemporaryRules(run);
         const child = run.child;
         if (child && child.exitCode === null && child.signalCode === null) {
             try {

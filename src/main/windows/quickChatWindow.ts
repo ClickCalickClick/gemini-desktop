@@ -132,6 +132,9 @@ export default class QuickChatWindow extends BaseWindow {
         // activation token, so the adapter hides and shows it again (B16, L21). A second instance's
         // XDG_ACTIVATION_TOKEN cannot be used here: Electron has no API to apply one to a window.
         getPlatformAdapter().bringToFront(this.window);
+        // Focusing the window does not always give the page the keyboard, so the input would only
+        // take typing after a click
+        this.window.webContents.focus();
     }
 
     private handleBlur(): void {
