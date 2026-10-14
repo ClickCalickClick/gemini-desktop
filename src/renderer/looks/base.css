@@ -281,5 +281,5 @@
     --qc-text-secondary: var(--text-secondary);
     --qc-placeholder: var(--text-secondary);
     --qc-accent: var(--accent-color);
-    --qc-accent-text: var(--look-accent-fg, #ffffff);
+    --qc-accent-text: var(--desktop-accent-fg, var(--look-accent-fg, #ffffff));
 }
