@@ -294,9 +294,22 @@ function QuickChatApp(): React.ReactElement {
         };
     }, []);
 
-    // Auto-focus input on mount
+    // Put the cursor in the input on mount and every time Quick Chat is shown again, so typing
+    // works without a click. A click on the answer or a button would otherwise keep the focus there.
     useEffect(() => {
-        inputRef.current?.focus();
+        const focusInput = () => {
+            if (document.visibilityState === 'hidden') {
+                return;
+            }
+            inputRef.current?.focus();
+        };
+        focusInput();
+        window.addEventListener('focus', focusInput);
+        document.addEventListener('visibilitychange', focusInput);
+        return () => {
+            window.removeEventListener('focus', focusInput);
+            document.removeEventListener('visibilitychange', focusInput);
+        };
     }, []);
 
     const canFollowUp = run.phase === 'done' && Boolean(run.conversationId);

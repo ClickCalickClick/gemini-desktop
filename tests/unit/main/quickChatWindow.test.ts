@@ -135,6 +135,20 @@ describe('QuickChatWindow', () => {
 
             expect(mockBringToFront).toHaveBeenCalledWith(win);
         });
+
+        it('gives the page the keyboard focus after bringing the window forward', () => {
+            const win = quickChatWindow.create();
+            win.setPosition = vi.fn();
+            const focusPage = vi.fn();
+            win.webContents.focus = focusPage;
+
+            quickChatWindow.showAndFocus();
+
+            expect(focusPage).toHaveBeenCalled();
+            expect(mockBringToFront.mock.invocationCallOrder.at(-1)).toBeLessThan(
+                focusPage.mock.invocationCallOrder[0]
+            );
+        });
     });
 
     describe('hide', () => {
