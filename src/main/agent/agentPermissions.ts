@@ -612,6 +612,9 @@ const COMMAND_PREFIX_WORDS = new Set([
     'stdbuf',
     'ionice',
     'xargs',
+    'setsid',
+    'chroot',
+    'trap',
 ]);
 
 /** The word a part of a command line runs, past assignments, keywords and wrappers. */
@@ -656,11 +659,22 @@ export function needsCaution(commandLine: string): boolean {
             if (!first) {
                 return false;
             }
+            // A command on the lookup list (`systemctl status x`, `ip -br addr show`) only looks.
+            if (lastingRuleFor(words.slice(words.indexOf(first)).join(' '))) {
+                return false;
+            }
             const name = first.split('/').pop() ?? first;
             if (!isPlainCommandName(name)) {
                 return true;
             }
-            return isDeniedPrefix(name) && !READING_COMMANDS.has(name);
+            if (isDeniedPrefix(name) && !READING_COMMANDS.has(name)) {
+                return true;
+            }
+            // Wrappers this list does not know (`setsid rm`, `flock /tmp/l rm`): any later
+            // word that names a state-changing command.
+            return words
+                .slice(words.indexOf(first) + 1)
+                .some((word) => isPlainCommandName(word) && isDeniedPrefix(word) && !READING_COMMANDS.has(word));
         });
 }
 

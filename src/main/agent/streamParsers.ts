@@ -167,8 +167,22 @@ function toolOutputOf(value: unknown): string | undefined {
     if (typeof value !== 'string' || value.trim().length === 0) {
         return undefined;
     }
-    const text = value.replace(/\r\n?/g, '\n').replace(/\s+$/, '');
-    return text.length > MAX_TOOL_OUTPUT_LENGTH ? `${text.slice(0, MAX_TOOL_OUTPUT_LENGTH)}\n…` : text;
+    const text = value
+        // Terminal colour and cursor codes, then other control and invisible formatting characters.
+        // eslint-disable-next-line no-control-regex -- stripping terminal codes is the point
+        .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+        .replace(/\r\n?/g, '\n')
+        // eslint-disable-next-line no-control-regex -- as above
+        .replace(/[\p{Cf}\u0000-\u0008\u000b-\u001f\u007f]/gu, '')
+        .replace(/\s+$/, '');
+    if (text.length <= MAX_TOOL_OUTPUT_LENGTH) {
+        return text;
+    }
+    // Do not split a surrogate pair.
+    const end = /[\uD800-\uDBFF]/.test(text.charAt(MAX_TOOL_OUTPUT_LENGTH - 1))
+        ? MAX_TOOL_OUTPUT_LENGTH - 1
+        : MAX_TOOL_OUTPUT_LENGTH;
+    return `${text.slice(0, end)}\n…`;
 }
 
 /** Parameter names that hold a terminal command line. */

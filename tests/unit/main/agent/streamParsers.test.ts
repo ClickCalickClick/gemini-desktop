@@ -307,6 +307,9 @@ describe('parseAntigravityEvent', () => {
                     },
                 })[0];
             expect(parse('a\r\nb\r\n')).toMatchObject({ output: 'a\nb' });
+            expect(parse('\u001b[1;31mred\u001b[0m\tx \u202Eevil\u0007')).toMatchObject({ output: 'red\tx evil' });
+            const emoji = parse(`${'x'.repeat(MAX_TOOL_OUTPUT_LENGTH - 1)}😀tail`);
+            expect(emoji?.kind === 'tool' && emoji.output).toBe(`${'x'.repeat(MAX_TOOL_OUTPUT_LENGTH - 1)}\n…`);
             expect(parse('   \r\n')).not.toHaveProperty('output');
             expect(parse(42)).not.toHaveProperty('output');
             const long = parse('x'.repeat(MAX_TOOL_OUTPUT_LENGTH + 50));
