@@ -45,6 +45,7 @@ The project uses **npm** for package management and **Vitest** + **WebdriverIO**
 - **Vitest:** `npx vitest tests/unit/shared/hotkeys.test.ts` (or any path)
 - **WDIO (E2E):** `npm run test:e2e:spec -- --spec=tests/e2e/auth.spec.ts`
 - **WDIO (Integration):** `npm run test:integration -- --spec=tests/integration/your-test.integration.test.ts`
+- **Live check (the real app, no install):** `node scripts/live-check.mjs --launch release/linux-unpacked/gemini-desktop --copy-profile ~/.config/gemini-desktop --reload --sign-in` drives the built app over the DevTools protocol, records every page load and saves screenshots. `--help` lists the options.
 
 **Headless ARM Linux Notes:**
 

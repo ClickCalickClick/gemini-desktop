@@ -65,7 +65,7 @@ Every feature below must keep working through the cleanup. The status is for pac
 | Smart Enter and scroll-to-bottom button                                                         | OK                                                | OK                                                                         | OK               | inline script in `mainWindow.ts`                                |
 | Linux sandbox fallback (`--no-sandbox` when user namespaces and SUID sandbox are unavailable)   | n/a                                               | OK                                                                         | n/a              | `sandboxDetector.ts`, `sandboxInit.ts`                          |
 
-Since then, the CachyOS test found that Gemini's own Sign in button cannot sign in on any platform (B14). L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) opens it in the sign-in window.
+Since then, the CachyOS test found that Gemini's own Sign in button cannot sign in on any platform (B14), and neither can a tab that a server redirect sends to Google's sign-in page while it loads. L18 ([#2](https://github.com/ClickCalickClick/gemini-desktop/pull/2)) opens both in the sign-in window.
 
 Persisted state lives in the user-data folder: `user-preferences.json`, `tabs-state.json`, `update-settings.json`, `notification-settings.json` and `models/*.gguf`.
 Google cookies live in Chromium's default session; there is no `persist:` partition.
