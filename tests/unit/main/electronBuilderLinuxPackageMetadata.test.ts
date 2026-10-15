@@ -14,6 +14,7 @@ type DesktopConfig = {
 type ElectronBuilderConfig = {
     linux?: {
         target?: TargetConfig[];
+        icon?: string;
         executableName?: string;
         synopsis?: string;
         maintainer?: string;
@@ -174,6 +175,17 @@ describe('electron-builder Linux package metadata', () => {
         expect(readFileSync(path.join(repoRoot, 'build/icon-quick-chat.png'))).not.toEqual(
             readFileSync(path.join(repoRoot, 'build/icon.png'))
         );
+    });
+
+    it('gives the main icon every size the hicolor theme looks in, so GNOME finds it', () => {
+        // A lone 1024 px icon lands in hicolor/1024x1024, which hicolor's index.theme does not list
+        expect(builderConfig.linux?.icon).toBe('build/icons');
+        for (const size of [16, 24, 32, 48, 64, 128, 256, 512]) {
+            const png = readFileSync(path.join(repoRoot, 'build/icons', `${size}x${size}.png`));
+            expect(png.subarray(1, 4).toString('ascii')).toBe('PNG');
+            expect(png.readUInt32BE(16)).toBe(size);
+            expect(png.readUInt32BE(20)).toBe(size);
+        }
     });
 
     it('declares the metadata fpm needs instead of reading it from .git', () => {
