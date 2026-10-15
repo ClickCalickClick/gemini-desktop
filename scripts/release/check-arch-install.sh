@@ -36,6 +36,11 @@ pacman -Qo "$quick_chat_desktop"
 # The launcher has its own icon, so the app grid tells it apart from the main entry.
 grep -qx 'Icon=gemini-desktop-quick-chat' "$quick_chat_desktop"
 pacman -Qo /usr/share/icons/hicolor/512x512/apps/gemini-desktop-quick-chat.png
+# The main icon must sit in sizes hicolor's index.theme lists; a 1024x1024 folder alone leaves GNOME
+# showing its generic application icon (L23).
+for size in 48x48 256x256 512x512; do
+    pacman -Qo "/usr/share/icons/hicolor/$size/apps/gemini-desktop.png"
+done
 # The update notice reads this to tell pacman installs to install the new package (src/main/utils/packageType.ts).
 grep -qx 'pacman' '/opt/Gemini Desktop/resources/package-type'
 

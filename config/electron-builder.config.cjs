@@ -180,7 +180,10 @@ module.exports = {
                 arch: ['x64'],
             },
         ],
-        icon: 'build/icon.png',
+        // One PNG per hicolor size. Given only the 1024 px icon.png, the packages install it to
+        // hicolor/1024x1024, a folder hicolor's index.theme does not list, so GNOME never finds it
+        // and shows its generic application icon (L23). Regenerate the folder when icon.png changes.
+        icon: 'build/icons',
         category: 'Utility',
         artifactName: 'Gemini-Desktop-${version}-${arch}.${ext}',
         executableName: 'gemini-desktop',
