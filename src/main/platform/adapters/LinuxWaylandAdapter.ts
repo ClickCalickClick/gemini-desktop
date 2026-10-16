@@ -171,6 +171,23 @@ export class LinuxWaylandAdapter implements PlatformAdapter {
         window.setSkipTaskbar(false);
     }
 
+    /**
+     * A Wayland app cannot raise its own window: it asks the desktop with an activation token,
+     * and GNOME answers a token it does not accept with an "is ready" notification, leaving the
+     * window behind other apps. GNOME does put a newly shown window in front with the focus, as
+     * Peek and Hide shows, so a window that is open but not focused is hidden and shown again.
+     */
+    bringToFront(window: Electron.BrowserWindow): void {
+        if (window.isVisible() && !window.isFocused()) {
+            if (window.isMinimized()) {
+                window.restore();
+            }
+            window.hide();
+        }
+        window.show();
+        window.focus();
+    }
+
     // ----- Menu methods -----
 
     shouldIncludeAppMenu(): boolean {
