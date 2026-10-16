@@ -14,6 +14,17 @@ vi.mock('../../../src/main/utils/paths', async (importOriginal) => {
     };
 });
 
+const { mockBringToFront } = vi.hoisted(() => ({
+    mockBringToFront: vi.fn((window: { show: () => void; focus: () => void }) => {
+        window.show();
+        window.focus();
+    }),
+}));
+
+vi.mock('../../../src/main/platform/platformAdapterFactory', () => ({
+    getPlatformAdapter: () => ({ bringToFront: mockBringToFront }),
+}));
+
 describe('QuickChatWindow', () => {
     let quickChatWindow: QuickChatWindow;
 
@@ -113,6 +124,30 @@ describe('QuickChatWindow', () => {
             expect(win.setPosition).toHaveBeenCalled();
             expect(win.show).toHaveBeenCalled();
             expect(win.focus).toHaveBeenCalled();
+        });
+
+        it('brings an open window forward through the platform adapter (hide and show on Wayland)', () => {
+            const win = quickChatWindow.create();
+            win.setPosition = vi.fn();
+            mockBringToFront.mockClear();
+
+            quickChatWindow.showAndFocus();
+
+            expect(mockBringToFront).toHaveBeenCalledWith(win);
+        });
+
+        it('gives the page the keyboard focus after bringing the window forward', () => {
+            const win = quickChatWindow.create();
+            win.setPosition = vi.fn();
+            const focusPage = vi.fn();
+            win.webContents.focus = focusPage;
+
+            quickChatWindow.showAndFocus();
+
+            expect(focusPage).toHaveBeenCalled();
+            expect(mockBringToFront.mock.invocationCallOrder.at(-1)).toBeLessThan(
+                focusPage.mock.invocationCallOrder[0]
+            );
         });
     });
 

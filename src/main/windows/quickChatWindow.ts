@@ -14,6 +14,7 @@ import { BrowserWindow, screen, type BrowserWindowConstructorOptions } from 'ele
 import BaseWindow from './baseWindow';
 import { QUICK_CHAT_WINDOW_CONFIG, QUICK_CHAT_WIDTH } from '../utils/constants';
 import { getPreloadPath } from '../utils/paths';
+import { getPlatformAdapter } from '../platform/platformAdapterFactory';
 
 /**
  * Quick Chat floating window.
@@ -121,8 +122,12 @@ export default class QuickChatWindow extends BaseWindow {
             return;
         }
         this._suppressBlurUntil = Date.now() + 500;
-        this.window.show();
-        this.window.focus();
+        // On GNOME Wayland a window that is open but not focused cannot raise itself without an
+        // activation token, so the adapter hides and shows it again.
+        getPlatformAdapter().bringToFront(this.window);
+        // Focusing the window does not always give the page the keyboard, so the input would only
+        // take typing after a click
+        this.window.webContents.focus();
     }
 
     private handleBlur(): void {
